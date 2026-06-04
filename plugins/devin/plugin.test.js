@@ -58,9 +58,8 @@ function makeQuotaResponse(overrides = {}) {
 
 function mockAppAuth(ctx, apiKey = "devin-session-token$app") {
   ctx.host.sqlite.query.mockImplementation((db, sql) => {
-    expect(db).toBe(STATE_DB)
     expect(String(sql)).toContain("windsurfAuthStatus")
-    return makeAuthStatus(apiKey)
+    return db === STATE_DB ? makeAuthStatus(apiKey) : "[]"
   })
 }
 
@@ -175,6 +174,36 @@ describe("devin plugin", () => {
     expect(ctx.host.log.info).toHaveBeenCalledWith(
       expect.stringContaining("Devin quota diagnostics source=Devin - Next app")
     )
+  })
+
+  it("falls back from a stale stable-Devin token to the Devin - Next app", async () => {
+    const ctx = makeCtx()
+    ctx.host.sqlite.query.mockImplementation((db, sql) => {
+      expect(String(sql)).toContain("windsurfAuthStatus")
+      if (db === STATE_DB) return makeAuthStatus("devin-session-token$stable")
+      if (db === NEXT_STATE_DB) return makeAuthStatus("devin-session-token$next")
+      return "[]"
+    })
+    ctx.host.http.request.mockImplementation((request) => {
+      const body = JSON.parse(String(request.bodyText))
+      if (body.metadata.apiKey === "devin-session-token$stable") {
+        return { status: 401, bodyText: "{}" }
+      }
+      return {
+        status: 200,
+        bodyText: JSON.stringify(makeQuotaResponse({ planInfo: { planName: "Teams" } })),
+      }
+    })
+
+    const plugin = await loadPlugin()
+    const result = plugin.probe(ctx)
+
+    expect(result.plan).toBe("Teams")
+    expect(ctx.host.http.request).toHaveBeenCalledTimes(2)
+    const triedKeys = ctx.host.http.request.mock.calls.map(
+      ([request]) => JSON.parse(String(request.bodyText)).metadata.apiKey
+    )
+    expect(triedKeys).toEqual(["devin-session-token$stable", "devin-session-token$next"])
   })
 
   it("ignores plaintext API server URLs from CLI credentials", async () => {

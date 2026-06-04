@@ -137,12 +137,13 @@
     }
   }
 
-  function loadAppAuth(ctx) {
+  function loadAppAuths(ctx) {
+    var auths = []
     for (var i = 0; i < APP_AUTH_SOURCES.length; i++) {
       var auth = readAppAuth(ctx, APP_AUTH_SOURCES[i])
-      if (auth) return auth
+      if (auth) auths.push(auth)
     }
-    return null
+    return auths
   }
 
   function readAppAuth(ctx, variant) {
@@ -295,23 +296,26 @@
   function probe(ctx) {
     var sawApiKey = false
     var sawAuthFailure = false
-    var credentials = loadCredentialsFile(ctx)
+    var attempts = []
 
+    var credentials = loadCredentialsFile(ctx)
     if (credentials) {
       sawApiKey = true
+      attempts.push(authFingerprint(credentials))
       var credentialsAttempt = tryAuth(ctx, credentials)
       if (credentialsAttempt.output) return credentialsAttempt.output
       if (credentialsAttempt.authFailure) sawAuthFailure = true
     }
 
-    var appAuth = loadAppAuth(ctx)
-    if (
-      appAuth &&
-      (!credentials ||
-        appAuth.apiKey !== credentials.apiKey ||
-        effectiveApiServerUrl(appAuth) !== effectiveApiServerUrl(credentials))
-    ) {
+    // Walk every app install (stable, then "- Next") and try each token the cloud
+    // hasn't already rejected, so a stale token in one install doesn't mask a
+    // valid one in another.
+    var appAuths = loadAppAuths(ctx)
+    for (var i = 0; i < appAuths.length; i++) {
+      var appAuth = appAuths[i]
+      if (alreadyAttempted(attempts, appAuth)) continue
       sawApiKey = true
+      attempts.push(authFingerprint(appAuth))
       var appAttempt = tryAuth(ctx, appAuth)
       if (appAttempt.output) return appAttempt.output
       if (appAttempt.authFailure) sawAuthFailure = true
@@ -320,6 +324,18 @@
     if (sawAuthFailure) throw LOGIN_HINT
     if (sawApiKey) throw QUOTA_HINT
     throw LOGIN_HINT
+  }
+
+  function authFingerprint(auth) {
+    return auth.apiKey + "\n" + effectiveApiServerUrl(auth)
+  }
+
+  function alreadyAttempted(attempts, auth) {
+    var fingerprint = authFingerprint(auth)
+    for (var i = 0; i < attempts.length; i++) {
+      if (attempts[i] === fingerprint) return true
+    }
+    return false
   }
 
   globalThis.__openusage_plugin = { id: "devin", probe: probe }
