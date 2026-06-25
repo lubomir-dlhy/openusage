@@ -393,8 +393,13 @@ final class StatusItemController: NSObject {
     /// adds no second animation to fight SwiftUI's spring.
     private func applyMorphHeight(_ rawHeight: CGFloat) {
         guard rawHeight > 1 else { return }   // 0 = "not established yet"; ignore the sentinel.
+        // Drop heights that arrive after a close. `PanelHeightBridge` hops each frame through
+        // `DispatchQueue.main.async`, so a spring morph in flight when the panel closes leaves queued
+        // callbacks behind; `orderOut` flips `isVisible` synchronously, so they're rejected here while
+        // closed (before any reopen) instead of resizing a hidden — or freshly reopened — panel.
+        guard panel.isVisible else { return }
         guard let anchorTopLeft else {
-            AppLog.error(.statusItem, "Morph height with no anchor; frame not applied")
+            AppLog.error(.statusItem, "Morph height while visible but no anchor; frame not applied")
             return
         }
         let height = min(max(rawHeight, Self.minPanelHeight), maxPanelHeight())
