@@ -108,14 +108,21 @@ struct AntigravityUsageClient: Sendable {
             timeout: 15
         )
         guard let response = try? await http.send(request) else { return .unavailable }
-        if (400..<500).contains(response.statusCode) { return .authFailed } // invalid_grant -> token revoked/expired
-        guard (200..<300).contains(response.statusCode),
-              let decoded = try? JSONDecoder().decode(GoogleTokenResponse.self, from: response.body),
-              let access = decoded.accessToken?.nilIfEmpty
-        else {
-            return .unavailable
+        switch response.statusCode {
+        case 200..<300:
+            guard let decoded = try? JSONDecoder().decode(GoogleTokenResponse.self, from: response.body),
+                  let access = decoded.accessToken?.nilIfEmpty
+            else {
+                return .unavailable // 2xx but undecodable / empty — treat as transient
+            }
+            return .refreshed(accessToken: access, expiresIn: decoded.expiresIn ?? 3600)
+        case 408, 429:
+            return .unavailable // request timeout / rate limited — transient, not a revoked token
+        case 400..<500:
+            return .authFailed // invalid_grant / invalid_client — refresh token revoked or expired
+        default:
+            return .unavailable // 5xx and anything else — transient
         }
-        return .refreshed(accessToken: access, expiresIn: decoded.expiresIn ?? 3600)
     }
 
     private static func formEncoded(_ value: String) -> String {
