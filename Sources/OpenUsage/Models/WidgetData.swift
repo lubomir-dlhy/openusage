@@ -516,8 +516,9 @@ extension WidgetData {
     /// read — the `resetsAt - now ≈ full period` test is only valid the instant the snapshot is captured,
     /// then drifts every second until the next refresh, which split the headline from the label (headline
     /// "100% left" while the label fell back to "Resets in 5h"). Usage is the stable, snapshot-consistent
-    /// signal: Codex's whole-percent floor is normalized to 0 at a fresh window in its mapper, while Claude
-    /// and Antigravity report 0 utilization directly, so zero means the same for all — the window is unused.
+    /// signal: Codex's whole-percent floor is normalized to 0 at a fresh window in its mapper, Claude
+    /// reports 0 utilization directly, and Antigravity's mapper rounds its fraction-derived percent (so a
+    /// pool under ~0.5% used also reads 0). In each case zero means the window is effectively unused.
     /// Still gated on `now < resetsAt`: once the reset has passed the snapshot is stale, so we drop the
     /// "Not started" claim and let the row fall back to the normal "Resets soon"/countdown formatting.
     func isFreshSessionWindow(now: Date = Date()) -> Bool {
