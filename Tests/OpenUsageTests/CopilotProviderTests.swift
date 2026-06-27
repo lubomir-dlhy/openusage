@@ -72,6 +72,36 @@ final class CopilotAuthStoreTests: XCTestCase {
         """
         XCTAssertEqual(CopilotAuthStore.yamlValue(hosts, key: "user"), "octocat")
     }
+
+    func testYamlValueScopesToGithubDotComHost() {
+        // A GitHub Enterprise block precedes github.com; the github.com token must win.
+        let hosts = """
+        ghe.corp.example:
+            oauth_token: gho_enterprise
+            user: ent
+        github.com:
+            oauth_token: gho_dotcom
+            user: octocat
+        """
+        XCTAssertEqual(CopilotAuthStore.yamlValue(hosts, key: "oauth_token"), "gho_dotcom")
+        XCTAssertEqual(CopilotAuthStore.yamlValue(hosts, key: "user"), "octocat")
+    }
+
+    func testGhConfigPrefersGithubDotComTokenOverEnterprise() {
+        let store = CopilotAuthStore(
+            files: FakeFiles([
+                CopilotAuthStore.ghHostsPath: """
+                ghe.corp.example:
+                    oauth_token: gho_enterprise
+                github.com:
+                    oauth_token: gho_dotcom
+                """
+            ]),
+            keychain: FakeKeychain()
+        )
+
+        XCTAssertEqual(store.loadToken()?.value, "gho_dotcom")
+    }
 }
 
 final class CopilotUsageMapperTests: XCTestCase {
@@ -129,7 +159,7 @@ final class CopilotUsageMapperTests: XCTestCase {
         XCTAssertNotNil(progress(mapped.lines, "Chat")?.resetsAt)
     }
 
-    func testThrowsTokenBasedBillingWhenNoUsableQuota() {
+    func testTokenBasedBillingReturnsPlanWithoutMeters() throws {
         let body: [String: Any] = [
             "copilot_plan": "business",
             "token_based_billing": true,
@@ -138,9 +168,10 @@ final class CopilotUsageMapperTests: XCTestCase {
             ]
         ]
 
-        XCTAssertThrowsError(try CopilotUsageMapper.map(body: body)) { error in
-            XCTAssertEqual(error as? CopilotUsageError, .tokenBasedBilling)
-        }
+        let mapped = try CopilotUsageMapper.map(body: body)
+
+        XCTAssertEqual(mapped.plan, "Business")
+        XCTAssertTrue(mapped.lines.isEmpty)
     }
 
     func testThrowsQuotaUnavailableWhenEmpty() {
@@ -190,7 +221,7 @@ final class CopilotProviderTests: XCTestCase {
         XCTAssertEqual(http.requests.first?.headers["Authorization"], "token gho_editor")
     }
 
-    func testTokenBasedBillingSurfacesNotAvailable() async {
+    func testTokenBasedBillingShowsPlanWithoutError() async {
         let body: [String: Any] = [
             "copilot_plan": "business",
             "token_based_billing": true,
@@ -203,7 +234,9 @@ final class CopilotProviderTests: XCTestCase {
 
         let snapshot = await provider.refresh()
 
-        XCTAssertEqual(snapshot.errorCategory, .notAvailable)
+        XCTAssertNil(snapshot.errorCategory)
+        XCTAssertEqual(snapshot.plan, "Business")
+        XCTAssertTrue(snapshot.lines.isEmpty)
     }
 
     private func editorTokenStore() -> CopilotAuthStore {

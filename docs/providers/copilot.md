@@ -16,7 +16,7 @@ Which meters appear depends on your plan:
 
 - **Paid plans** expose Premium and Chat (and sometimes Completions). Buckets a plan treats as unlimited show an empty meter; on most paid plans Completions has no quota to track and reads "No data".
 - **Free plans** expose Chat and Completions (no Premium).
-- **Copilot Business / token-based billing** returns no per-seat quota, so there's nothing to meter. The provider shows the plan and a short note instead of fabricating numbers. (GitHub only exposes that spend through its logged-in web billing page, which would require reading browser cookies — OpenUsage does not do that.)
+- **Copilot Business / token-based billing** returns no per-seat quota, so there's nothing to meter. The provider still shows the plan; the meters read "No data" rather than fabricating numbers. (GitHub only exposes that spend through its logged-in web billing page, which would require reading browser cookies — OpenUsage does not do that.)
 
 ## Where credentials come from
 
@@ -41,7 +41,7 @@ Using Copilot in a supported editor is enough on its own — the editor writes t
 
 - **"Sign in to GitHub Copilot…"** — no token was found. Sign in to Copilot in your editor, or run `gh auth login`.
 - **"GitHub token invalid or expired"** — the token was rejected (401/403). Re-authenticate with `gh auth login`.
-- **"…token-based billing; per-seat usage isn't available"** — expected on Copilot Business seats; GitHub doesn't expose per-seat quota.
+- **Meters show "No data" but the plan is shown** — expected on Copilot Business / token-based-billing seats; GitHub doesn't expose per-seat quota for them.
 
 ## Under the hood
 

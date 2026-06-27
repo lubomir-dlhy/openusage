@@ -42,11 +42,13 @@ enum CopilotUsageMapper {
             appendIfPresent(&lines, limitedLine(label: "Completions", remaining: limited?["completions"], total: monthly?["completions"], resetsAt: resetsAt))
         }
 
+        // Copilot Business / token-based-billing seats expose no per-seat quota — a legitimate empty
+        // state, not a failure. Surface the plan with empty meters (the tiles read "No data") so the
+        // dashboard still identifies the plan, instead of a loud error that drops it. A genuinely empty
+        // or garbled payload (no token-based-billing marker) is a real problem and fails loudly.
         guard !lines.isEmpty else {
-            // Distinguish "Business seat with no per-seat quota" from a generic empty payload so the
-            // error badge can say something true instead of looking like a malfunction.
             if readBool(body["token_based_billing"]) == true {
-                throw CopilotUsageError.tokenBasedBilling
+                return CopilotMappedUsage(plan: plan, lines: [])
             }
             throw CopilotUsageError.quotaUnavailable
         }
@@ -165,7 +167,6 @@ enum CopilotUsageError: Error, LocalizedError, Equatable {
     case connectionFailed
     case requestFailed(Int)
     case quotaUnavailable
-    case tokenBasedBilling
 
     var errorDescription: String? {
         switch self {
@@ -177,8 +178,6 @@ enum CopilotUsageError: Error, LocalizedError, Equatable {
             return "Copilot usage request failed (HTTP \(status)). Try again later."
         case .quotaUnavailable:
             return "Copilot usage data is unavailable for this account."
-        case .tokenBasedBilling:
-            return "Copilot Business uses token-based billing; per-seat usage isn't available."
         }
     }
 }

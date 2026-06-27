@@ -142,13 +142,23 @@ struct CopilotAuthStore: Sendable {
         return nil
     }
 
-    /// Read a top-level-ish `key: value` from the small `hosts.yml` GitHub CLI writes. A line scan is
-    /// enough here: `gh` writes one host block (`github.com`) with simple scalar values, so the first
-    /// `oauth_token:` / `user:` line is the github.com one. `users:` (the nested map) doesn't match
-    /// `user:` because the colon position differs.
-    static func yamlValue(_ text: String, key: String) -> String? {
+    /// Read an indented `key: value` from within a specific host block of the `hosts.yml` GitHub CLI
+    /// writes. `gh` keys each host block by a top-level (unindented) `<host>:` line; reading must be
+    /// scoped to the `github.com` block, because a GitHub Enterprise block in the same file would
+    /// otherwise let its `oauth_token` win and get sent to api.github.com (a guaranteed 401/403).
+    /// `users:` (the nested map) doesn't match `user:` because the colon position differs.
+    static func yamlValue(_ text: String, key: String, host: String = "github.com") -> String? {
         let prefix = key + ":"
+        let hostHeader = host + ":"
+        var inHost = false
         for line in text.split(whereSeparator: \.isNewline) {
+            // An unindented line starts a new top-level block (a host header or other root key); only
+            // the github.com block's children should be read.
+            if let first = line.first, !first.isWhitespace {
+                inHost = line.trimmingCharacters(in: .whitespaces).hasPrefix(hostHeader)
+                continue
+            }
+            guard inHost else { continue }
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix(prefix) else { continue }
             let value = trimmed.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
