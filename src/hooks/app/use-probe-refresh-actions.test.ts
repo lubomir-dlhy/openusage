@@ -5,10 +5,14 @@ const { getEnabledPluginIdsMock } = vi.hoisted(() => ({
   getEnabledPluginIdsMock: vi.fn(),
 }))
 
-vi.mock("@/lib/settings", () => ({
-  REFRESH_COOLDOWN_MS: 300_000,
-  getEnabledPluginIds: getEnabledPluginIdsMock,
-}))
+vi.mock("@/lib/settings", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/settings")>("@/lib/settings")
+  return {
+    ...actual,
+    REFRESH_COOLDOWN_MS: 300_000,
+    getEnabledPluginIds: getEnabledPluginIdsMock,
+  }
+})
 
 import { useProbeRefreshActions } from "@/hooks/app/use-probe-refresh-actions"
 
@@ -42,7 +46,7 @@ describe("useProbeRefreshActions", () => {
     })
 
     expect(setLoadingForPlugins).toHaveBeenCalledWith(["codex"])
-    expect(startBatch).toHaveBeenCalledWith(["codex"])
+    expect(startBatch).toHaveBeenCalledWith([{ pluginId: "codex", instanceId: "codex" }])
     expect(manualRefreshIdsRef.current.has("codex")).toBe(true)
   })
 
@@ -74,7 +78,7 @@ describe("useProbeRefreshActions", () => {
     })
 
     expect(setLoadingForPlugins).toHaveBeenCalledWith(["c"])
-    expect(startBatch).toHaveBeenCalledWith(["c"])
+    expect(startBatch).toHaveBeenCalledWith([{ pluginId: "c", instanceId: "c" }])
     nowSpy.mockRestore()
   })
 

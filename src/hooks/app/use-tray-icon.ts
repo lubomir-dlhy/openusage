@@ -231,9 +231,20 @@ export function useTrayIcon({
           })
         : []
 
-      const providerIconUrl = trayProviderId
-        ? pluginsMetaRef.current.find((plugin) => plugin.id === trayProviderId)?.iconUrl
+      // `trayProviderId` is an instanceId. Prefer that account's custom icon
+      // (rendered as a monochrome template silhouette in the menu bar); else
+      // fall back to the provider's default glyph (mapped instanceId->providerId).
+      const pinnedInstance = trayProviderId
+        ? (currentSettings.instances ?? []).find(
+            (inst) => inst.instanceId === trayProviderId
+          )
         : undefined
+      const trayProviderRealId = pinnedInstance?.providerId ?? trayProviderId
+      const providerIconUrl =
+        pinnedInstance?.icon ||
+        (trayProviderRealId
+          ? pluginsMetaRef.current.find((plugin) => plugin.id === trayProviderRealId)?.iconUrl
+          : undefined)
       const providerPercentText = formatTrayPercentText(providerBars[0]?.fraction)
 
       const nextPreview: TraySettingsPreview = {

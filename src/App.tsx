@@ -170,6 +170,9 @@ function App() {
   const {
     handleReorder,
     handleToggle,
+    handleAddInstance,
+    handleEditInstance,
+    handleRemoveInstance,
   } = useSettingsPluginActions({
     pluginSettings,
     setPluginSettings,
@@ -178,6 +181,11 @@ function App() {
     startBatch,
     scheduleTrayIconUpdate,
   })
+
+  const addableProviders = pluginsMeta.map((plugin) => ({
+    id: plugin.id,
+    name: plugin.name,
+  }))
 
   const settingsPlugins = useSettingsPluginList({
     pluginSettings,
@@ -252,6 +260,10 @@ function App() {
         onRetryPlugin: handleRetryPlugin,
         onReorder: handleReorder,
         onToggle: handleToggle,
+        onAddInstance: handleAddInstance,
+        onEditInstance: handleEditInstance,
+        onRemoveInstance: handleRemoveInstance,
+        addableProviders,
         onAutoUpdateIntervalChange: handleAutoUpdateIntervalChange,
         onThemeModeChange: handleThemeModeChange,
         onDisplayModeChange: handleDisplayModeChange,

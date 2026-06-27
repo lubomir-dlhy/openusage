@@ -20,6 +20,10 @@ import { formatResetAbsoluteLabel, formatResetRelativeLabel, formatResetTooltipT
 
 interface ProviderCardProps {
   name: string
+  /** Account label for extra accounts (e.g. "Work"); null/omitted for default. */
+  label?: string | null
+  /** Per-account custom icon (data/image URL); shown full-color before the name when set. */
+  customIconUrl?: string
   plan?: string
   links?: PluginLink[]
   showSeparator?: boolean
@@ -95,6 +99,8 @@ function formatRelativeTime(diffMs: number): string {
 
 export function ProviderCard({
   name,
+  label,
+  customIconUrl,
   plan,
   links = [],
   showSeparator = true,
@@ -186,7 +192,23 @@ export function ProviderCard({
       <div className="py-3">
         <div className="flex items-center justify-between mb-2">
           <div className="relative flex items-center">
-            <h2 className="text-lg font-semibold" style={{ transform: "translateZ(0)" }}>{name}</h2>
+            {customIconUrl && (
+              <img
+                src={customIconUrl}
+                alt=""
+                aria-hidden
+                className="mr-2 size-6 rounded object-contain bg-[#F0EEE6] p-0.5"
+                draggable={false}
+              />
+            )}
+            <h2 className="text-lg font-semibold" style={{ transform: "translateZ(0)" }}>
+              {name}
+              {label ? (
+                <span className="ml-1.5 text-sm font-normal text-muted-foreground align-middle">
+                  {label}
+                </span>
+              ) : null}
+            </h2>
             {onRetry && (
               loading ? (
                 <Button

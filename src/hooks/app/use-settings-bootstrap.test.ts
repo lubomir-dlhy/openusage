@@ -84,6 +84,8 @@ vi.mock("@/lib/settings", () => ({
   migrateWindsurfToDevin: migrateWindsurfToDevinMock,
   normalizePluginSettings: normalizePluginSettingsMock,
   savePluginSettings: savePluginSettingsMock,
+  resolveProbeInstances: (_settings: unknown, ids?: string[]) =>
+    (ids ?? []).map((id) => ({ pluginId: id, instanceId: id })),
 }))
 
 import { useSettingsBootstrap } from "@/hooks/app/use-settings-bootstrap"
@@ -248,7 +250,7 @@ describe("useSettingsBootstrap", () => {
       )
       expect(savePluginSettingsMock).toHaveBeenCalledWith(migratedSettings)
       expect(args.setPluginSettings).toHaveBeenCalledWith(migratedSettings)
-      expect(args.startBatch).toHaveBeenCalledWith(["devin"])
+      expect(args.startBatch).toHaveBeenCalledWith([{ pluginId: "devin", instanceId: "devin" }])
     })
   })
 })

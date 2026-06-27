@@ -941,7 +941,10 @@
       }
     }
 
-    const keychainAuth = loadAuthFromKeychain(ctx)
+    // Multi-account: when CODEX_HOME is explicitly set, this instance is pinned to that
+    // home's auth.json. The shared "Codex Auth" keychain entry is not scoped to a home, so
+    // falling back to it would surface a different (default) account — cross-talk. Skip it.
+    const keychainAuth = readCodexHome(ctx) ? null : loadAuthFromKeychain(ctx)
     if (keychainAuth) {
       try {
         return probeWithAuthState(ctx, keychainAuth)

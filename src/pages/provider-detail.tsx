@@ -1,9 +1,9 @@
 import { ProviderCard } from "@/components/provider-card"
-import type { PluginDisplayState } from "@/lib/plugin-types"
+import type { DisplayPluginState } from "@/hooks/app/use-app-plugin-views"
 import type { DisplayMode, ResetTimerDisplayMode, TimeFormatMode } from "@/lib/settings"
 
 interface ProviderDetailPageProps {
-  plugin: PluginDisplayState | null
+  plugin: DisplayPluginState | null
   onRetry?: () => void
   displayMode: DisplayMode
   resetTimerDisplayMode: ResetTimerDisplayMode
@@ -30,6 +30,8 @@ export function ProviderDetailPage({
   return (
     <ProviderCard
       name={plugin.meta.name}
+      label={plugin.label}
+      customIconUrl={plugin.customIconUrl}
       plan={plugin.data?.plan}
       links={plugin.meta.links}
       showSeparator={false}

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react"
 import {
   getEnabledPluginIds,
+  resolveProbeInstances,
   type AutoUpdateIntervalMinutes,
   type PluginSettings,
+  type ProbeInstance,
 } from "@/lib/settings"
 
 type UseProbeAutoUpdateArgs = {
@@ -11,7 +13,7 @@ type UseProbeAutoUpdateArgs = {
   setLoadingForPlugins: (ids: string[]) => void
   setErrorForPlugins: (ids: string[], error: string) => void
   isPluginLoading: (id: string) => boolean
-  startBatch: (pluginIds?: string[]) => Promise<string[] | undefined>
+  startBatch: (instances?: ProbeInstance[]) => Promise<string[] | undefined>
 }
 
 export function useProbeAutoUpdate({
@@ -49,7 +51,7 @@ export function useProbeAutoUpdate({
       }
 
       setLoadingForPlugins(idleIds)
-      startBatch(idleIds).catch((error) => {
+      startBatch(resolveProbeInstances(pluginSettings, idleIds)).catch((error) => {
         console.error("Failed to start auto-update batch:", error)
         setErrorForPlugins(idleIds, "Failed to start probe")
       })

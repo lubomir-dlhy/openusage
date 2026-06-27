@@ -20,6 +20,7 @@ describe("useSettingsPluginList", () => {
     const pluginSettings: PluginSettings = {
       order: ["codex", "missing", "cursor"],
       disabled: ["cursor"],
+      instances: [],
     }
 
     const { result } = renderHook(() =>
@@ -33,8 +34,8 @@ describe("useSettingsPluginList", () => {
     )
 
     expect(result.current).toEqual([
-      { id: "codex", name: "Codex", enabled: true },
-      { id: "cursor", name: "Cursor", enabled: false },
+      { id: "codex", providerId: "codex", name: "Codex", label: null, isDefault: true, enabled: true, env: undefined, icon: null },
+      { id: "cursor", providerId: "cursor", name: "Cursor", label: null, isDefault: true, enabled: false, env: undefined, icon: null },
     ])
   })
 

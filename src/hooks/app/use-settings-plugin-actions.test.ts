@@ -5,9 +5,10 @@ const { savePluginSettingsMock } = vi.hoisted(() => ({
   savePluginSettingsMock: vi.fn(),
 }))
 
-vi.mock("@/lib/settings", () => ({
-  savePluginSettings: savePluginSettingsMock,
-}))
+vi.mock("@/lib/settings", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/settings")>("@/lib/settings")
+  return { ...actual, savePluginSettings: savePluginSettingsMock }
+})
 
 import { useSettingsPluginActions } from "@/hooks/app/use-settings-plugin-actions"
 
@@ -186,7 +187,7 @@ describe("useSettingsPluginActions", () => {
       result.current.handleToggle("b")
     })
     expect(setLoadingForPlugins).toHaveBeenCalledWith(["b"])
-    expect(startBatch).toHaveBeenCalledWith(["b"])
+    expect(startBatch).toHaveBeenCalledWith([{ pluginId: "b", instanceId: "b" }])
     expect(setPluginSettings).toHaveBeenNthCalledWith(1, { order: ["a", "b"], disabled: [] })
 
     act(() => {

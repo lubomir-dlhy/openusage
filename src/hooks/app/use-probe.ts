@@ -30,6 +30,9 @@ export function useProbe({
 
   const handleBatchComplete = useCallback(() => {}, [])
 
+  // startBatch takes ProbeInstance[] (pluginId + instanceId + env). Each caller
+  // resolves enabled instanceIds -> ProbeInstance[] from its own settings, so
+  // there is never a stale-settings race at bootstrap.
   const { startBatch } = useProbeEvents({
     onResult: handleProbeResult,
     onBatchComplete: handleBatchComplete,

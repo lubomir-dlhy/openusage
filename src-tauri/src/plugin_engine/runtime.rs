@@ -2,6 +2,7 @@ use crate::plugin_engine::host_api;
 use crate::plugin_engine::manifest::LoadedPlugin;
 use rquickjs::{Array, Context, Ctx, Error, Object, Promise, Runtime, Value};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -63,28 +64,79 @@ pub enum MetricLine {
 #[serde(rename_all = "camelCase")]
 pub struct PluginOutput {
     pub provider_id: String,
+    pub instance_id: String,
+    pub label: Option<String>,
     pub display_name: String,
     pub plan: Option<String>,
     pub lines: Vec<MetricLine>,
     pub icon_url: String,
 }
 
+#[cfg(test)]
 pub fn run_probe(plugin: &LoadedPlugin, app_data_dir: &PathBuf, app_version: &str) -> PluginOutput {
-    run_probe_with_timeout(
+    run_probe_with_options(
         plugin,
         app_data_dir,
         app_version,
         Duration::from_secs(PROBE_TIMEOUT_SECS),
+        &plugin.manifest.id,
+        None,
+        &HashMap::new(),
     )
 }
 
+/// Run a probe for a specific account instance, applying that instance's `env`
+/// overrides (e.g. CLAUDE_CONFIG_DIR / CODEX_HOME directory paths) so the plugin
+/// reads the matching existing credential store. Overrides are paths, not secrets.
+pub fn run_probe_for_instance(
+    plugin: &LoadedPlugin,
+    app_data_dir: &PathBuf,
+    app_version: &str,
+    instance_id: &str,
+    label: Option<&str>,
+    env_overrides: &HashMap<String, String>,
+) -> PluginOutput {
+    run_probe_with_options(
+        plugin,
+        app_data_dir,
+        app_version,
+        Duration::from_secs(PROBE_TIMEOUT_SECS),
+        instance_id,
+        label,
+        env_overrides,
+    )
+}
+
+#[cfg(test)]
 fn run_probe_with_timeout(
     plugin: &LoadedPlugin,
     app_data_dir: &PathBuf,
     app_version: &str,
     timeout: Duration,
 ) -> PluginOutput {
-    let fallback = error_output(plugin, "runtime error".to_string());
+    run_probe_with_options(
+        plugin,
+        app_data_dir,
+        app_version,
+        timeout,
+        &plugin.manifest.id,
+        None,
+        &HashMap::new(),
+    )
+}
+
+fn run_probe_with_options(
+    plugin: &LoadedPlugin,
+    app_data_dir: &PathBuf,
+    app_version: &str,
+    timeout: Duration,
+    instance_id: &str,
+    label: Option<&str>,
+    env_overrides: &HashMap<String, String>,
+) -> PluginOutput {
+    let mut fallback = error_output(plugin, "runtime error".to_string());
+    fallback.instance_id = instance_id.to_string();
+    fallback.label = label.map(|value| value.to_string());
     let timeout_message = probe_timeout_message(timeout);
     let deadline_at = Instant::now()
         .checked_add(timeout)
@@ -108,13 +160,14 @@ fn run_probe_with_timeout(
     let icon_url = plugin.icon_data_url.clone();
     let app_data = app_data_dir.clone();
 
-    ctx.with(|ctx| {
+    let mut output = ctx.with(|ctx| {
         if host_api::inject_host_api_with_deadline(
             &ctx,
             &plugin_id,
             &app_data,
             app_version,
             deadline,
+            env_overrides,
         )
         .is_err()
         {
@@ -224,12 +277,17 @@ fn run_probe_with_timeout(
 
         PluginOutput {
             provider_id: plugin_id,
+            instance_id: String::new(),
+            label: None,
             display_name,
             plan,
             lines,
             icon_url,
         }
-    })
+    });
+    output.instance_id = instance_id.to_string();
+    output.label = label.map(|value| value.to_string());
+    output
 }
 
 fn parse_lines(result: &Object) -> Result<Vec<MetricLine>, String> {
@@ -675,6 +733,8 @@ fn parse_bar_chart_line<'js>(
 fn error_output(plugin: &LoadedPlugin, message: String) -> PluginOutput {
     PluginOutput {
         provider_id: plugin.manifest.id.clone(),
+        instance_id: String::new(),
+        label: None,
         display_name: plugin.manifest.name.clone(),
         plan: None,
         lines: vec![error_line(message)],

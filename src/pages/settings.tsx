@@ -15,9 +15,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { Fragment, useMemo, useRef, useState } from "react";
+import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ACCOUNT_ICON_PRESETS } from "@/lib/account-icon-presets";
+import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { GlobalShortcutSection } from "@/components/global-shortcut-section";
 import { getBarFillLayout, getTrayIconSizePx } from "@/lib/tray-bars-icon";
 import {
@@ -43,9 +48,23 @@ import { cn } from "@/lib/utils";
 
 interface PluginConfig {
   id: string;
+  providerId: string;
   name: string;
+  label: string | null;
+  isDefault: boolean;
   enabled: boolean;
+  env?: Record<string, string>;
+  icon?: string | null;
 }
+
+interface AddableProvider {
+  id: string;
+  name: string;
+}
+
+// Providers whose multi-account config-dir env var is known (others are hidden
+// from the "Add account" picker since we can't point them at a second login).
+const MULTI_ACCOUNT_PROVIDERS = new Set(["claude", "codex"]);
 
 const TRAY_PREVIEW_SIZE_PX = getTrayIconSizePx(1);
 
@@ -201,9 +220,13 @@ function MenubarIconStylePreview({
 function SortablePluginItem({
   plugin,
   onToggle,
+  onRemove,
+  onEdit,
 }: {
   plugin: PluginConfig;
   onToggle: (id: string) => void;
+  onRemove: (instanceId: string) => void;
+  onEdit: (instanceId: string) => void;
 }) {
   const {
     attributes,
@@ -242,12 +265,55 @@ function SortablePluginItem({
 
       <span
         className={cn(
-          "flex-1 text-sm",
+          "flex-1 min-w-0 truncate text-sm",
           !plugin.enabled && "text-muted-foreground"
         )}
       >
         {plugin.name}
+        {plugin.label ? (
+          <span className="ml-1.5 text-xs text-muted-foreground">
+            {plugin.label}
+          </span>
+        ) : null}
       </span>
+
+      {!plugin.isDefault && plugin.icon && (
+        <img
+          src={plugin.icon}
+          alt=""
+          aria-hidden
+          className="size-5 rounded object-contain shrink-0 bg-[#F0EEE6] p-px"
+          draggable={false}
+        />
+      )}
+
+      {!plugin.isDefault && (
+        <button
+          type="button"
+          aria-label="Edit account"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(plugin.id);
+          }}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
+      )}
+
+      {!plugin.isDefault && (
+        <button
+          type="button"
+          aria-label="Remove account"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(plugin.id);
+          }}
+          className="text-muted-foreground hover:text-destructive transition-colors"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
 
       {/* Wrap to stop Base UI's internal input.click() from bubbling to the row div */}
       <span onClick={(e) => e.stopPropagation()}>
@@ -261,10 +327,292 @@ function SortablePluginItem({
   );
 }
 
+function IconPicker({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") onChange(reader.result);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <span className="text-xs text-muted-foreground">Icon</span>
+      <div className="flex items-center gap-2 flex-wrap">
+        <div
+          aria-label="Icon preview"
+          className="size-9 rounded-md border bg-background flex items-center justify-center overflow-hidden shrink-0"
+        >
+          {value ? (
+            <img src={value} alt="" className="size-full object-contain" />
+          ) : (
+            <span className="text-[9px] text-muted-foreground">Default</span>
+          )}
+        </div>
+        {ACCOUNT_ICON_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            title={preset.label}
+            aria-label={preset.label}
+            onClick={() => onChange(preset.dataUrl)}
+            className={cn(
+              "size-9 rounded-md border bg-background overflow-hidden transition-shadow",
+              value === preset.dataUrl ? "ring-2 ring-primary" : "hover:border-foreground/30"
+            )}
+          >
+            <img src={preset.dataUrl} alt={preset.label} className="size-full object-contain" />
+          </button>
+        ))}
+        <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+          Upload
+        </Button>
+        {value ? (
+          <Button type="button" variant="ghost" size="sm" onClick={() => onChange(null)}>
+            Default
+          </Button>
+        ) : null}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFile}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AccountForm({
+  mode,
+  providers,
+  initial,
+  onSubmit,
+  onCancel,
+}: {
+  mode: "add" | "edit";
+  providers: AddableProvider[];
+  initial?: {
+    providerId: string;
+    providerName?: string;
+    label: string;
+    configDir: string;
+    icon: string | null;
+  };
+  onSubmit: (
+    providerId: string,
+    label: string,
+    configDir: string,
+    icon: string | null
+  ) => void;
+  onCancel: () => void;
+}) {
+  const addable = useMemo(
+    () => providers.filter((p) => MULTI_ACCOUNT_PROVIDERS.has(p.id)),
+    [providers]
+  );
+  const [providerId, setProviderId] = useState(
+    initial?.providerId ?? addable[0]?.id ?? ""
+  );
+  const [label, setLabel] = useState(initial?.label ?? "");
+  const [configDir, setConfigDir] = useState(initial?.configDir ?? "");
+  const [icon, setIcon] = useState<string | null>(initial?.icon ?? null);
+
+  const canSubmit = Boolean(providerId && label.trim() && configDir.trim());
+  const configEnvName = providerId === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR";
+
+  const chooseFolder = async () => {
+    // Keep the menu-bar panel from auto-hiding while the native dialog has focus.
+    try {
+      await invoke("set_dialog_guard", { active: true });
+    } catch {
+      // non-tauri / command missing — proceed anyway
+    }
+    try {
+      const dir = await openFolderDialog({
+        directory: true,
+        multiple: false,
+        title: "Select config folder",
+        defaultPath: configDir || undefined,
+      });
+      if (typeof dir === "string") setConfigDir(dir);
+    } catch (e) {
+      console.error("Folder picker failed:", e);
+    } finally {
+      try {
+        await invoke("set_dialog_guard", { active: false });
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  return (
+    <div className="mt-1 rounded-md bg-card p-3 space-y-3 min-w-0">
+      <div className="space-y-1 min-w-0">
+        <span className="text-xs text-muted-foreground">Provider</span>
+        {mode === "add" ? (
+          <select
+            aria-label="Provider"
+            value={providerId}
+            onChange={(e) => setProviderId(e.target.value)}
+            className="w-full h-8 rounded-md border bg-background px-2 text-sm"
+          >
+            {addable.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="w-full h-8 rounded-md border bg-muted px-2 text-sm flex items-center text-muted-foreground truncate">
+            {initial?.providerName ?? providerId}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-1 min-w-0">
+        <span className="text-xs text-muted-foreground">Label</span>
+        <input
+          aria-label="Account label"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="e.g. Work"
+          className="w-full h-8 rounded-md border bg-background px-2 text-sm"
+        />
+      </div>
+
+      <div className="space-y-1 min-w-0">
+        <span className="text-xs text-muted-foreground">Config directory</span>
+        <div className="flex gap-2 min-w-0">
+          <input
+            aria-label="Config directory"
+            value={configDir}
+            onChange={(e) => setConfigDir(e.target.value)}
+            placeholder={`${configEnvName} folder`}
+            className="flex-1 min-w-0 h-8 rounded-md border bg-background px-2 text-sm font-mono truncate"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={chooseFolder}
+          >
+            Choose…
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Tip: press ⌘⇧. in the dialog to show hidden folders.
+        </p>
+      </div>
+
+      <p className="text-xs text-muted-foreground break-words">
+        Log in once via the CLI with that folder, e.g.{" "}
+        <code className="break-all">
+          {configEnvName}=&lt;dir&gt;{" "}
+          {providerId === "codex" ? "codex login" : "claude /login"}
+        </code>
+        . OpenUsage only reads the resulting Keychain session.
+      </p>
+
+      <IconPicker value={icon} onChange={setIcon} />
+
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          className="flex-1"
+          disabled={!canSubmit}
+          onClick={() => onSubmit(providerId, label.trim(), configDir.trim(), icon)}
+        >
+          {mode === "add" ? "Add" : "Save"}
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AddAccountForm({
+  providers,
+  onAddInstance,
+}: {
+  providers: AddableProvider[];
+  onAddInstance: (
+    providerId: string,
+    label: string,
+    configDir: string,
+    icon?: string | null
+  ) => void;
+}) {
+  const addable = useMemo(
+    () => providers.filter((p) => MULTI_ACCOUNT_PROVIDERS.has(p.id)),
+    [providers]
+  );
+  const [open, setOpen] = useState(false);
+
+  if (addable.length === 0) return null;
+
+  if (!open) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full mt-1"
+        onClick={() => setOpen(true)}
+      >
+        <Plus className="h-4 w-4 mr-1" />
+        Add account
+      </Button>
+    );
+  }
+
+  return (
+    <AccountForm
+      mode="add"
+      providers={providers}
+      onSubmit={(providerId, label, configDir, icon) => {
+        onAddInstance(providerId, label, configDir, icon);
+        setOpen(false);
+      }}
+      onCancel={() => setOpen(false)}
+    />
+  );
+}
+
 interface SettingsPageProps {
   plugins: PluginConfig[];
   onReorder: (orderedIds: string[]) => void;
   onToggle: (id: string) => void;
+  onAddInstance: (
+    providerId: string,
+    label: string,
+    configDir: string,
+    icon?: string | null
+  ) => void;
+  onEditInstance: (
+    instanceId: string,
+    patch: { label: string; configDir: string; icon?: string | null }
+  ) => void;
+  onRemoveInstance: (instanceId: string) => void;
+  addableProviders: AddableProvider[];
   autoUpdateInterval: AutoUpdateIntervalMinutes;
   onAutoUpdateIntervalChange: (value: AutoUpdateIntervalMinutes) => void;
   themeMode: ThemeMode;
@@ -290,6 +638,10 @@ export function SettingsPage({
   plugins,
   onReorder,
   onToggle,
+  onAddInstance,
+  onEditInstance,
+  onRemoveInstance,
+  addableProviders,
   autoUpdateInterval,
   onAutoUpdateIntervalChange,
   themeMode,
@@ -329,8 +681,21 @@ export function SettingsPage({
     }
   };
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editingPlugin = plugins.find((p) => p.id === editingId) ?? null;
+  const editingConfigDir = editingPlugin?.env
+    ? Object.values(editingPlugin.env)[0] ?? ""
+    : "";
+
   return (
-    <div className="py-3 space-y-4">
+    <Tabs defaultValue="general" className="py-3">
+      <TabsList className="w-full">
+        <TabsTrigger value="general">General</TabsTrigger>
+        <TabsTrigger value="appearance">Appearance</TabsTrigger>
+        <TabsTrigger value="accounts">Accounts</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="general" className="space-y-4 mt-3">
       <section>
         <h3 className="text-lg font-semibold mb-0">Auto Refresh</h3>
         <p className="text-sm text-muted-foreground mb-2">
@@ -459,6 +824,27 @@ export function SettingsPage({
           </div>
         </div>
       </section>
+      <GlobalShortcutSection
+        globalShortcut={globalShortcut}
+        onGlobalShortcutChange={onGlobalShortcutChange}
+      />
+      <section>
+        <h3 className="text-lg font-semibold mb-0">Start on Login</h3>
+        <p className="text-sm text-muted-foreground mb-2">
+          OpenUsage starts when you sign in
+        </p>
+        <label className="flex items-center gap-2 text-sm select-none text-foreground">
+          <Checkbox
+            key={`start-on-login-${startOnLogin}`}
+            checked={startOnLogin}
+            onCheckedChange={(checked) => onStartOnLoginChange(checked === true)}
+          />
+          Start on login
+        </label>
+      </section>
+      </TabsContent>
+
+      <TabsContent value="appearance" className="space-y-4 mt-3">
       <section>
         <h3 className="text-lg font-semibold mb-0">Menubar Icon</h3>
         <p className="text-sm text-muted-foreground mb-2">
@@ -541,24 +927,9 @@ export function SettingsPage({
           </div>
         </div>
       </section>
-      <GlobalShortcutSection
-        globalShortcut={globalShortcut}
-        onGlobalShortcutChange={onGlobalShortcutChange}
-      />
-      <section>
-        <h3 className="text-lg font-semibold mb-0">Start on Login</h3>
-        <p className="text-sm text-muted-foreground mb-2">
-          OpenUsage starts when you sign in
-        </p>
-        <label className="flex items-center gap-2 text-sm select-none text-foreground">
-          <Checkbox
-            key={`start-on-login-${startOnLogin}`}
-            checked={startOnLogin}
-            onCheckedChange={(checked) => onStartOnLoginChange(checked === true)}
-          />
-          Start on login
-        </label>
-      </section>
+      </TabsContent>
+
+      <TabsContent value="accounts" className="space-y-4 mt-3">
       <section>
         <h3 className="text-lg font-semibold mb-0">Plugins</h3>
         <p className="text-sm text-muted-foreground mb-2">
@@ -575,16 +946,48 @@ export function SettingsPage({
               strategy={verticalListSortingStrategy}
             >
               {plugins.map((plugin) => (
-                <SortablePluginItem
-                  key={plugin.id}
-                  plugin={plugin}
-                  onToggle={onToggle}
-                />
+                <Fragment key={plugin.id}>
+                  <SortablePluginItem
+                    plugin={plugin}
+                    onToggle={onToggle}
+                    onRemove={onRemoveInstance}
+                    onEdit={(id) => setEditingId(id)}
+                  />
+                  {editingPlugin && editingPlugin.id === plugin.id ? (
+                    <AccountForm
+                      mode="edit"
+                      providers={addableProviders}
+                      initial={{
+                        providerId: editingPlugin.providerId,
+                        providerName: editingPlugin.name,
+                        label: editingPlugin.label ?? "",
+                        configDir: editingConfigDir,
+                        icon: editingPlugin.icon ?? null,
+                      }}
+                      onSubmit={(_providerId, label, configDir, icon) => {
+                        onEditInstance(editingPlugin.id, {
+                          label,
+                          configDir,
+                          icon,
+                        });
+                        setEditingId(null);
+                      }}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  ) : null}
+                </Fragment>
               ))}
             </SortableContext>
           </DndContext>
+          {!editingPlugin ? (
+            <AddAccountForm
+              providers={addableProviders}
+              onAddInstance={onAddInstance}
+            />
+          ) : null}
         </div>
       </section>
-    </div>
+      </TabsContent>
+    </Tabs>
   );
 }

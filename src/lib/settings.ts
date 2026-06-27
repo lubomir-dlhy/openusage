@@ -4,10 +4,50 @@ import type { PluginMeta } from "@/lib/plugin-types";
 // Refresh cooldown duration in milliseconds (5 minutes)
 export const REFRESH_COOLDOWN_MS = 300_000;
 
-// Spec: persist plugin order + disabled list; new plugins append, default disabled unless in DEFAULT_ENABLED_PLUGINS.
+/**
+ * A single account instance of a provider. The default account for a provider
+ * has `instanceId === providerId` and no env override. Extra accounts get a
+ * distinct `instanceId` (e.g. "claude#2") and an `env` pointing at that
+ * account's config directory.
+ *
+ * `env` holds directory PATHS only (e.g. CLAUDE_CONFIG_DIR / CODEX_HOME) — never
+ * a credential. Tokens stay in the macOS Keychain, written by the official CLIs.
+ */
+export type PluginInstance = {
+  instanceId: string;
+  providerId: string;
+  label?: string | null;
+  env?: Record<string, string>;
+  /**
+   * Optional custom icon (a data URL or image URL) shown full-color in-app
+   * (nav rail + provider cards) for this account. When absent, the provider's
+   * default icon is used. The menu-bar (tray) icon always uses the provider glyph.
+   */
+  icon?: string | null;
+};
+
+// Spec: persist plugin order + disabled list (keyed by instanceId; for default
+// accounts instanceId === providerId so legacy id-keyed data still applies).
+// `instances` holds the per-account definitions. New plugins append, default
+// disabled unless in DEFAULT_ENABLED_PLUGINS.
 export type PluginSettings = {
   order: string[];
   disabled: string[];
+  instances: PluginInstance[];
+};
+
+/** Shape sent to the Rust `start_probe_batch` command for each account. */
+export type ProbeInstance = {
+  pluginId: string;
+  instanceId: string;
+  label?: string | null;
+  env?: Record<string, string>;
+};
+
+/** Env var used to point a provider at a specific account's config directory. */
+export const PROVIDER_CONFIG_DIR_ENV: Record<string, string> = {
+  claude: "CLAUDE_CONFIG_DIR",
+  codex: "CODEX_HOME",
 };
 
 export type AutoUpdateIntervalMinutes = 5 | 15 | 30 | 60;
@@ -108,20 +148,163 @@ const DEFAULT_ENABLED_PLUGINS = new Set(["claude", "codex", "cursor"]);
 export const DEFAULT_PLUGIN_SETTINGS: PluginSettings = {
   order: [],
   disabled: [],
+  instances: [],
 };
+
+function isValidInstance(value: unknown): value is PluginInstance {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.instanceId === "string" && typeof v.providerId === "string";
+}
+
+/**
+ * Ensure every id referenced in `order` has a matching instance definition.
+ * Legacy installs (and order entries with no instance) get a synthesized
+ * default instance where instanceId === providerId and there is no env override.
+ */
+function withSynthesizedInstances(settings: PluginSettings): PluginSettings {
+  const byId = new Map(
+    (settings.instances ?? []).map((inst) => [inst.instanceId, inst])
+  );
+  for (const id of settings.order) {
+    if (!byId.has(id)) {
+      byId.set(id, { instanceId: id, providerId: id });
+    }
+  }
+  return { ...settings, instances: Array.from(byId.values()) };
+}
 
 export async function loadPluginSettings(): Promise<PluginSettings> {
   const stored = await store.get<PluginSettings>(PLUGIN_SETTINGS_KEY);
-  if (!stored) return { ...DEFAULT_PLUGIN_SETTINGS };
-  return {
-    order: Array.isArray(stored.order) ? stored.order : [],
-    disabled: Array.isArray(stored.disabled) ? stored.disabled : [],
-  };
+  if (!stored) return { ...DEFAULT_PLUGIN_SETTINGS, instances: [] };
+  const order = Array.isArray(stored.order) ? stored.order : [];
+  const disabled = Array.isArray(stored.disabled) ? stored.disabled : [];
+  const instances = Array.isArray(stored.instances)
+    ? stored.instances.filter(isValidInstance)
+    : [];
+  return withSynthesizedInstances({ order, disabled, instances });
 }
 
 export async function savePluginSettings(settings: PluginSettings): Promise<void> {
   await store.set(PLUGIN_SETTINGS_KEY, settings);
   await store.save();
+}
+
+/** Map of instanceId -> instance for the given settings. */
+function instancesById(settings: PluginSettings): Map<string, PluginInstance> {
+  return new Map((settings.instances ?? []).map((inst) => [inst.instanceId, inst]));
+}
+
+/**
+ * Expand a list of enabled instanceIds into the ProbeInstance objects sent to
+ * Rust. When `instanceIds` is omitted, all enabled instances are returned.
+ */
+export function resolveProbeInstances(
+  settings: PluginSettings,
+  instanceIds?: string[]
+): ProbeInstance[] {
+  const byId = instancesById(settings);
+  const ids = instanceIds ?? getEnabledPluginIds(settings);
+  return ids.map((id) => {
+    const inst = byId.get(id);
+    if (!inst) {
+      // Defensive: treat an unknown id as a default account (instanceId == providerId).
+      return { pluginId: id, instanceId: id };
+    }
+    return {
+      pluginId: inst.providerId,
+      instanceId: inst.instanceId,
+      label: inst.label ?? null,
+      env: inst.env,
+    };
+  });
+}
+
+/** Generate a stable, collision-free instanceId for a new account. */
+function nextInstanceId(settings: PluginSettings, providerId: string): string {
+  const existing = new Set(settings.instances.map((inst) => inst.instanceId));
+  existing.add(providerId); // the default account already owns the bare providerId
+  let n = 2;
+  let candidate = `${providerId}#${n}`;
+  while (existing.has(candidate)) {
+    n += 1;
+    candidate = `${providerId}#${n}`;
+  }
+  return candidate;
+}
+
+/** Add a new account instance for a provider (enabled by default). */
+export function addInstance(
+  settings: PluginSettings,
+  providerId: string,
+  label: string | null,
+  env?: Record<string, string>,
+  icon?: string | null
+): PluginSettings {
+  const instanceId = nextInstanceId(settings, providerId);
+  const instance: PluginInstance = {
+    instanceId,
+    providerId,
+    label: label && label.trim() ? label.trim() : null,
+    ...(env && Object.keys(env).length > 0 ? { env } : {}),
+    ...(icon ? { icon } : {}),
+  };
+  return {
+    order: [...settings.order, instanceId],
+    disabled: settings.disabled,
+    instances: [...settings.instances, instance],
+  };
+}
+
+/**
+ * Update an existing account instance. Only the keys present in `patch` are
+ * changed. Passing `icon: null/undefined` clears the custom icon; passing
+ * `env` replaces the env map. Returns the same settings object if no instance
+ * matches (callers can use referential equality to detect a no-op).
+ */
+export function editInstance(
+  settings: PluginSettings,
+  instanceId: string,
+  patch: { label?: string | null; env?: Record<string, string>; icon?: string | null }
+): PluginSettings {
+  let changed = false;
+  const instances = settings.instances.map((inst) => {
+    if (inst.instanceId !== instanceId) return inst;
+    changed = true;
+    const next: PluginInstance = { ...inst };
+    if ("label" in patch) {
+      const trimmed = patch.label && patch.label.trim() ? patch.label.trim() : null;
+      next.label = trimmed;
+    }
+    if ("env" in patch) {
+      if (patch.env && Object.keys(patch.env).length > 0) next.env = patch.env;
+      else delete next.env;
+    }
+    if ("icon" in patch) {
+      if (patch.icon) next.icon = patch.icon;
+      else delete next.icon;
+    }
+    return next;
+  });
+  if (!changed) return settings;
+  return { ...settings, instances };
+}
+
+/**
+ * Remove an extra account instance. Default accounts (instanceId === providerId)
+ * are never removed through this path — disable them instead.
+ */
+export function removeInstance(
+  settings: PluginSettings,
+  instanceId: string
+): PluginSettings {
+  const inst = settings.instances.find((i) => i.instanceId === instanceId);
+  if (!inst || inst.instanceId === inst.providerId) return settings;
+  return {
+    order: settings.order.filter((id) => id !== instanceId),
+    disabled: settings.disabled.filter((id) => id !== instanceId),
+    instances: settings.instances.filter((i) => i.instanceId !== instanceId),
+  };
 }
 
 // TODO(remove after 2026-09-01): One-time Windsurf -> Devin settings migration.
@@ -142,10 +325,28 @@ export function migrateWindsurfToDevin(settings: PluginSettings): PluginSettings
     disabled.push("devin");
   }
 
-  return {
+  // Remap any windsurf instances to devin (default instance only; extra windsurf
+  // accounts are dropped by normalize since the provider is retired).
+  const instances = (settings.instances ?? [])
+    .map((inst) =>
+      inst.providerId === "windsurf"
+        ? {
+            ...inst,
+            providerId: "devin",
+            instanceId: inst.instanceId === "windsurf" ? "devin" : inst.instanceId,
+          }
+        : inst
+    )
+    .filter(
+      (inst, index, all) =>
+        all.findIndex((other) => other.instanceId === inst.instanceId) === index
+    );
+
+  return withSynthesizedInstances({
     order,
     disabled: Array.from(new Set(disabled)),
-  };
+    instances,
+  });
 }
 
 function isAutoUpdateInterval(value: unknown): value is AutoUpdateIntervalMinutes {
@@ -172,32 +373,61 @@ export function normalizePluginSettings(
   settings: PluginSettings,
   plugins: PluginMeta[]
 ): PluginSettings {
-  const knownIds = plugins.map((plugin) => plugin.id);
-  const knownSet = new Set(knownIds);
+  const knownProviderIds = new Set(plugins.map((plugin) => plugin.id));
+
+  // Index instances by id, ensuring a default instance for every known provider
+  // and dropping instances whose provider is no longer available (e.g. retired).
+  const instById = new Map<string, PluginInstance>();
+  for (const inst of settings.instances ?? []) {
+    if (knownProviderIds.has(inst.providerId)) {
+      instById.set(inst.instanceId, inst);
+    }
+  }
+  for (const providerId of knownProviderIds) {
+    if (!instById.has(providerId)) {
+      instById.set(providerId, { instanceId: providerId, providerId });
+    }
+  }
 
   const order: string[] = [];
   const seen = new Set<string>();
   for (const id of settings.order) {
-    if (!knownSet.has(id) || seen.has(id)) continue;
+    if (!instById.has(id) || seen.has(id)) continue;
     seen.add(id);
     order.push(id);
   }
   const newlyAdded: string[] = [];
-  for (const id of knownIds) {
-    if (!seen.has(id)) {
-      seen.add(id);
-      order.push(id);
-      newlyAdded.push(id);
+  for (const instanceId of instById.keys()) {
+    if (!seen.has(instanceId)) {
+      seen.add(instanceId);
+      order.push(instanceId);
+      newlyAdded.push(instanceId);
     }
   }
 
-  const disabled = settings.disabled.filter((id) => knownSet.has(id));
-  for (const id of newlyAdded) {
-    if (!DEFAULT_ENABLED_PLUGINS.has(id) && !disabled.includes(id)) {
-      disabled.push(id);
+  const disabled = settings.disabled.filter((id) => instById.has(id));
+  for (const instanceId of newlyAdded) {
+    const inst = instById.get(instanceId)!;
+    const isDefault = inst.instanceId === inst.providerId;
+    // Default accounts follow the DEFAULT_ENABLED_PLUGINS gate; extra accounts
+    // (added explicitly by the user) default to enabled.
+    if (
+      isDefault &&
+      !DEFAULT_ENABLED_PLUGINS.has(inst.providerId) &&
+      !disabled.includes(instanceId)
+    ) {
+      disabled.push(instanceId);
     }
   }
-  return { order, disabled };
+  return { order, disabled, instances: Array.from(instById.values()) };
+}
+
+function areInstancesEqual(a: PluginInstance, b: PluginInstance): boolean {
+  if (a.instanceId !== b.instanceId) return false;
+  if (a.providerId !== b.providerId) return false;
+  if ((a.label ?? null) !== (b.label ?? null)) return false;
+  if ((a.icon ?? null) !== (b.icon ?? null)) return false;
+  return JSON.stringify(a.env ?? null) === JSON.stringify(b.env ?? null);
 }
 
 export function arePluginSettingsEqual(
@@ -206,11 +436,17 @@ export function arePluginSettingsEqual(
 ): boolean {
   if (a.order.length !== b.order.length) return false;
   if (a.disabled.length !== b.disabled.length) return false;
+  const aInstances = a.instances ?? [];
+  const bInstances = b.instances ?? [];
+  if (aInstances.length !== bInstances.length) return false;
   for (let i = 0; i < a.order.length; i += 1) {
     if (a.order[i] !== b.order[i]) return false;
   }
   for (let i = 0; i < a.disabled.length; i += 1) {
     if (a.disabled[i] !== b.disabled[i]) return false;
+  }
+  for (let i = 0; i < aInstances.length; i += 1) {
+    if (!areInstancesEqual(aInstances[i], bInstances[i])) return false;
   }
   return true;
 }

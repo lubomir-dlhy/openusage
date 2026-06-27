@@ -32,13 +32,14 @@ export function formatTrayTooltip(
 
   const metaById = new Map(pluginsMeta.map((p) => [p.id, p]))
   for (const bar of bars) {
-    const meta = metaById.get(bar.id)
+    const meta = metaById.get(bar.providerId ?? bar.id)
     if (!meta) continue
+    const name = bar.accountLabel ? `${meta.name} · ${bar.accountLabel}` : meta.name
     const percent = formatTrayPercentText(bar.fraction)
     if (showTags && bar.label) {
-      lines.push(`${meta.name}: ${percent} · ${bar.label}`)
+      lines.push(`${name}: ${percent} · ${bar.label}`)
     } else {
-      lines.push(`${meta.name}: ${percent}`)
+      lines.push(`${name}: ${percent}`)
     }
   }
   return lines.join("\n")

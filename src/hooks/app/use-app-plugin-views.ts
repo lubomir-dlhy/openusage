@@ -4,7 +4,21 @@ import type { PluginMeta } from "@/lib/plugin-types"
 import type { PluginSettings } from "@/lib/settings"
 import type { PluginState } from "@/hooks/app/types"
 
-export type DisplayPluginState = { meta: PluginMeta } & PluginState
+export type DisplayPluginState = {
+  meta: PluginMeta
+  instanceId: string
+  label: string | null
+  /** Per-account custom icon (data/image URL); overrides the provider icon in-app. */
+  customIconUrl?: string
+} & PluginState
+
+const EMPTY_STATE: PluginState = {
+  data: null,
+  loading: false,
+  error: null,
+  lastManualRefreshAt: null,
+  lastUpdatedAt: null,
+}
 
 type UseAppPluginViewsArgs = {
   activeView: ActiveView
@@ -25,50 +39,56 @@ export function useAppPluginViews({
     if (!pluginSettings) return []
     const disabledSet = new Set(pluginSettings.disabled)
     const metaById = new Map(pluginsMeta.map((plugin) => [plugin.id, plugin]))
+    const instById = new Map(
+      (pluginSettings.instances ?? []).map((inst) => [inst.instanceId, inst])
+    )
 
     return pluginSettings.order
       .filter((id) => !disabledSet.has(id))
-      .map((id) => {
-        const meta = metaById.get(id)
+      .map((instanceId): DisplayPluginState | null => {
+        const inst = instById.get(instanceId)
+        const providerId = inst?.providerId ?? instanceId
+        const meta = metaById.get(providerId)
         if (!meta) return null
-        const state =
-          pluginStates[id] ?? { data: null, loading: false, error: null, lastManualRefreshAt: null, lastUpdatedAt: null }
-        return { meta, ...state }
+        const state = pluginStates[instanceId] ?? EMPTY_STATE
+        return {
+          meta,
+          instanceId,
+          label: inst?.label ?? null,
+          customIconUrl: inst?.icon ?? undefined,
+          ...state,
+        }
       })
       .filter((plugin): plugin is DisplayPluginState => Boolean(plugin))
   }, [pluginSettings, pluginStates, pluginsMeta])
 
   const navPlugins = useMemo<NavPlugin[]>(() => {
-    if (!pluginSettings) return []
-    const disabledSet = new Set(pluginSettings.disabled)
-    const metaById = new Map(pluginsMeta.map((plugin) => [plugin.id, plugin]))
-
-    return pluginSettings.order
-      .filter((id) => !disabledSet.has(id))
-      .map((id) => metaById.get(id))
-      .filter((plugin): plugin is PluginMeta => Boolean(plugin))
-      .map((plugin) => ({
-        id: plugin.id,
-        name: plugin.name,
-        iconUrl: plugin.iconUrl,
-        brandColor: plugin.brandColor,
-      }))
-  }, [pluginSettings, pluginsMeta])
+    return displayPlugins.map((plugin) => ({
+      id: plugin.instanceId,
+      name: plugin.label ? `${plugin.meta.name} · ${plugin.label}` : plugin.meta.name,
+      iconUrl: plugin.meta.iconUrl,
+      brandColor: plugin.meta.brandColor,
+      customIconUrl: plugin.customIconUrl,
+    }))
+  }, [displayPlugins])
 
   useEffect(() => {
     if (activeView === "home" || activeView === "settings") return
     if (!pluginSettings) return
-    const isKnownPlugin = pluginsMeta.some((plugin) => plugin.id === activeView)
-    if (!isKnownPlugin) return
+    const isKnownInstance =
+      (pluginSettings.instances ?? []).some(
+        (inst) => inst.instanceId === activeView
+      ) || pluginSettings.order.includes(activeView)
+    if (!isKnownInstance) return
     const isStillEnabled = navPlugins.some((plugin) => plugin.id === activeView)
     if (!isStillEnabled) {
       setActiveView("home")
     }
-  }, [activeView, navPlugins, pluginSettings, pluginsMeta, setActiveView])
+  }, [activeView, navPlugins, pluginSettings, setActiveView])
 
   const selectedPlugin = useMemo(() => {
     if (activeView === "home" || activeView === "settings") return null
-    return displayPlugins.find((plugin) => plugin.meta.id === activeView) ?? null
+    return displayPlugins.find((plugin) => plugin.instanceId === activeView) ?? null
   }, [activeView, displayPlugins])
 
   return {

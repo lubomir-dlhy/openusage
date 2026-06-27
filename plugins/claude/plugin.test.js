@@ -300,6 +300,43 @@ describe("claude plugin", () => {
     )
   })
 
+  it("resolves a distinct keychain service per CLAUDE_CONFIG_DIR (no cross-talk between accounts)", async () => {
+    const serviceForConfigDir = (configDir, token) => {
+      plugin._resetState()
+      const ctx = makeCtx()
+      ctx.host.fs.exists = () => false
+      ctx.host.env.get.mockImplementation((name) =>
+        name === "CLAUDE_CONFIG_DIR" ? configDir : null
+      )
+      const services = []
+      ctx.host.keychain.readGenericPasswordForCurrentUser.mockImplementation((service) => {
+        services.push(service)
+        if (service === "Claude Code-credentials-" + expectedHash(configDir)) {
+          return JSON.stringify({ claudeAiOauth: { accessToken: token, subscriptionType: "pro" } })
+        }
+        return null
+      })
+      ctx.host.http.request.mockReturnValue({
+        status: 200,
+        bodyText: JSON.stringify({
+          five_hour: { utilization: 10, resets_at: "2099-01-01T00:00:00.000Z" },
+        }),
+      })
+      const result = plugin.probe(ctx)
+      expect(result.lines.find((line) => line.label === "Session")).toBeTruthy()
+      return services[0]
+    }
+
+    const personalDir = "/Users/test/.claude-personal"
+    const workDir = "/Users/test/.claude-work"
+    const personalService = serviceForConfigDir(personalDir, "personal-token")
+    const workService = serviceForConfigDir(workDir, "work-token")
+
+    expect(personalService).toBe("Claude Code-credentials-" + expectedHash(personalDir))
+    expect(workService).toBe("Claude Code-credentials-" + expectedHash(workDir))
+    expect(personalService).not.toBe(workService)
+  })
+
   it("does NOT compute a hash when CLAUDE_CONFIG_DIR is unset (matches upstream)", async () => {
     const ctx = makeCtx()
     ctx.host.fs.exists = () => false

@@ -10,6 +10,8 @@ import {
   DEFAULT_START_ON_LOGIN,
   DEFAULT_THEME_MODE,
   DEFAULT_TIME_FORMAT_MODE,
+  addInstance,
+  editInstance,
   arePluginSettingsEqual,
   getEnabledPluginIds,
   loadAutoUpdateInterval,
@@ -81,25 +83,37 @@ describe("settings", () => {
     await expect(loadPluginSettings()).resolves.toEqual({
       order: ["a"],
       disabled: [],
+      instances: [{ instanceId: "a", providerId: "a" }],
     })
   })
 
   it("saves settings", async () => {
-    const settings = { order: ["a"], disabled: ["b"] }
+    const settings = { order: ["a"], disabled: ["b"], instances: [] }
     await savePluginSettings(settings)
-    await expect(loadPluginSettings()).resolves.toEqual(settings)
+    await expect(loadPluginSettings()).resolves.toEqual({
+      order: ["a"],
+      disabled: ["b"],
+      instances: [{ instanceId: "a", providerId: "a" }],
+    })
   })
 
   it("normalizes order + disabled against known plugins", () => {
     const plugins: PluginMeta[] = [
-      { id: "a", name: "A", iconUrl: "", lines: [] },
-      { id: "b", name: "B", iconUrl: "", lines: [] },
+      { id: "a", name: "A", iconUrl: "", lines: [], primaryCandidates: [] },
+      { id: "b", name: "B", iconUrl: "", lines: [], primaryCandidates: [] },
     ]
     const normalized = normalizePluginSettings(
-      { order: ["b", "b", "c"], disabled: ["c", "a"] },
+      { order: ["b", "b", "c"], disabled: ["c", "a"], instances: [] },
       plugins
     )
-    expect(normalized).toEqual({ order: ["b", "a"], disabled: ["a"] })
+    expect(normalized).toEqual({
+      order: ["b", "a"],
+      disabled: ["a"],
+      instances: [
+        { instanceId: "a", providerId: "a" },
+        { instanceId: "b", providerId: "b" },
+      ],
+    })
   })
 
   it("auto-disables new non-default plugins", () => {
@@ -117,11 +131,17 @@ describe("settings", () => {
     const result = migrateWindsurfToDevin({
       order: ["claude", "windsurf", "codex"],
       disabled: [],
+      instances: [],
     })
 
     expect(result).toEqual({
       order: ["claude", "devin", "codex"],
       disabled: [],
+      instances: [
+        { instanceId: "claude", providerId: "claude" },
+        { instanceId: "devin", providerId: "devin" },
+        { instanceId: "codex", providerId: "codex" },
+      ],
     })
   })
 
@@ -129,11 +149,17 @@ describe("settings", () => {
     const result = migrateWindsurfToDevin({
       order: ["claude", "windsurf", "codex"],
       disabled: ["devin"],
+      instances: [],
     })
 
     expect(result).toEqual({
       order: ["claude", "devin", "codex"],
       disabled: [],
+      instances: [
+        { instanceId: "claude", providerId: "claude" },
+        { instanceId: "devin", providerId: "devin" },
+        { instanceId: "codex", providerId: "codex" },
+      ],
     })
   })
 
@@ -141,11 +167,16 @@ describe("settings", () => {
     const result = migrateWindsurfToDevin({
       order: ["windsurf", "claude"],
       disabled: ["windsurf"],
+      instances: [],
     })
 
     expect(result).toEqual({
       order: ["devin", "claude"],
       disabled: ["devin"],
+      instances: [
+        { instanceId: "devin", providerId: "devin" },
+        { instanceId: "claude", providerId: "claude" },
+      ],
     })
   })
 
@@ -153,11 +184,16 @@ describe("settings", () => {
     const result = migrateWindsurfToDevin({
       order: ["windsurf", "devin", "claude"],
       disabled: ["windsurf"],
+      instances: [],
     })
 
     expect(result).toEqual({
       order: ["devin", "claude"],
       disabled: [],
+      instances: [
+        { instanceId: "devin", providerId: "devin" },
+        { instanceId: "claude", providerId: "claude" },
+      ],
     })
   })
 
@@ -475,5 +511,45 @@ describe("settings", () => {
   it("ignores a negative retirement notice dismissal value", async () => {
     storeState.set("retirementNoticeDismissedAt", -5)
     await expect(loadRetirementNoticeDismissedAt()).resolves.toBeNull()
+  })
+})
+
+describe("editInstance", () => {
+  function settingsWithWorkAccount() {
+    // default claude account + an added "Work" account with a config dir.
+    return addInstance(
+      { order: ["claude"], disabled: [], instances: [{ instanceId: "claude", providerId: "claude" }] },
+      "claude",
+      "Work",
+      { CLAUDE_CONFIG_DIR: "/Users/me/CP/.claude" }
+    )
+  }
+
+  it("updates label, env (config dir) and icon of an existing instance", () => {
+    const before = settingsWithWorkAccount()
+    const id = before.instances.at(-1)!.instanceId
+    const after = editInstance(before, id, {
+      label: "Work",
+      env: { CLAUDE_CONFIG_DIR: "/new/dir" },
+      icon: "data:image/svg+xml,<svg/>",
+    })
+    const inst = after.instances.find((i) => i.instanceId === id)!
+    expect(inst.label).toBe("Work")
+    expect(inst.env).toEqual({ CLAUDE_CONFIG_DIR: "/new/dir" })
+    expect(inst.icon).toBe("data:image/svg+xml,<svg/>")
+  })
+
+  it("clears the icon when icon is null", () => {
+    const seeded = settingsWithWorkAccount()
+    const id = seeded.instances.at(-1)!.instanceId
+    const withIcon = editInstance(seeded, id, { icon: "data:image/svg+xml,<svg/>" })
+    expect(withIcon.instances.find((i) => i.instanceId === id)!.icon).toBe("data:image/svg+xml,<svg/>")
+    const cleared = editInstance(withIcon, id, { icon: null })
+    expect(cleared.instances.find((i) => i.instanceId === id)!.icon).toBeUndefined()
+  })
+
+  it("returns the same settings object for an unknown instanceId (no-op)", () => {
+    const before = settingsWithWorkAccount()
+    expect(editInstance(before, "does-not-exist", { label: "x" })).toBe(before)
   })
 })

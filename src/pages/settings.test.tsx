@@ -43,10 +43,22 @@ vi.mock("@dnd-kit/utilities", () => ({
 
 import { SettingsPage } from "@/pages/settings"
 
+// Settings is organized into tabs (General / Appearance / Accounts); inactive
+// tab panels are unmounted, so tests must activate the relevant tab first.
+async function goToTab(name: "General" | "Appearance" | "Accounts") {
+  await userEvent.click(screen.getByRole("tab", { name }))
+}
+
 const defaultProps = {
-  plugins: [{ id: "a", name: "Alpha", enabled: true }],
+  plugins: [
+    { id: "a", providerId: "a", name: "Alpha", label: null, isDefault: true, enabled: true },
+  ],
   onReorder: vi.fn(),
   onToggle: vi.fn(),
+  onAddInstance: vi.fn(),
+  onEditInstance: vi.fn(),
+  onRemoveInstance: vi.fn(),
+  addableProviders: [],
   autoUpdateInterval: 15 as const,
   onAutoUpdateIntervalChange: vi.fn(),
   themeMode: "system" as const,
@@ -89,12 +101,13 @@ describe("SettingsPage", () => {
         onToggle={onToggle}
       />
     )
+    await goToTab("Accounts")
     const checkboxes = screen.getAllByRole("checkbox")
     await userEvent.click(checkboxes[checkboxes.length - 1])
     expect(onToggle).toHaveBeenCalledWith("b")
   })
 
-  it("reorders plugins on drag end", () => {
+  it("reorders plugins on drag end", async () => {
     const onReorder = vi.fn()
     render(
       <SettingsPage
@@ -106,6 +119,7 @@ describe("SettingsPage", () => {
         onReorder={onReorder}
       />
     )
+    await goToTab("Accounts")
     latestOnDragEnd?.({ active: { id: "a" }, over: { id: "b" } })
     expect(onReorder).toHaveBeenCalledWith(["b", "a"])
   })
@@ -140,8 +154,9 @@ describe("SettingsPage", () => {
     expect(screen.getByText("How obsessive are you")).toBeInTheDocument()
   })
 
-  it("renders app theme section with theme options", () => {
+  it("renders app theme section with theme options", async () => {
     render(<SettingsPage {...defaultProps} />)
+    await goToTab("Appearance")
     expect(screen.getByText("App Theme")).toBeInTheDocument()
     expect(screen.getByText("How it looks around here")).toBeInTheDocument()
     expect(screen.getByText("System")).toBeInTheDocument()
@@ -157,6 +172,7 @@ describe("SettingsPage", () => {
         onThemeModeChange={onThemeModeChange}
       />
     )
+    await goToTab("Appearance")
     await userEvent.click(screen.getByText("Dark"))
     expect(onThemeModeChange).toHaveBeenCalledWith("dark")
   })
@@ -225,8 +241,9 @@ describe("SettingsPage", () => {
     expect(onTimeFormatModeChange).toHaveBeenCalledWith("24h")
   })
 
-  it("renders menubar icon section", () => {
+  it("renders menubar icon section", async () => {
     render(<SettingsPage {...defaultProps} />)
+    await goToTab("Appearance")
     expect(screen.getByText("Menubar Icon")).toBeInTheDocument()
     expect(screen.getByText("What shows in the menu bar")).toBeInTheDocument()
   })
@@ -239,6 +256,7 @@ describe("SettingsPage", () => {
         onMenubarIconStyleChange={onMenubarIconStyleChange}
       />
     )
+    await goToTab("Appearance")
     await userEvent.click(screen.getByRole("radio", { name: "Bars" }))
     expect(onMenubarIconStyleChange).toHaveBeenCalledWith("bars")
   })
@@ -251,12 +269,14 @@ describe("SettingsPage", () => {
         onMenubarIconStyleChange={onMenubarIconStyleChange}
       />
     )
+    await goToTab("Appearance")
     await userEvent.click(screen.getByRole("radio", { name: "Donut" }))
     expect(onMenubarIconStyleChange).toHaveBeenCalledWith("donut")
   })
 
-  it("renders the menubar metric control", () => {
+  it("renders the menubar metric control", async () => {
     render(<SettingsPage {...defaultProps} />)
+    await goToTab("Appearance")
     expect(screen.getByText("Metric")).toBeInTheDocument()
     expect(screen.getByRole("radio", { name: "Default" })).toBeInTheDocument()
     expect(screen.getByRole("radio", { name: "Weekly" })).toBeInTheDocument()
@@ -270,6 +290,7 @@ describe("SettingsPage", () => {
         onMenubarMetricChange={onMenubarMetricChange}
       />
     )
+    await goToTab("Appearance")
     await userEvent.click(screen.getByRole("radio", { name: "Weekly" }))
     expect(onMenubarMetricChange).toHaveBeenCalledWith("weekly")
   })

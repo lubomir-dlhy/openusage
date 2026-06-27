@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tauri_plugin_aptabase::EventTracker;
 use tauri_plugin_log::{Target, TargetKind};
@@ -24,6 +24,10 @@ use uuid::Uuid;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const GLOBAL_SHORTCUT_STORE_KEY: &str = "globalShortcut";
+/// Fallback shortcut registered when the store has none (or hasn't loaded yet at
+/// setup time). Guarantees the panel can always be opened via the keyboard even
+/// when the menu-bar icon is hidden (e.g. behind the notch / menu-bar overflow).
+const DEFAULT_GLOBAL_SHORTCUT: &str = "CommandOrControl+Shift+U";
 const DAILY_ACTIVE_TRACKED_DAY_KEY: &str = "analytics.daily_active_day";
 const DAILY_ACTIVE_EVENT_NAME: &str = "app_started";
 const MAX_CONCURRENT_PROBES: usize = 4;
@@ -182,6 +186,22 @@ pub struct PluginLinkDto {
 pub struct ProbeBatchStarted {
     pub batch_id: String,
     pub plugin_ids: Vec<String>,
+    pub instance_ids: Vec<String>,
+}
+
+/// One account instance to probe. `env` carries directory-path overrides
+/// (e.g. CLAUDE_CONFIG_DIR / CODEX_HOME) — paths, not secrets — so the plugin
+/// reads that account's existing credential store. The same `plugin_id` may
+/// appear in multiple instances (e.g. personal + work Claude).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProbeInstance {
+    pub plugin_id: String,
+    pub instance_id: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub env: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -210,6 +230,15 @@ fn hide_panel(app_handle: tauri::AppHandle) {
     }
 }
 
+/// Suspend/resume the panel's auto-hide-on-blur. The frontend calls this around
+/// a native dialog (folder picker) so the panel doesn't vanish when the dialog
+/// takes focus.
+#[tauri::command]
+fn set_dialog_guard(app_handle: tauri::AppHandle, active: bool) {
+    panel::set_autohide_suspended(active);
+    panel::set_panel_dialog_level(&app_handle, active);
+}
+
 #[tauri::command]
 fn open_devtools(#[allow(unused)] app_handle: tauri::AppHandle) {
     #[cfg(debug_assertions)]
@@ -227,6 +256,7 @@ async fn start_probe_batch(
     state: tauri::State<'_, Mutex<AppState>>,
     batch_id: Option<String>,
     plugin_ids: Option<Vec<String>>,
+    instances: Option<Vec<ProbeInstance>>,
 ) -> Result<ProbeBatchStarted, String> {
     let batch_id = batch_id
         .and_then(|id| {
@@ -248,37 +278,85 @@ async fn start_probe_batch(
         )
     };
 
-    let selected_plugins = match plugin_ids {
-        Some(ids) => {
-            let mut by_id: HashMap<String, plugin_engine::manifest::LoadedPlugin> = plugins
-                .into_iter()
-                .map(|plugin| (plugin.manifest.id.clone(), plugin))
-                .collect();
-            let mut seen = HashSet::new();
-            ids.into_iter()
-                .filter_map(|id| {
-                    if !seen.insert(id.clone()) {
-                        return None;
-                    }
-                    by_id.remove(&id)
+    struct ProbeJob {
+        plugin: plugin_engine::manifest::LoadedPlugin,
+        instance_id: String,
+        label: Option<String>,
+        env: HashMap<String, String>,
+    }
+
+    let by_id: HashMap<String, plugin_engine::manifest::LoadedPlugin> = plugins
+        .into_iter()
+        .map(|plugin| (plugin.manifest.id.clone(), plugin))
+        .collect();
+
+    let jobs: Vec<ProbeJob> = match instances {
+        // Multi-account path: one job per instance (the same provider may repeat).
+        Some(instances) => instances
+            .into_iter()
+            .filter_map(|instance| {
+                let Some(plugin) = by_id.get(&instance.plugin_id).cloned() else {
+                    log::warn!(
+                        "probe batch {}: no loaded plugin for instance {} (provider {})",
+                        batch_id,
+                        instance.instance_id,
+                        instance.plugin_id
+                    );
+                    return None;
+                };
+                Some(ProbeJob {
+                    plugin,
+                    instance_id: instance.instance_id,
+                    label: instance.label,
+                    env: instance.env.unwrap_or_default(),
                 })
-                .collect()
-        }
-        None => plugins,
+            })
+            .collect(),
+        // Legacy path: dedupe ids; instance_id == provider id; no env overrides.
+        None => match plugin_ids {
+            Some(ids) => {
+                let mut seen = HashSet::new();
+                ids.into_iter()
+                    .filter_map(|id| {
+                        if !seen.insert(id.clone()) {
+                            return None;
+                        }
+                        by_id.get(&id).cloned().map(|plugin| ProbeJob {
+                            plugin,
+                            instance_id: id,
+                            label: None,
+                            env: HashMap::new(),
+                        })
+                    })
+                    .collect()
+            }
+            None => by_id
+                .values()
+                .cloned()
+                .map(|plugin| ProbeJob {
+                    instance_id: plugin.manifest.id.clone(),
+                    plugin,
+                    label: None,
+                    env: HashMap::new(),
+                })
+                .collect(),
+        },
     };
 
-    let response_plugin_ids: Vec<String> = selected_plugins
+    let response_plugin_ids: Vec<String> = jobs
         .iter()
-        .map(|plugin| plugin.manifest.id.clone())
+        .map(|job| job.plugin.manifest.id.clone())
         .collect();
+    let response_instance_ids: Vec<String> =
+        jobs.iter().map(|job| job.instance_id.clone()).collect();
 
     log::info!(
         "probe batch {} starting: {:?}",
         batch_id,
-        response_plugin_ids
+        response_instance_ids
     );
 
-    if selected_plugins.is_empty() {
+    if jobs.is_empty() {
         let _ = app_handle.emit(
             "probe:batch-complete",
             ProbeBatchComplete {
@@ -288,14 +366,15 @@ async fn start_probe_batch(
         return Ok(ProbeBatchStarted {
             batch_id,
             plugin_ids: response_plugin_ids,
+            instance_ids: response_instance_ids,
         });
     }
 
-    let selected_count = selected_plugins.len();
+    let selected_count = jobs.len();
     let worker_count = probe_worker_count(selected_count);
     if worker_count < selected_count {
         log::info!(
-            "probe batch {} using {} workers for {} plugins",
+            "probe batch {} using {} workers for {} jobs",
             batch_id,
             worker_count,
             selected_count
@@ -303,9 +382,7 @@ async fn start_probe_batch(
     }
 
     let remaining = Arc::new(AtomicUsize::new(selected_count));
-    let probe_queue = Arc::new(Mutex::new(
-        selected_plugins.into_iter().collect::<VecDeque<_>>(),
-    ));
+    let probe_queue = Arc::new(Mutex::new(jobs.into_iter().collect::<VecDeque<_>>()));
 
     for _ in 0..worker_count {
         let handle = app_handle.clone();
@@ -319,20 +396,28 @@ async fn start_probe_batch(
 
         tauri::async_runtime::spawn_blocking(move || {
             loop {
-                let plugin = {
+                let job = {
                     let mut queue = queue
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
                     queue.pop_front()
                 };
 
-                let Some(plugin) = plugin else {
+                let Some(job) = job else {
                     break;
                 };
 
-                let plugin_id = plugin.manifest.id.clone();
+                let plugin_id = job.plugin.manifest.id.clone();
+                let instance_id = job.instance_id.clone();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    plugin_engine::runtime::run_probe(&plugin, &data_dir, &version)
+                    plugin_engine::runtime::run_probe_for_instance(
+                        &job.plugin,
+                        &data_dir,
+                        &version,
+                        &job.instance_id,
+                        job.label.as_deref(),
+                        &job.env,
+                    )
                 }));
 
                 match result {
@@ -341,11 +426,16 @@ async fn start_probe_batch(
                             matches!(line, plugin_engine::runtime::MetricLine::Badge { label, .. } if label == "Error")
                         });
                         if has_error {
-                            log::warn!("probe {} completed with error", plugin_id);
+                            log::warn!(
+                                "probe {} (instance {}) completed with error",
+                                plugin_id,
+                                instance_id
+                            );
                         } else {
                             log::info!(
-                                "probe {} completed ok ({} lines)",
+                                "probe {} (instance {}) completed ok ({} lines)",
                                 plugin_id,
+                                instance_id,
                                 output.lines.len()
                             );
                             local_http_api::cache_successful_output(&output);
@@ -359,7 +449,7 @@ async fn start_probe_batch(
                         );
                     }
                     Err(_) => {
-                        log::error!("probe {} panicked", plugin_id);
+                        log::error!("probe {} (instance {}) panicked", plugin_id, instance_id);
                     }
                 }
 
@@ -379,6 +469,7 @@ async fn start_probe_batch(
     Ok(ProbeBatchStarted {
         batch_id,
         plugin_ids: response_plugin_ids,
+        instance_ids: response_instance_ids,
     })
 }
 
@@ -513,6 +604,7 @@ pub fn run() {
         .plugin(tauri_plugin_aptabase::Builder::new("A-US-6435241436").build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_nspanel::init())
         .plugin(
@@ -535,6 +627,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             init_panel,
             hide_panel,
+            set_dialog_guard,
             open_devtools,
             start_probe_batch,
             list_plugins,
@@ -599,30 +692,33 @@ pub fn run() {
             {
                 use tauri_plugin_store::StoreExt;
 
-                if let Ok(store) = app.handle().store("settings.json") {
-                    if let Some(shortcut_value) = store.get(GLOBAL_SHORTCUT_STORE_KEY) {
-                        if let Some(shortcut) = shortcut_value.as_str() {
-                            let shortcut = shortcut.trim();
-                            if !shortcut.is_empty() {
-                                let handle = app.handle().clone();
-                                log::info!("Registering initial global shortcut: {}", shortcut);
-                                if let Err(e) = handle.global_shortcut().on_shortcut(
-                                    shortcut,
-                                    |app, _shortcut, event| {
-                                        handle_global_shortcut(app, event);
-                                    },
-                                ) {
-                                    log::warn!("Failed to register initial global shortcut: {}", e);
-                                } else if let Ok(mut managed_shortcut) =
-                                    managed_shortcut_slot().lock()
-                                {
-                                    *managed_shortcut = Some(shortcut.to_string());
-                                } else {
-                                    log::warn!("Failed to store managed shortcut in memory");
-                                }
-                            }
-                        }
-                    }
+                // Resolve the shortcut from the store; fall back to a default so a
+                // keyboard opener ALWAYS exists, even when the icon is hidden behind
+                // the notch or the store hasn't loaded yet at this setup stage.
+                let stored_shortcut = app
+                    .handle()
+                    .store("settings.json")
+                    .ok()
+                    .and_then(|store| store.get(GLOBAL_SHORTCUT_STORE_KEY))
+                    .and_then(|value| value.as_str().map(|s| s.trim().to_string()))
+                    .filter(|s| !s.is_empty());
+
+                let shortcut =
+                    stored_shortcut.unwrap_or_else(|| DEFAULT_GLOBAL_SHORTCUT.to_string());
+
+                let handle = app.handle().clone();
+                log::info!("Registering global shortcut: {}", shortcut);
+                if let Err(e) = handle
+                    .global_shortcut()
+                    .on_shortcut(shortcut.as_str(), |app, _shortcut, event| {
+                        handle_global_shortcut(app, event);
+                    })
+                {
+                    log::warn!("Failed to register global shortcut '{}': {}", shortcut, e);
+                } else if let Ok(mut managed_shortcut) = managed_shortcut_slot().lock() {
+                    *managed_shortcut = Some(shortcut);
+                } else {
+                    log::warn!("Failed to store managed shortcut in memory");
                 }
             }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
 import type { PluginOutput } from "@/lib/plugin-types"
+import type { ProbeInstance } from "@/lib/settings"
 
 type ProbeResult = {
   batchId: string
@@ -15,6 +16,7 @@ type ProbeBatchComplete = {
 type ProbeBatchStarted = {
   batchId: string
   pluginIds: string[]
+  instanceIds?: string[]
 }
 
 type UseProbeEventsOptions = {
@@ -80,7 +82,7 @@ export function useProbeEvents({ onResult, onBatchComplete }: UseProbeEventsOpti
     }
   }, [onBatchComplete, onResult])
 
-  const startBatch = useCallback(async (pluginIds?: string[]) => {
+  const startBatch = useCallback(async (instances?: ProbeInstance[]) => {
     // Wait for listeners to be ready before starting the batch
     if (listenersReadyRef.current) {
       await listenersReadyRef.current
@@ -92,12 +94,12 @@ export function useProbeEvents({ onResult, onBatchComplete }: UseProbeEventsOpti
         : `batch-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
     activeBatchIds.current.add(batchId)
-    const args = pluginIds
-      ? { batchId, pluginIds }
-      : { batchId }
+    // `instances === undefined` means "probe everything" (Rust runs all default
+    // accounts). An explicit array probes exactly those account instances.
+    const args = instances ? { batchId, instances } : { batchId }
     try {
       const result = await invoke<ProbeBatchStarted>("start_probe_batch", args)
-      return result.pluginIds
+      return result.instanceIds ?? result.pluginIds
     } catch (error) {
       activeBatchIds.current.delete(batchId)
       throw error

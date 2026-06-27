@@ -5,9 +5,10 @@ const { getEnabledPluginIdsMock } = vi.hoisted(() => ({
   getEnabledPluginIdsMock: vi.fn(),
 }))
 
-vi.mock("@/lib/settings", () => ({
-  getEnabledPluginIds: getEnabledPluginIdsMock,
-}))
+vi.mock("@/lib/settings", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/settings")>("@/lib/settings")
+  return { ...actual, getEnabledPluginIds: getEnabledPluginIdsMock }
+})
 
 import { useProbeAutoUpdate } from "@/hooks/app/use-probe-auto-update"
 
@@ -92,7 +93,7 @@ describe("useProbeAutoUpdate", () => {
     expect(isPluginLoading).toHaveBeenCalledWith("slow")
     expect(isPluginLoading).toHaveBeenCalledWith("idle")
     expect(setLoadingForPlugins).toHaveBeenCalledWith(["idle"])
-    expect(startBatch).toHaveBeenCalledWith(["idle"])
+    expect(startBatch).toHaveBeenCalledWith([{ pluginId: "idle", instanceId: "idle" }])
     expect(setErrorForPlugins).not.toHaveBeenCalled()
   })
 

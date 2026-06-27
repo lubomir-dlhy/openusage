@@ -1,10 +1,9 @@
 import { ProviderCard } from "@/components/provider-card"
-import { RetirementNotice } from "@/components/retirement-notice"
-import type { PluginDisplayState } from "@/lib/plugin-types"
+import type { DisplayPluginState } from "@/hooks/app/use-app-plugin-views"
 import type { DisplayMode, ResetTimerDisplayMode, TimeFormatMode } from "@/lib/settings"
 
 interface OverviewPageProps {
-  plugins: PluginDisplayState[]
+  plugins: DisplayPluginState[]
   onRetryPlugin?: (pluginId: string) => void
   displayMode: DisplayMode
   resetTimerDisplayMode: ResetTimerDisplayMode
@@ -22,7 +21,6 @@ export function OverviewPage({
 }: OverviewPageProps) {
   return (
     <div>
-      <RetirementNotice />
       {plugins.length === 0 ? (
         <div className="text-center text-muted-foreground py-8">
           No providers enabled
@@ -30,8 +28,10 @@ export function OverviewPage({
       ) : (
         plugins.map((plugin, index) => (
           <ProviderCard
-            key={plugin.meta.id}
+            key={plugin.instanceId}
             name={plugin.meta.name}
+            label={plugin.label}
+            customIconUrl={plugin.customIconUrl}
             plan={plugin.data?.plan}
             showSeparator={index < plugins.length - 1}
             loading={plugin.loading}
@@ -40,7 +40,7 @@ export function OverviewPage({
             skeletonLines={plugin.meta.lines}
             lastManualRefreshAt={plugin.lastManualRefreshAt}
             lastUpdatedAt={plugin.lastUpdatedAt}
-            onRetry={onRetryPlugin ? () => onRetryPlugin(plugin.meta.id) : undefined}
+            onRetry={onRetryPlugin ? () => onRetryPlugin(plugin.instanceId) : undefined}
             scopeFilter="overview"
             displayMode={displayMode}
             resetTimerDisplayMode={resetTimerDisplayMode}

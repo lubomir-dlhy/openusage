@@ -24,10 +24,22 @@ type AppContentDerivedProps = {
   selectedPlugin: DisplayPluginState | null
 }
 
+export type AddableProvider = {
+  id: string
+  name: string
+}
+
 export type AppContentActionProps = {
   onRetryPlugin: (id: string) => void
   onReorder: (orderedIds: string[]) => void
   onToggle: (id: string) => void
+  onAddInstance: (providerId: string, label: string, configDir: string, icon?: string | null) => void
+  onEditInstance: (
+    instanceId: string,
+    patch: { label: string; configDir: string; icon?: string | null }
+  ) => void
+  onRemoveInstance: (instanceId: string) => void
+  addableProviders: AddableProvider[]
   onAutoUpdateIntervalChange: (value: AutoUpdateIntervalMinutes) => void
   onThemeModeChange: (mode: ThemeMode) => void
   onDisplayModeChange: (mode: DisplayMode) => void
@@ -50,6 +62,10 @@ export function AppContent({
   onRetryPlugin,
   onReorder,
   onToggle,
+  onAddInstance,
+  onEditInstance,
+  onRemoveInstance,
+  addableProviders,
   onAutoUpdateIntervalChange,
   onThemeModeChange,
   onDisplayModeChange,
@@ -111,6 +127,10 @@ export function AppContent({
         plugins={settingsPlugins}
         onReorder={onReorder}
         onToggle={onToggle}
+        onAddInstance={onAddInstance}
+        onEditInstance={onEditInstance}
+        onRemoveInstance={onRemoveInstance}
+        addableProviders={addableProviders}
         autoUpdateInterval={autoUpdateInterval}
         onAutoUpdateIntervalChange={onAutoUpdateIntervalChange}
         themeMode={themeMode}
@@ -135,7 +155,7 @@ export function AppContent({
   }
 
   const handleRetry = selectedPlugin
-    ? () => onRetryPlugin(selectedPlugin.meta.id)
+    ? () => onRetryPlugin(selectedPlugin.instanceId)
     : /* v8 ignore next */ undefined
 
   return (

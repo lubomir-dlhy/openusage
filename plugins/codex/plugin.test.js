@@ -147,6 +147,41 @@ describe("codex plugin", () => {
     expect(() => plugin.probe(ctx)).toThrow("Not logged in")
   })
 
+  it("does not read the shared keychain when CODEX_HOME is set (prevents account cross-talk)", async () => {
+    const ctx = makeCtx()
+    ctx.host.env.get.mockImplementation((name) => (name === "CODEX_HOME" ? "/tmp/work-codex-home" : null))
+    // A populated default "Codex Auth" keychain entry must NOT leak into a CODEX_HOME-scoped
+    // instance that has no auth.json of its own — that would surface the wrong account.
+    ctx.host.keychain.readGenericPassword.mockReturnValue(JSON.stringify({
+      tokens: { access_token: "default-account-token" },
+      last_refresh: new Date().toISOString(),
+    }))
+    const plugin = await loadPlugin()
+    expect(() => plugin.probe(ctx)).toThrow("Not logged in")
+    expect(ctx.host.keychain.readGenericPassword).not.toHaveBeenCalled()
+  })
+
+  it("resolves a separate auth.json per CODEX_HOME (no cross-talk between accounts)", async () => {
+    const plugin = await loadPlugin()
+    const tokenSeenForHome = (home, token) => {
+      const ctx = makeCtx()
+      ctx.host.env.get.mockImplementation((name) => (name === "CODEX_HOME" ? home : null))
+      ctx.host.fs.writeText(home + "/auth.json", JSON.stringify({
+        tokens: { access_token: token },
+        last_refresh: new Date().toISOString(),
+      }))
+      let seen = null
+      ctx.host.http.request.mockImplementation((opts) => {
+        seen = opts.headers.Authorization
+        return { status: 200, headers: {}, bodyText: JSON.stringify({}) }
+      })
+      plugin.probe(ctx)
+      return seen
+    }
+    expect(tokenSeenForHome("/tmp/personal-codex", "personal-token")).toBe("Bearer personal-token")
+    expect(tokenSeenForHome("/tmp/work-codex", "work-token")).toBe("Bearer work-token")
+  })
+
   it("throws when auth json is invalid", async () => {
     const ctx = makeCtx()
     ctx.host.fs.writeText("~/.codex/auth.json", "{bad")

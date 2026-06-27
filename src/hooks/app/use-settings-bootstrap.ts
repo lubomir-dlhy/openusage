@@ -31,7 +31,9 @@ import {
   loadThemeMode,
   loadTimeFormatMode,
   normalizePluginSettings,
+  resolveProbeInstances,
   savePluginSettings,
+  type ProbeInstance,
   type AutoUpdateIntervalMinutes,
   type DisplayMode,
   type GlobalShortcut,
@@ -57,7 +59,7 @@ type UseSettingsBootstrapArgs = {
   setMenubarMetric: (value: MenubarMetric) => void
   setLoadingForPlugins: (ids: string[]) => void
   setErrorForPlugins: (ids: string[], error: string) => void
-  startBatch: (pluginIds?: string[]) => Promise<string[] | undefined>
+  startBatch: (instances?: ProbeInstance[]) => Promise<string[] | undefined>
 }
 
 export function useSettingsBootstrap({
@@ -194,7 +196,7 @@ export function useSettingsBootstrap({
           const enabledIds = getEnabledPluginIds(normalized)
           setLoadingForPlugins(enabledIds)
           try {
-            await startBatch(enabledIds)
+            await startBatch(resolveProbeInstances(normalized, enabledIds))
           } catch (error) {
             console.error("Failed to start probe batch:", error)
             if (isMounted) {

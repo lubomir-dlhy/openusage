@@ -10,7 +10,12 @@ type PluginState = {
 }
 
 export type TrayPrimaryBar = {
+  /** instanceId of the account (equals providerId for the default account). */
   id: string
+  /** providerId of the plugin, for meta lookup when `id` is a non-default instanceId. */
+  providerId?: string
+  /** User label for a non-default account instance (e.g. "Work"); undefined for the default. */
+  accountLabel?: string
   fraction?: number
   /** Label of the metric line that produced this bar (when data is available). */
   label?: string
@@ -48,6 +53,9 @@ export function getTrayPrimaryBars(args: {
   if (!pluginSettings) return []
 
   const metaById = new Map(pluginsMeta.map((p) => [p.id, p]))
+  const instById = new Map(
+    (pluginSettings.instances ?? []).map((inst) => [inst.instanceId, inst])
+  )
   const disabled = new Set(pluginSettings.disabled)
   const orderedIds = pluginId
     ? [pluginId]
@@ -56,7 +64,11 @@ export function getTrayPrimaryBars(args: {
   const out: TrayPrimaryBar[] = []
   for (const id of orderedIds) {
     if (disabled.has(id)) continue
-    const meta = metaById.get(id)
+    // `id` is an instanceId; resolve to its providerId to find the plugin meta
+    // (icon, primaryCandidates). Falls back to `id` for default instances.
+    const inst = instById.get(id)
+    const providerId = inst?.providerId ?? id
+    const meta = metaById.get(providerId)
     if (!meta) continue
     
     // Skip plugins with no primary metric. Weekly mode is an override of the
@@ -102,7 +114,11 @@ export function getTrayPrimaryBars(args: {
       }
     }
 
-    out.push({ id, fraction, label, weekly })
+    const bar: TrayPrimaryBar = { id, fraction, label, weekly }
+    // Only annotate non-default instances so default-account bars stay identical.
+    if (providerId !== id) bar.providerId = providerId
+    if (inst?.label) bar.accountLabel = inst.label
+    out.push(bar)
     if (out.length >= maxBars) break
   }
 

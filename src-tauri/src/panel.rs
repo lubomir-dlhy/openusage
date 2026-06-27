@@ -1,7 +1,31 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager, Position, Size};
 use tauri_nspanel::{
     CollectionBehavior, ManagerExt, PanelLevel, StyleMask, WebviewWindowExt, tauri_panel,
 };
+
+/// When true, the panel will NOT auto-hide on losing key focus. Used while a
+/// native dialog (e.g. the folder picker) is open — otherwise the panel hides
+/// the moment the dialog takes focus, burying the dialog on this accessory app.
+static AUTOHIDE_SUSPENDED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_autohide_suspended(suspended: bool) {
+    AUTOHIDE_SUSPENDED.store(suspended, Ordering::SeqCst);
+}
+
+/// While a native dialog is open, drop the panel below normal window level so the
+/// system dialog (which sits at modal-panel level) appears in front of it;
+/// restore the elevated level afterwards.
+pub fn set_panel_dialog_level(app_handle: &AppHandle, dialog_open: bool) {
+    if let Ok(panel) = app_handle.get_webview_panel("main") {
+        let level = if dialog_open {
+            0
+        } else {
+            PanelLevel::MainMenu.value() + 1
+        };
+        panel.set_level(level);
+    }
+}
 
 fn monitor_contains_physical_point(
     origin_x: f64,
@@ -178,6 +202,10 @@ pub fn init(app_handle: &tauri::AppHandle) -> tauri::Result<()> {
 
     let handle = app_handle.clone();
     event_handler.window_did_resign_key(move |_notification| {
+        // Keep the panel open while a native dialog (folder picker) is showing.
+        if AUTOHIDE_SUSPENDED.load(Ordering::SeqCst) {
+            return;
+        }
         if let Ok(panel) = handle.get_webview_panel("main") {
             panel.hide();
         }

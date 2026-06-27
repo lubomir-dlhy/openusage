@@ -595,6 +595,7 @@ pub(crate) fn inject_host_api<'js>(
         app_data_dir,
         app_version,
         ProbeDeadline::none(),
+        &HashMap::new(),
     )
 }
 
@@ -604,6 +605,7 @@ pub(crate) fn inject_host_api_with_deadline<'js>(
     app_data_dir: &PathBuf,
     app_version: &str,
     deadline: ProbeDeadline,
+    env_overrides: &HashMap<String, String>,
 ) -> rquickjs::Result<()> {
     let globals = ctx.globals();
     let probe_ctx = Object::new(ctx.clone())?;
@@ -632,7 +634,7 @@ pub(crate) fn inject_host_api_with_deadline<'js>(
     inject_log(ctx, &host, plugin_id)?;
     inject_fs(ctx, &host)?;
     inject_crypto(ctx, &host)?;
-    inject_env(ctx, &host, plugin_id)?;
+    inject_env(ctx, &host, plugin_id, env_overrides)?;
     inject_http(ctx, &host, plugin_id, deadline)?;
     inject_keychain(ctx, &host, plugin_id)?;
     inject_sqlite(ctx, &host)?;
@@ -792,13 +794,26 @@ fn inject_crypto<'js>(ctx: &Ctx<'js>, host: &Object<'js>) -> rquickjs::Result<()
     Ok(())
 }
 
-fn inject_env<'js>(ctx: &Ctx<'js>, host: &Object<'js>, _plugin_id: &str) -> rquickjs::Result<()> {
+fn inject_env<'js>(
+    ctx: &Ctx<'js>,
+    host: &Object<'js>,
+    _plugin_id: &str,
+    env_overrides: &HashMap<String, String>,
+) -> rquickjs::Result<()> {
     let env_obj = Object::new(ctx.clone())?;
+    let overrides = env_overrides.clone();
     env_obj.set(
         "get",
         Function::new(ctx.clone(), move |name: String| -> Option<String> {
             if !WHITELISTED_ENV_VARS.contains(&name.as_str()) {
                 return None;
+            }
+
+            // Per-instance overrides (directory paths such as CLAUDE_CONFIG_DIR /
+            // CODEX_HOME) win over the process environment so each account reads
+            // its own existing credential store. These are paths, not secrets.
+            if let Some(value) = overrides.get(&name) {
+                return Some(value.clone());
             }
 
             resolve_env_value(&name)
@@ -1651,20 +1666,32 @@ enum CcusageProvider {
     Codex,
 }
 
-static CCUSAGE_ACTIVE_PROVIDERS: OnceLock<Mutex<HashSet<CcusageProvider>>> = OnceLock::new();
+// Keyed by data source (provider + resolved home/config dir) so that two
+// distinct accounts of the same provider — e.g. a personal and a work Claude
+// pointing at different CLAUDE_CONFIG_DIRs — can run ccusage concurrently
+// instead of the second one being skipped as "already running".
+static CCUSAGE_ACTIVE_PROVIDERS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 struct CcusageQueryGuard {
-    provider: CcusageProvider,
+    key: String,
 }
 
 impl CcusageQueryGuard {
-    fn acquire(provider: CcusageProvider) -> Option<Self> {
+    /// Build the data-source key from provider + resolved home/config dir.
+    /// Distinct config dirs (different accounts) get distinct keys and so are
+    /// allowed to run concurrently; same dir collides as before.
+    fn key_for(provider: CcusageProvider, home: Option<&str>) -> String {
+        format!("{:?}\u{0}{}", provider, home.unwrap_or(""))
+    }
+
+    fn acquire(provider: CcusageProvider, home: Option<&str>) -> Option<Self> {
+        let key = Self::key_for(provider, home);
         let active = CCUSAGE_ACTIVE_PROVIDERS.get_or_init(|| Mutex::new(HashSet::new()));
         let mut active = active.lock().unwrap_or_else(|err| err.into_inner());
-        if !active.insert(provider) {
+        if !active.insert(key.clone()) {
             return None;
         }
-        Some(Self { provider })
+        Some(Self { key })
     }
 }
 
@@ -1672,7 +1699,7 @@ impl Drop for CcusageQueryGuard {
     fn drop(&mut self) {
         let active = CCUSAGE_ACTIVE_PROVIDERS.get_or_init(|| Mutex::new(HashSet::new()));
         let mut active = active.lock().unwrap_or_else(|err| err.into_inner());
-        active.remove(&self.provider);
+        active.remove(&self.key);
     }
 }
 
@@ -2410,7 +2437,9 @@ fn inject_ccusage<'js>(
                     }
                 };
                 let provider = resolve_ccusage_provider(&opts, &pid);
-                let Some(_active_query) = CcusageQueryGuard::acquire(provider) else {
+                let home_override = ccusage_home_override(&opts, provider);
+                let Some(_active_query) = CcusageQueryGuard::acquire(provider, home_override)
+                else {
                     log::warn!("[plugin:{}] ccusage query already running", pid);
                     return Ok(serde_json::json!({ "status": "runner_failed" }).to_string());
                 };
@@ -4370,21 +4399,39 @@ Saved lockfile
 
     #[test]
     fn ccusage_query_guard_blocks_overlapping_provider_query() {
-        let first = CcusageQueryGuard::acquire(CcusageProvider::Codex)
+        let first = CcusageQueryGuard::acquire(CcusageProvider::Codex, None)
             .expect("first query should acquire guard");
         assert!(
-            CcusageQueryGuard::acquire(CcusageProvider::Codex).is_none(),
-            "second query for same provider should be blocked"
+            CcusageQueryGuard::acquire(CcusageProvider::Codex, None).is_none(),
+            "second query for same provider+home should be blocked"
         );
         assert!(
-            CcusageQueryGuard::acquire(CcusageProvider::Claude).is_some(),
+            CcusageQueryGuard::acquire(CcusageProvider::Claude, None).is_some(),
             "different provider should have its own guard"
         );
         drop(first);
         assert!(
-            CcusageQueryGuard::acquire(CcusageProvider::Codex).is_some(),
+            CcusageQueryGuard::acquire(CcusageProvider::Codex, None).is_some(),
             "guard should release on drop"
         );
+    }
+
+    #[test]
+    fn ccusage_query_guard_allows_same_provider_different_home() {
+        // Two accounts of the same provider with distinct config dirs (e.g. a
+        // personal and a work Claude) must be able to query ccusage concurrently.
+        let personal = CcusageQueryGuard::acquire(CcusageProvider::Claude, Some("/Users/me/.claude"))
+            .expect("personal account should acquire guard");
+        assert!(
+            CcusageQueryGuard::acquire(CcusageProvider::Claude, Some("/Users/me/CP/.claude"))
+                .is_some(),
+            "a second Claude account with a different home must not be blocked"
+        );
+        assert!(
+            CcusageQueryGuard::acquire(CcusageProvider::Claude, Some("/Users/me/.claude")).is_none(),
+            "same provider+home should still collide"
+        );
+        drop(personal);
     }
 
     #[test]

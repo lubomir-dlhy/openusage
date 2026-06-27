@@ -1,6 +1,12 @@
 import { useCallback } from "react"
 import type { MutableRefObject } from "react"
-import { REFRESH_COOLDOWN_MS, getEnabledPluginIds, type PluginSettings } from "@/lib/settings"
+import {
+  REFRESH_COOLDOWN_MS,
+  getEnabledPluginIds,
+  resolveProbeInstances,
+  type PluginSettings,
+  type ProbeInstance,
+} from "@/lib/settings"
 import type { PluginState } from "@/hooks/app/types"
 
 type UseProbeRefreshActionsArgs = {
@@ -10,7 +16,7 @@ type UseProbeRefreshActionsArgs = {
   resetAutoUpdateSchedule: () => void
   setLoadingForPlugins: (ids: string[]) => void
   setErrorForPlugins: (ids: string[], error: string) => void
-  startBatch: (pluginIds?: string[]) => Promise<string[] | undefined>
+  startBatch: (instances?: ProbeInstance[]) => Promise<string[] | undefined>
 }
 
 export function useProbeRefreshActions({
@@ -28,8 +34,11 @@ export function useProbeRefreshActions({
         manualRefreshIdsRef.current.add(id)
       }
 
+      const instances = pluginSettings
+        ? resolveProbeInstances(pluginSettings, ids)
+        : ids.map((id) => ({ pluginId: id, instanceId: id }))
       setLoadingForPlugins(ids)
-      startBatch(ids).catch((error) => {
+      startBatch(instances).catch((error) => {
         for (const id of ids) {
           manualRefreshIdsRef.current.delete(id)
         }
@@ -37,7 +46,7 @@ export function useProbeRefreshActions({
         setErrorForPlugins(ids, "Failed to start probe")
       })
     },
-    [manualRefreshIdsRef, setLoadingForPlugins, setErrorForPlugins, startBatch]
+    [pluginSettings, manualRefreshIdsRef, setLoadingForPlugins, setErrorForPlugins, startBatch]
   )
 
   const handleRetryPlugin = useCallback(

@@ -37,6 +37,14 @@ export type PluginLink = {
 
 export type PluginOutput = {
   providerId: string
+  /**
+   * Unique id of the account instance this output belongs to. Equals
+   * `providerId` for the default account; distinct for extra accounts of the
+   * same provider (e.g. "claude#2").
+   */
+  instanceId: string
+  /** User-facing account label (e.g. "Work"); null for the default account. */
+  label?: string | null
   displayName: string
   plan?: string
   lines: MetricLine[]
@@ -58,6 +66,10 @@ export type PluginMeta = {
 
 export type PluginDisplayState = {
   meta: PluginMeta
+  /** Account instance id (equals meta.id for the default account). */
+  instanceId: string
+  /** Account label (e.g. "Work"); null for the default account. */
+  label: string | null
   data: PluginOutput | null
   loading: boolean
   error: string | null

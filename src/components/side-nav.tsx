@@ -39,6 +39,8 @@ interface NavPlugin {
   name: string
   iconUrl: string
   brandColor?: string
+  /** Per-account custom icon (data/image URL); rendered full-color in place of the masked glyph. */
+  customIconUrl?: string
 }
 
 interface SideNavProps {
@@ -118,22 +120,34 @@ function SortableNavPlugin({ plugin, isActive, isDark, onClick, onContextMenu }:
         onContextMenu={onContextMenu}
         aria-label={plugin.name}
       >
-        <span
-          role="img"
-          aria-label={plugin.name}
-          className="size-6 inline-block"
-          style={{
-            backgroundColor: getIconColor(plugin.brandColor, isDark),
-            WebkitMaskImage: `url(${plugin.iconUrl})`,
-            WebkitMaskSize: "contain",
-            WebkitMaskRepeat: "no-repeat",
-            WebkitMaskPosition: "center",
-            maskImage: `url(${plugin.iconUrl})`,
-            maskSize: "contain",
-            maskRepeat: "no-repeat",
-            maskPosition: "center",
-          }}
-        />
+        {plugin.customIconUrl ? (
+          // Full-color custom (per-account) icon set via the settings form.
+          // Transparent icons sit on a fixed cream tile so dark marks stay
+          // visible in both light and dark themes.
+          <img
+            src={plugin.customIconUrl}
+            alt={plugin.name}
+            className="size-6 inline-block rounded object-contain bg-[#F0EEE6] p-0.5"
+            draggable={false}
+          />
+        ) : (
+          <span
+            role="img"
+            aria-label={plugin.name}
+            className="size-6 inline-block"
+            style={{
+              backgroundColor: getIconColor(plugin.brandColor, isDark),
+              WebkitMaskImage: `url(${plugin.iconUrl})`,
+              WebkitMaskSize: "contain",
+              WebkitMaskRepeat: "no-repeat",
+              WebkitMaskPosition: "center",
+              maskImage: `url(${plugin.iconUrl})`,
+              maskSize: "contain",
+              maskRepeat: "no-repeat",
+              maskPosition: "center",
+            }}
+          />
+        )}
       </NavButton>
     </div>
   )

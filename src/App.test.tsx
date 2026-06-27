@@ -383,6 +383,7 @@ describe("App", () => {
     render(<App />)
     const settingsButtons = await screen.findAllByRole("button", { name: "Settings" })
     await userEvent.click(settingsButtons[0])
+    await userEvent.click(await screen.findByRole("tab", { name: "Appearance" }))
 
     // Dark
     await userEvent.click(await screen.findByRole("radio", { name: "Dark" }))
@@ -421,7 +422,14 @@ describe("App", () => {
   })
 
   it("skips saving settings when already normalized", async () => {
-    state.loadPluginSettingsMock.mockResolvedValueOnce({ order: ["a", "b"], disabled: [] })
+    state.loadPluginSettingsMock.mockResolvedValueOnce({
+      order: ["a", "b"],
+      disabled: [],
+      instances: [
+        { instanceId: "a", providerId: "a" },
+        { instanceId: "b", providerId: "b" },
+      ],
+    })
     render(<App />)
     await waitFor(() => expect(state.invokeMock).toHaveBeenCalledWith("list_plugins"))
     expect((await screen.findAllByText("Alpha")).length).toBeGreaterThan(0)
@@ -690,6 +698,7 @@ describe("App", () => {
     render(<App />)
     const settingsButtons = await screen.findAllByRole("button", { name: "Settings" })
     await userEvent.click(settingsButtons[0])
+    await userEvent.click(await screen.findByRole("tab", { name: "Appearance" }))
 
     expect(screen.getByText("Menubar Icon")).toBeVisible()
     const barsRadio = await screen.findByRole("radio", { name: "Bars" })
@@ -707,6 +716,7 @@ describe("App", () => {
     render(<App />)
     const settingsButtons = await screen.findAllByRole("button", { name: "Settings" })
     await userEvent.click(settingsButtons[0])
+    await userEvent.click(await screen.findByRole("tab", { name: "Appearance" }))
 
     expect(screen.getByText("Menubar Icon")).toBeVisible()
     const donutRadio = await screen.findByRole("radio", { name: "Donut" })
@@ -758,6 +768,7 @@ describe("App", () => {
     const settingsButtons = await screen.findAllByRole("button", { name: "Settings" })
     await userEvent.click(settingsButtons[0])
 
+    await userEvent.click(await screen.findByRole("tab", { name: "Appearance" }))
     await userEvent.click(await screen.findByRole("radio", { name: "Weekly" }))
     expect(state.saveMenubarMetricMock).toHaveBeenCalledWith("weekly")
 
@@ -818,6 +829,7 @@ describe("App", () => {
 
     const settingsButtons = await screen.findAllByRole("button", { name: "Settings" })
     await userEvent.click(settingsButtons[0])
+    await userEvent.click(await screen.findByRole("tab", { name: "Appearance" }))
     await userEvent.click(await screen.findByRole("radio", { name: "Weekly" }))
 
     // Cursor has no weekly line -> falls back to its primary, so the list is mixed
@@ -877,10 +889,18 @@ describe("App", () => {
   it("toggles plugins in settings", async () => {
     // Use already-normalised settings so no init save fires (b is disabled
     // because "b" is not in DEFAULT_ENABLED_PLUGINS = ["claude","codex","cursor"])
-    state.loadPluginSettingsMock.mockResolvedValue({ order: ["a", "b"], disabled: ["b"] })
+    state.loadPluginSettingsMock.mockResolvedValue({
+      order: ["a", "b"],
+      disabled: ["b"],
+      instances: [
+        { instanceId: "a", providerId: "a" },
+        { instanceId: "b", providerId: "b" },
+      ],
+    })
     render(<App />)
     const settingsButtons = await screen.findAllByRole("button", { name: "Settings" })
     await userEvent.click(settingsButtons[0])
+    await userEvent.click(await screen.findByRole("tab", { name: "Accounts" }))
     // Re-query before each click: the Checkbox remounts on each toggle because
     // its key includes plugin.enabled, so the reference goes stale after click 1.
     await userEvent.click((await screen.findAllByRole("checkbox")).at(-1)!)
@@ -1017,6 +1037,7 @@ describe("App", () => {
     render(<App />)
     const settingsButtons = await screen.findAllByRole("button", { name: "Settings" })
     await userEvent.click(settingsButtons[0])
+    await userEvent.click(await screen.findByRole("tab", { name: "Appearance" }))
     await userEvent.click(await screen.findByRole("radio", { name: "Light" }))
     await waitFor(() => expect(errorSpy).toHaveBeenCalled())
     errorSpy.mockRestore()
@@ -1029,6 +1050,7 @@ describe("App", () => {
     render(<App />)
     const settingsButtons = await screen.findAllByRole("button", { name: "Settings" })
     await userEvent.click(settingsButtons[0])
+    await userEvent.click(await screen.findByRole("tab", { name: "Appearance" }))
     await userEvent.click(await screen.findByRole("radio", { name: "Bars" }))
 
     await waitFor(() =>
@@ -1048,7 +1070,7 @@ describe("App", () => {
     })
     const retry = await screen.findByRole("button", { name: "Retry" })
     await userEvent.click(retry)
-    expect(state.startBatchMock).toHaveBeenCalledWith(["a"])
+    expect(state.startBatchMock).toHaveBeenCalledWith([{ pluginId: "a", instanceId: "a", label: null }])
   })
 
   it("reloads plugin from sidebar context menu", async () => {
@@ -1067,7 +1089,7 @@ describe("App", () => {
     expect(reloadConfig?.enabled).toBe(true)
     reloadAction()
 
-    await waitFor(() => expect(state.startBatchMock).toHaveBeenCalledWith(["b"]))
+    await waitFor(() => expect(state.startBatchMock).toHaveBeenCalledWith([{ pluginId: "b", instanceId: "b", label: null }]))
   })
 
   it("respects manual refresh cooldown for sidebar context menu reload", async () => {
@@ -1092,7 +1114,7 @@ describe("App", () => {
     const firstReloadConfig = menuState.iconMenuItemConfigs.find((item) => item.id === "ctx-reload-b")
     expect(firstReloadConfig?.enabled).toBe(true)
     reloadAction()
-    await waitFor(() => expect(state.startBatchMock).toHaveBeenCalledWith(["b"]))
+    await waitFor(() => expect(state.startBatchMock).toHaveBeenCalledWith([{ pluginId: "b", instanceId: "b", label: null }]))
 
     state.probeHandlers?.onResult({
       providerId: "b",
@@ -1150,7 +1172,14 @@ describe("App", () => {
     removeAction()
 
     await waitFor(() =>
-      expect(state.savePluginSettingsMock).toHaveBeenCalledWith({ order: ["a", "b"], disabled: ["b"] })
+      expect(state.savePluginSettingsMock).toHaveBeenCalledWith({
+        order: ["a", "b"],
+        disabled: ["b"],
+        instances: [
+          { instanceId: "a", providerId: "a" },
+          { instanceId: "b", providerId: "b" },
+        ],
+      })
     )
     expect(state.startBatchMock).not.toHaveBeenCalled()
   })
@@ -1164,7 +1193,14 @@ describe("App", () => {
     const removeAction = await triggerPluginContextAction("Beta", "b", "remove")
     removeAction()
     await waitFor(() =>
-      expect(state.savePluginSettingsMock).toHaveBeenCalledWith({ order: ["a", "b"], disabled: ["b"] })
+      expect(state.savePluginSettingsMock).toHaveBeenCalledWith({
+        order: ["a", "b"],
+        disabled: ["b"],
+        instances: [
+          { instanceId: "a", providerId: "a" },
+          { instanceId: "b", providerId: "b" },
+        ],
+      })
     )
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Beta" })).not.toBeInTheDocument()
@@ -1226,7 +1262,14 @@ describe("App", () => {
 
   it("handles enable toggle failures", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
-    state.loadPluginSettingsMock.mockResolvedValueOnce({ order: ["a", "b"], disabled: ["b"] })
+    state.loadPluginSettingsMock.mockResolvedValueOnce({
+      order: ["a", "b"],
+      disabled: ["b"],
+      instances: [
+        { instanceId: "a", providerId: "a" },
+        { instanceId: "b", providerId: "b" },
+      ],
+    })
     state.startBatchMock
       .mockResolvedValueOnce(["a"])
       .mockRejectedValueOnce(new Error("enable fail"))
@@ -1247,10 +1290,11 @@ describe("App", () => {
     render(<App />)
     const settingsButtons = await screen.findAllByRole("button", { name: "Settings" })
     await userEvent.click(settingsButtons[0])
+    await userEvent.click(await screen.findByRole("tab", { name: "Accounts" }))
     const checkboxes = await screen.findAllByRole("checkbox")
     const targetCheckbox = checkboxes[checkboxes.length - 1]
     await userEvent.click(targetCheckbox)
-    await waitFor(() => expect(state.startBatchMock).toHaveBeenCalledWith(["b"]))
+    await waitFor(() => expect(state.startBatchMock).toHaveBeenCalledWith([{ pluginId: "b", instanceId: "b", label: null }]))
   })
 
   it("uses fallback monitor sizing when monitor missing", async () => {
@@ -1601,7 +1645,10 @@ describe("App", () => {
       expect(state.startBatchMock.mock.calls.length).toBe(initialCalls + 1)
     )
     const lastCall = state.startBatchMock.mock.calls[state.startBatchMock.mock.calls.length - 1]
-    expect(lastCall[0]).toEqual(["a", "b"])
+    expect(lastCall[0]).toEqual([
+      { pluginId: "a", instanceId: "a", label: null },
+      { pluginId: "b", instanceId: "b", label: null },
+    ])
   })
 
   it("ignores repeated refresh-all clicks while providers are already refreshing", async () => {
@@ -1634,7 +1681,10 @@ describe("App", () => {
       expect(state.startBatchMock.mock.calls.length).toBe(initialCalls + 1)
     )
     const lastCall = state.startBatchMock.mock.calls[state.startBatchMock.mock.calls.length - 1]
-    expect(lastCall[0]).toEqual(["a", "b"])
+    expect(lastCall[0]).toEqual([
+      { pluginId: "a", instanceId: "a", label: null },
+      { pluginId: "b", instanceId: "b", label: null },
+    ])
   })
 
   it("does not leak manual refresh cooldown state when refresh-all start fails", async () => {
@@ -1743,7 +1793,7 @@ describe("App", () => {
 
     // The retry should still work (startBatch called) but resetAutoUpdateSchedule
     // should hit the enabledIds.length === 0 branch
-    expect(state.startBatchMock).toHaveBeenCalledWith(["a"])
+    expect(state.startBatchMock).toHaveBeenCalledWith([{ pluginId: "a", instanceId: "a", label: null }])
   })
 
   it("clears global shortcut via clear button and invokes update_global_shortcut with null", async () => {

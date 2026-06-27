@@ -29,17 +29,25 @@ describe("useProbeEvents", () => {
     })
   })
 
-  it("starts batch and returns plugin ids", async () => {
+  it("starts batch and returns instance ids", async () => {
     invokeMock.mockImplementation(async (_cmd: string, args: any) => ({
       batchId: args.batchId,
-      pluginIds: args.pluginIds ?? [],
+      pluginIds: (args.instances ?? []).map((i: any) => i.pluginId),
+      instanceIds: (args.instances ?? []).map((i: any) => i.instanceId),
     }))
     const onResult = vi.fn()
     const onBatchComplete = vi.fn()
     const { result } = renderHook(() => useProbeEvents({ onResult, onBatchComplete }))
 
-    const ids = await act(() => result.current.startBatch(["a", "b"]))
-    expect(invokeMock).toHaveBeenCalledWith("start_probe_batch", expect.objectContaining({ pluginIds: ["a", "b"] }))
+    const instances = [
+      { pluginId: "a", instanceId: "a" },
+      { pluginId: "b", instanceId: "b" },
+    ]
+    const ids = await act(() => result.current.startBatch(instances))
+    expect(invokeMock).toHaveBeenCalledWith(
+      "start_probe_batch",
+      expect.objectContaining({ instances })
+    )
     expect(ids).toEqual(["a", "b"])
   })
 

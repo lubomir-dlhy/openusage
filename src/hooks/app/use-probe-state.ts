@@ -74,18 +74,21 @@ export function useProbeState({ onProbeResult }: UseProbeStateArgs) {
 
   const handleProbeResult = useCallback(
     (output: PluginOutput) => {
+      // State is keyed by account instance. Default accounts have
+      // instanceId === providerId, so legacy single-account behavior is unchanged.
+      const key = output.instanceId || output.providerId
       const errorMessage = getErrorMessage(output)
-      const isManual = manualRefreshIdsRef.current.has(output.providerId)
+      const isManual = manualRefreshIdsRef.current.has(key)
       if (isManual) {
-        manualRefreshIdsRef.current.delete(output.providerId)
+        manualRefreshIdsRef.current.delete(key)
       }
 
       const now = Date.now()
       updatePluginStates((prev) => {
-        const existing = prev[output.providerId]
+        const existing = prev[key]
         return {
           ...prev,
-          [output.providerId]: {
+          [key]: {
             data: errorMessage ? (existing?.data ?? null) : output,
             loading: false,
             error: errorMessage,
