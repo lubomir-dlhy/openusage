@@ -23,8 +23,56 @@ still points at the dead **Tauri 0.6.28** edition:
 - bundle id `com.sunstory.openusage` (the Swift edition is `com.robinebers.openusage`),
 - `depends_on macos: :monterey` (the Swift edition requires macOS 15 / Sequoia).
 
-The fix is to replace that cask's body with the one in `Casks/openusage.rb` (see "Fix the official
-cask" below).
+The fix is to replace that cask's body with the one in `Casks/openusage.rb` (see Phase 1 below).
+
+---
+
+## Rollout
+
+Getting onto Homebrew is a two-phase rollout: a one-time manual corrective PR to fix the stale official
+cask, then ongoing automated version+sha bumps once the body is correct.
+
+### Phase 1 — One-time corrective PR to `Homebrew/homebrew-cask` (manual)
+
+The already-merged official cask is structurally wrong for the Swift edition (Tauri per-arch URL
+`OpenUsage_<ver>_<arch>.dmg`, `com.sunstory` zap paths, `depends_on macos: :monterey`).
+`brew bump-cask-pr --version` only swaps `version` + `sha256`, so it **can't** fix this — the first
+update must rewrite the cask by hand.
+
+1. Get the checksum: `shasum -a 256 OpenUsage-<ver>.dmg` (or `curl` the release asset and pipe to
+   `shasum`). See "Computing the sha256" below.
+2. Scaffold the fork/branch/PR:
+   ```sh
+   brew bump-cask-pr --version <ver> \
+     --url "https://github.com/robinebers/openusage/releases/download/v<ver>/OpenUsage-<ver>.dmg" \
+     openusage
+   ```
+3. Before pushing, hand-edit the cask to match `Casks/openusage.rb` in this repo (single universal
+   `url`, `depends_on macos: ">= :sequoia"`, `com.robinebers.openusage` zap paths, the `livecheck`
+   block). Easiest is to paste our cask over the scaffolded one.
+4. Validate:
+   ```sh
+   brew style openusage
+   brew audit --cask --online openusage
+   brew install --cask ./Casks/o/openusage.rb
+   ```
+5. Open the PR; Homebrew CI plus a maintainer review and merge it. Note: homebrew-cask accepts
+   **stable** releases only — betas never go here.
+
+### Phase 2 — Ongoing auto-updates (after Phase 1 lands)
+
+Once the cask body is correct, each stable release only needs a `version` + `sha256` bump. Two options:
+
+- **(Recommended) CI bump.** The `release.yml` step this PR adds runs
+  `brew bump-cask-pr --version <ver> openusage` (via `HOMEBREW_GITHUB_API_TOKEN`) on every stable tag,
+  auto-opening the update PR. `script/update-homebrew-cask.sh` does the same thing locally if you ever
+  need to bump by hand.
+- **Or rely on Homebrew autobump.** The `livecheck { strategy :github_latest }` block lets BrewTestBot
+  detect new tags and open the bump PR automatically (this works even with `auto_updates true`). If you
+  go this route you can drop the official-cask bump step from `release.yml` and keep only the tap bump.
+
+Either way, the **tap** (`robinebers/homebrew-tap`) is the channel that carries betas, future CLI tools,
+and same-hour updates with no upstream review queue — see the owner steps below.
 
 ---
 
@@ -79,17 +127,9 @@ exist.
 
 ### 3. Fix the official `Homebrew/homebrew-cask` entry (one-time)
 
-The first stable bump may fail because the existing cask body is the stale Tauri one and the auto-bump
-only edits `version`/`sha256`/`url`. Do the structural fix once by hand:
-
-```sh
-brew bump-cask-pr openusage   # or edit the cask directly in a homebrew-cask fork
-```
-
-Replace the cask body with the contents of `Casks/openusage.rb` here (Swift edition): single universal
-`OpenUsage-<version>.dmg` URL, `depends_on macos: ">= :sequoia"`, and the
-`com.robinebers.openusage` zap paths. After that one-time correction, `brew bump-cask-pr --version`
-from CI keeps it current.
+This is **Phase 1** above — a one-time manual PR that rewrites the stale Tauri cask body to match the
+Swift edition's `Casks/openusage.rb`. After it lands, Phase 2's automated `brew bump-cask-pr --version`
+keeps the official cask current.
 
 ---
 

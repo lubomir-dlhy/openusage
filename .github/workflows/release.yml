@@ -203,8 +203,10 @@ jobs:
 
       - name: Open bump PR against official Homebrew/homebrew-cask
         # Stable-only and best-effort: the official cask lives in a third-party repo and the first bump
-        # may need a manual structural fix (the merged cask still points at the dead Tauri 0.6.28 build).
-        # `continue-on-error` so a failed/queued upstream bump never fails the release.
+        # may need a manual structural fix (the merged cask still points at the dead Tauri 0.6.28 build —
+        # see Phase 1 in packaging/homebrew/README.md; script/update-homebrew-cask.sh is the manual
+        # equivalent of this step). `continue-on-error` so a failed/queued upstream bump never fails the
+        # release.
         if: steps.meta.outputs.channel == 'stable'
         continue-on-error: true
         env:
