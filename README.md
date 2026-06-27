@@ -18,7 +18,7 @@ OpenUsage shows how much of your AI coding plans you've used: session and weekly
 - [**Grok**](docs/providers/grok.md) — credits used, pay-as-you-go
 - [**OpenRouter**](docs/providers/openrouter.md) — credit balance, daily/weekly/monthly spend (API key)
 
-Each provider reads the credentials already on your machine (keychain, auth files, app state) — no extra login, and nothing leaves your Mac except the same API calls the vendor's own tools make.
+Most providers read the credentials already on your machine (keychain, auth files, app state) — no extra login. OpenRouter is the exception: it has no local credential to reuse, so you supply an API key (see [its setup](docs/providers/openrouter.md)). Either way, nothing leaves your Mac except the same API calls the vendor's own tools make.
 
 ## Features
 
