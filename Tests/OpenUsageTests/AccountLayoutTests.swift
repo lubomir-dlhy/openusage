@@ -60,6 +60,51 @@ struct AccountLayoutTests {
         #expect(!placed.contains(where: { $0.contains("#") }))  // no account-scoped ids leak in
     }
 
+    // MARK: Live account changes (syncAccounts) — applied without relaunch
+
+    @Test func syncAccountsSeedsAddedAccountLive() {
+        let layout = LayoutStore(registry: WidgetRegistry.from([ClaudeProvider()]), defaults: freshDefaults())
+        #expect(!layout.providerOrder.contains("claude#1"))
+
+        layout.syncAccounts(WidgetRegistry.from([ClaudeProvider(), workClaude()]))
+
+        let placed = Set(layout.placed.map(\.descriptorID))
+        #expect(placed.contains("claude.session"))     // default account untouched
+        #expect(placed.contains("claude#1.session"))   // added account seeded live
+        #expect(layout.providerOrder.contains("claude#1"))
+        #expect(layout.displayGroups.map(\.provider.id).contains("claude#1"))
+    }
+
+    @Test func syncAccountsDropsRemovedAccountLive() {
+        let layout = LayoutStore(
+            registry: WidgetRegistry.from([ClaudeProvider(), workClaude()]),
+            defaults: freshDefaults()
+        )
+        #expect(layout.providerOrder.contains("claude#1"))
+
+        layout.syncAccounts(WidgetRegistry.from([ClaudeProvider()]))
+
+        let placed = Set(layout.placed.map(\.descriptorID))
+        #expect(placed.contains("claude.session"))               // default kept
+        #expect(!placed.contains(where: { $0.contains("#") }))   // removed account's metrics gone
+        #expect(!layout.providerOrder.contains("claude#1"))
+        #expect(!layout.displayGroups.map(\.provider.id).contains("claude#1"))
+    }
+
+    /// Editing an existing account's icon at runtime must reach the dashboard groups (and, via the same
+    /// `provider.icon`, the menu-bar strip) — the bug where only the Settings row updated.
+    @Test func syncAccountsPropagatesEditedIconToGroupsLive() {
+        let layout = LayoutStore(registry: WidgetRegistry.from([ClaudeProvider()]), defaults: freshDefaults())
+        let withIcon = ClaudeProvider(account: ProviderAccount(
+            id: "claude", providerID: "claude", label: nil, configDir: nil, iconFileName: "claude.png"
+        ))
+
+        layout.syncAccounts(WidgetRegistry.from([withIcon]))
+
+        let group = layout.displayGroups.first { $0.provider.id == "claude" }
+        #expect(group?.provider.icon == .customFile("claude.png"))
+    }
+
     // MARK: Per-account enablement
 
     @Test func enablementIsIndependentPerAccount() {

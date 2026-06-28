@@ -13,6 +13,10 @@ enum MenuBarStripRenderer {
     /// `ImageRenderer` (which retains a little memory per run on macOS) to actual visual changes.
     private static var lastRender: (content: MenuBarContent, style: MenuBarStyle, image: NSImage?)?
 
+    /// Drop the memoized render. Needed when a custom account icon is *replaced* under the same file
+    /// name (the `IconSource` is unchanged, so the content compares equal even though the image differs).
+    static func invalidateCache() { lastRender = nil }
+
     /// The strip image for the given content and style, or `nil` when the content renders nothing
     /// in that style (caller falls back to the app icon). Memoized: equal inputs return the
     /// previously rendered instance.

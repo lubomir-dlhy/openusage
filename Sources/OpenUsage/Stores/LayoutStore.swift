@@ -96,7 +96,7 @@ final class LayoutStore {
         didSet { defaults.set(menuBarStyle.rawValue, forKey: menuBarStyleKey) }
     }
 
-    private let registry: WidgetRegistry
+    private var registry: WidgetRegistry
     private let defaults: UserDefaults
     private let storageKey: String
     private let providerOrderKey: String
@@ -231,6 +231,54 @@ final class LayoutStore {
     }
 
     func provider(id: String) -> Provider? { registry.provider(id: id) }
+
+    /// Apply a rebuilt registry after the account set changed at runtime (account added/removed, or an
+    /// existing account's icon/label/config edited). Swapping `registry` (an observed property) makes the
+    /// dashboard groups and the menu-bar strip recompute with the live provider data — no relaunch. New
+    /// accounts are seeded with their provider's default metrics/pins/expanded (mirrors `init`); removed
+    /// accounts' layout entries are dropped. The default account (id == providerID) is untouched.
+    func syncAccounts(_ newRegistry: WidgetRegistry) {
+        let previousIDs = Set(registry.providers.map(\.id))
+        registry = newRegistry
+        let currentIDs = newRegistry.providers.map(\.id)
+        let currentSet = Set(currentIDs)
+        let newAccountIDs = currentIDs.filter { !previousIDs.contains($0) }
+        let removed = !previousIDs.isSubset(of: currentSet)
+
+        if removed {
+            placed.removeAll { newRegistry.descriptor(id: $0.descriptorID) == nil }
+            pinnedMetricIDs = pinnedMetricIDs.filter { newRegistry.descriptor(id: $0) != nil }
+            expandedMetricIDs = expandedMetricIDs.filter { newRegistry.descriptor(id: $0) != nil }
+            expandedProviderIDs = expandedProviderIDs.filter { currentSet.contains($0) }
+            providerOrder.removeAll { !currentSet.contains($0) }
+            for key in metricOrderByProvider.keys where !currentSet.contains(key) {
+                metricOrderByProvider[key] = nil
+            }
+        }
+
+        for accountID in newAccountIDs {
+            if !providerOrder.contains(accountID) { providerOrder.append(accountID) }
+            let placedSet = Set(placed.map(\.descriptorID))
+            for id in DefaultLayout.expanded(DefaultLayout.metricIDs, forAccountIDs: [accountID])
+            where newRegistry.descriptor(id: id) != nil && !placedSet.contains(id) {
+                placed.append(PlacedWidget(descriptorID: id))
+            }
+            pinnedMetricIDs.formUnion(
+                DefaultLayout.expanded(DefaultLayout.pinnedMetricIDs, forAccountIDs: [accountID])
+                    .filter { newRegistry.descriptor(id: $0) != nil }
+            )
+            expandedMetricIDs.formUnion(
+                DefaultLayout.expanded(DefaultLayout.expandedMetricIDs, forAccountIDs: [accountID])
+                    .filter { newRegistry.descriptor(id: $0) != nil }
+            )
+        }
+
+        syncPlacedOrder(persistChanges: true)
+        persistProviderOrder()
+        persistPins()
+        persistExpanded()
+        persistExpandedProviders()
+    }
 
     func descriptor(for widget: PlacedWidget) -> WidgetDescriptor? {
         registry.descriptor(id: widget.descriptorID)

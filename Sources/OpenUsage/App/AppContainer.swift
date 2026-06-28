@@ -23,6 +23,10 @@ final class AppContainer {
     private let localAPI: LocalUsageServer
     // A `let` of a `Sendable` `Task` is implicitly nonisolated, so the nonisolated `deinit` can cancel it.
     private let refreshTask: Task<Void, Never>
+    /// Watches `AccountsStore` and rebuilds the per-account runtimes in place when the account
+    /// configuration changes (add/remove an account, or edit an existing one's icon/label/config dir).
+    /// A `let` Task capturing the stores (not `self`), so the nonisolated `deinit` can cancel it.
+    private let accountsObserver: Task<Void, Never>
 
     init() {
         // Default provider order (see AGENTS.md "## Providers"): the three established providers first —
@@ -36,14 +40,7 @@ final class AppContainer {
         // accounts grouped right after its default. With no extra accounts configured this is identical to
         // the previous single-instance-per-provider list.
         let accounts = AccountsStore()
-        var providers: [ProviderRuntime] = []
-        providers += accounts.accounts(for: "claude").map { ClaudeProvider(account: $0) }
-        providers += accounts.accounts(for: "codex").map { CodexProvider(account: $0) }
-        providers.append(CursorProvider())
-        providers.append(AntigravityProvider())
-        providers.append(CopilotProvider())
-        providers.append(DevinProvider())
-        providers.append(GrokProvider())
+        let providers = Self.buildProviders(accounts: accounts)
         let registry = WidgetRegistry.from(providers)
         let enablement = ProviderEnablementStore()
         let layout = LayoutStore(
@@ -103,9 +100,55 @@ final class AppContainer {
         })
         self.refreshTask = Self.startPeriodicRefresh(dataStore: dataStore, telemetry: telemetry)
         localAPI.start()
+
+        // Apply account changes (add/remove, or edit icon/label/config dir) live: rebuild the per-account
+        // runtimes and swap the registry into the stores in place, so the dashboard cards and the
+        // menu-bar strip reflect the change without a relaunch.
+        self.accountsObserver = Self.startAccountsObserver(accounts: accounts, layout: layout, dataStore: dataStore)
     }
 
-    deinit { refreshTask.cancel() }
+    deinit {
+        refreshTask.cancel()
+        accountsObserver.cancel()
+    }
+
+    /// The per-account provider runtimes. Claude/Codex get one runtime per configured account (default
+    /// first, then user-added extras); other providers are single-account. Order matches AGENTS.md
+    /// (Claude, Codex, Cursor, then the rest alphabetically), a provider's extras right after its default.
+    private static func buildProviders(accounts: AccountsStore) -> [ProviderRuntime] {
+        var providers: [ProviderRuntime] = []
+        providers += accounts.accounts(for: "claude").map { ClaudeProvider(account: $0) }
+        providers += accounts.accounts(for: "codex").map { CodexProvider(account: $0) }
+        providers.append(CursorProvider())
+        providers.append(AntigravityProvider())
+        providers.append(CopilotProvider())
+        providers.append(DevinProvider())
+        providers.append(GrokProvider())
+        return providers
+    }
+
+    /// Watch `AccountsStore` and, on each change, rebuild the runtimes + registry from the current
+    /// accounts and apply them in place to the live stores (same instances, so the refresh loop / local
+    /// API / telemetry stay valid), then fetch. Captures the stores (not `self`), mirroring `refreshTask`.
+    private static func startAccountsObserver(
+        accounts: AccountsStore,
+        layout: LayoutStore,
+        dataStore: WidgetDataStore
+    ) -> Task<Void, Never> {
+        Task { @MainActor in
+            for await _ in NotificationCenter.default.notifications(named: AccountsStore.didChangeNotification) {
+                let providers = buildProviders(accounts: accounts)
+                let registry = WidgetRegistry.from(providers)
+                AppLog.info(.lifecycle, "accounts changed — rebuilding \(providers.count) runtimes live")
+                layout.syncAccounts(registry)
+                dataStore.updateProviders(registry: registry, providers: providers)
+                // A replaced icon keeps its file name (so the IconSource is unchanged) — drop the strip's
+                // content-keyed cache so the new image is rendered.
+                MenuBarStripRenderer.invalidateCache()
+                await dataStore.refreshAll()
+            }
+        }
+    }
 
     /// Drives live updates: refresh on launch, then again every refresh interval. Each pass honors the
     /// cache, so it only hits the network once a snapshot has actually expired. `@Observable` propagates

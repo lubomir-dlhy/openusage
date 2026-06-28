@@ -12,8 +12,8 @@ struct StalenessHint: Equatable {
 @MainActor
 @Observable
 final class WidgetDataStore {
-    private let registry: WidgetRegistry
-    private let providersByID: [String: ProviderRuntime]
+    private var registry: WidgetRegistry
+    private var providersByID: [String: ProviderRuntime]
     private let cache: ProviderSnapshotCache
     private let defaults: UserDefaults
     /// Whether a provider is currently enabled. Injected so the store consults the single
@@ -101,6 +101,23 @@ final class WidgetDataStore {
         // dashboard show last-known values immediately at launch instead of "—"; the refresh loop
         // replaces them as soon as fresh data lands.
         self.snapshots = cache.loadSnapshots(providerIDs: registry.providers.map(\.id))
+    }
+
+    /// Swap in a rebuilt provider set after the account configuration changed at runtime. Keeps this
+    /// same store instance (so the refresh loop, local API, and telemetry that captured it stay valid);
+    /// only the registry + runtime map are replaced. Snapshots/errors for accounts that no longer exist
+    /// are dropped; newly-added accounts are fetched by the caller's follow-up refresh.
+    func updateProviders(registry: WidgetRegistry, providers: [ProviderRuntime]) {
+        self.registry = registry
+        self.providersByID = Dictionary(providers.map { ($0.provider.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let known = Set(self.providersByID.keys)
+        snapshots = snapshots.filter { known.contains($0.key) }
+        providerErrors = providerErrors.filter { known.contains($0.key) }
+        refreshingProviderIDs = refreshingProviderIDs.filter { known.contains($0) }
+        failureRetryAfter = failureRetryAfter.filter { known.contains($0.key) }
+        // Paint any newly-added account's last-known cached values immediately (before the refresh lands).
+        let cached = cache.loadSnapshots(providerIDs: registry.providers.map(\.id))
+        for (id, snap) in cached where snapshots[id] == nil { snapshots[id] = snap }
     }
 
     /// Refresh every enabled provider, concurrently — one slow provider never delays the rest.

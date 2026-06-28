@@ -28,9 +28,6 @@ struct SettingsScreen: View {
 
     /// Drives the Add/Edit account sheet (`nil` = closed).
     @State private var accountEditor: AccountEditorTarget?
-    /// Shown after an account add/edit/delete. The provider list is built at launch (the app is a
-    /// long-lived menu-bar process — see AGENTS.md), so account changes take effect on relaunch.
-    @State private var accountsChangedNote = false
 
     /// Providers that support multiple accounts (one credential source per account). Matches the
     /// per-account instantiation in `AppContainer`.
@@ -136,9 +133,6 @@ struct SettingsScreen: View {
                     } else {
                         providerRow(base)
                     }
-                }
-                if accountsChangedNote {
-                    relaunchNote
                 }
             }
             section("Privacy") {
@@ -369,21 +363,9 @@ struct SettingsScreen: View {
         .padding(.vertical, density.controlRowPadding)
     }
 
-    private var relaunchNote: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "arrow.clockwise.circle")
-            Text("Relaunch OpenUsage to apply account changes.")
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, density.controlRowPadding)
-    }
-
     private func deleteAccount(_ account: ProviderAccount) {
         if let fileName = account.iconFileName { AccountIconStore.delete(fileName: fileName) }
         container.accounts.removeAccount(id: account.id)
-        accountsChangedNote = true
     }
 
     private func saveAccount(target: AccountEditorTarget, label: String?, configDir: String?, pickedIconURL: URL?, clearIcon: Bool) {
@@ -408,7 +390,6 @@ struct SettingsScreen: View {
                 accounts.updateAccount(withIcon)
             }
         }
-        accountsChangedNote = true
         accountEditor = nil
     }
 }
