@@ -28,7 +28,7 @@ cd "$ROOT_DIR"
 : "${OPENUSAGE_VERSION:?set OPENUSAGE_VERSION, e.g. 0.7.0}"
 
 APP_NAME="OpenUsage"
-BUNDLE_ID="com.robinebers.openusage"
+BUNDLE_ID="com.lubomirdlhy.openusage"
 MIN_SYSTEM_VERSION="15.0"
 VERSION="$OPENUSAGE_VERSION"
 # CFBundleShortVersionString carries the full version, including any pre-release suffix (e.g.
