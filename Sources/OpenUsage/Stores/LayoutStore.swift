@@ -123,6 +123,16 @@ final class LayoutStore {
         defaultExpandedMetricIDs: [String] = DefaultLayout.expandedMetricIDs,
         isProviderEnabled: @escaping @MainActor (String) -> Bool = { _ in true }
     ) {
+        // Expand base default ids (e.g. "claude.session") to every configured account (the default
+        // account keeps the base id, so single-account installs are unchanged), so a newly-added account
+        // is seeded with the provider's default metrics/pins. All four lists are filtered to the registry
+        // by the existing seeding code below, so ids for absent accounts simply drop out.
+        let accountIDs = registry.providers.map(\.id)
+        let defaultMetricIDs = DefaultLayout.expanded(defaultMetricIDs, forAccountIDs: accountIDs)
+        let migrationBaselineMetricIDs = DefaultLayout.expanded(migrationBaselineMetricIDs, forAccountIDs: accountIDs)
+        let defaultPinnedMetricIDs = DefaultLayout.expanded(defaultPinnedMetricIDs, forAccountIDs: accountIDs)
+        let defaultExpandedMetricIDs = DefaultLayout.expanded(defaultExpandedMetricIDs, forAccountIDs: accountIDs)
+
         self.registry = registry
         self.defaults = defaults
         self.storageKey = storageKey

@@ -80,4 +80,29 @@ enum DefaultLayout {
         "devin.extra",
         "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30"
     ]
+
+    /// Expand base default ids (e.g. `"claude.session"`) to every account of that provider present in the
+    /// registry, so a newly-added account gets the same default metrics/pins as the provider's default.
+    /// The default account's id == providerID, so its ids are returned unchanged (single-account installs
+    /// are byte-identical). An extra account `"claude#1"` additionally gets `"claude#1.session"`. Ids whose
+    /// provider has no extra accounts pass through unchanged (and are never duplicated). `LayoutStore` still
+    /// filters the result to what the registry actually defines, so unknown ids drop out.
+    static func expanded(_ baseIDs: [String], forAccountIDs accountIDs: [String]) -> [String] {
+        // base providerID -> [account ids] (default first, then extras), preserving registry order.
+        var accountsByBase: [String: [String]] = [:]
+        for accountID in accountIDs {
+            let base = accountID.split(separator: "#", maxSplits: 1).first.map(String.init) ?? accountID
+            accountsByBase[base, default: []].append(accountID)
+        }
+        var result: [String] = []
+        for baseID in baseIDs {
+            guard let dot = baseID.firstIndex(of: ".") else { result.append(baseID); continue }
+            let base = String(baseID[..<dot])
+            let suffix = String(baseID[baseID.index(after: dot)...])
+            for accountID in accountsByBase[base] ?? [base] {
+                result.append(accountID == base ? baseID : "\(accountID).\(suffix)")
+            }
+        }
+        return result
+    }
 }
