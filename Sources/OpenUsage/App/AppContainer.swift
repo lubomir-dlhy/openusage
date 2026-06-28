@@ -9,6 +9,10 @@ final class AppContainer {
     let registry: WidgetRegistry
     let layout: LayoutStore
     let dataStore: WidgetDataStore
+    /// Accounts configured per provider. A multi-account provider (Claude, Codex) gets one runtime per
+    /// account; everything downstream keys by the runtime's id (the account id, which == providerID for
+    /// the default account). The Accounts settings UI drives this.
+    let accounts: AccountsStore
     /// Single source of truth for which providers the user has turned off. Both stores consult it (via
     /// injected closures) and the Providers settings tab drives it.
     let enablement: ProviderEnablementStore
@@ -26,15 +30,20 @@ final class AppContainer {
         // order is the default provider order (`LayoutStore.orderedProviderIDs` falls back to it, and
         // `resetToDefault` seeds it), so the dashboard, Customize sections, and the per-provider reset
         // menu all read this way.
-        let providers: [ProviderRuntime] = [
-            ClaudeProvider(),
-            CodexProvider(),
-            CursorProvider(),
-            AntigravityProvider(),
-            CopilotProvider(),
-            DevinProvider(),
-            GrokProvider()
-        ]
+        // Claude and Codex support multiple accounts: one runtime per configured account (the default
+        // account first, then user-added extras). Other providers are single-account. Order preserves the
+        // AGENTS.md default (Claude, Codex, Cursor, then the rest alphabetically), with a provider's extra
+        // accounts grouped right after its default. With no extra accounts configured this is identical to
+        // the previous single-instance-per-provider list.
+        let accounts = AccountsStore()
+        var providers: [ProviderRuntime] = []
+        providers += accounts.accounts(for: "claude").map { ClaudeProvider(account: $0) }
+        providers += accounts.accounts(for: "codex").map { CodexProvider(account: $0) }
+        providers.append(CursorProvider())
+        providers.append(AntigravityProvider())
+        providers.append(CopilotProvider())
+        providers.append(DevinProvider())
+        providers.append(GrokProvider())
         let registry = WidgetRegistry.from(providers)
         let enablement = ProviderEnablementStore()
         let layout = LayoutStore(
@@ -54,6 +63,7 @@ final class AppContainer {
         self.enablement = enablement
         self.layout = layout
         self.dataStore = dataStore
+        self.accounts = accounts
 
         // Anonymous, opt-out usage telemetry (two daily-rollup events). Its state lives in a dedicated
         // UserDefaults suite, kept separate from app settings so the user's opt-out choice and the

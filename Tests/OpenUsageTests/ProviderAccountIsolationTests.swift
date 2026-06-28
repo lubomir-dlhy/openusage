@@ -79,4 +79,21 @@ struct ProviderAccountIsolationTests {
         #expect(provider.account.id == provider.provider.id)
         #expect(provider.account.isDefault)
     }
+
+    // MARK: Phase 2 — registry keeps multiple accounts of one provider distinct
+
+    @Test func registryKeepsAccountsDistinct() {
+        let def = ClaudeProvider()
+        let work = ClaudeProvider(
+            account: ProviderAccount(id: "claude#1", providerID: "claude", label: "Work", configDir: "/w", iconFileName: nil)
+        )
+        let registry = WidgetRegistry.from([def, work])
+        #expect(registry.providers.map(\.id).contains("claude"))
+        #expect(registry.providers.map(\.id).contains("claude#1"))
+        // Both accounts' descriptors coexist without colliding.
+        #expect(registry.descriptor(id: "claude.session") != nil)
+        #expect(registry.descriptor(id: "claude#1.session") != nil)
+        #expect(registry.descriptors(for: "claude#1").allSatisfy { $0.providerID == "claude#1" })
+        #expect(!registry.descriptors(for: "claude#1").isEmpty)
+    }
 }
