@@ -20,9 +20,17 @@ import Foundation
 @MainActor
 protocol ProviderRuntime: AnyObject {
     var provider: Provider { get }
+    /// The account this runtime serves. A provider can be instantiated once per account (e.g. a personal
+    /// and a work Claude); each instance reads that account's credential source. Defaults to the implicit
+    /// default account (`id == provider.id`) so providers without multi-account support need no change.
+    var account: ProviderAccount { get }
     var widgetDescriptors: [WidgetDescriptor] { get }
 
     func refresh() async -> ProviderSnapshot
+}
+
+extension ProviderRuntime {
+    var account: ProviderAccount { .makeDefault(providerID: provider.id) }
 }
 
 /// Run a blocking, `Sendable` credential load off the MainActor.

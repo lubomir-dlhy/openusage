@@ -110,16 +110,22 @@ struct ClaudeAuthStore: Sendable {
     var files: TextFileAccessing
     var keychain: KeychainAccessing
     var now: @Sendable () -> Date
+    /// Per-account credential-source override — the `CLAUDE_CONFIG_DIR` value for THIS account. When set it
+    /// takes precedence over the process env so multiple accounts can read different config dirs within one
+    /// process. `nil` = fall back to the `CLAUDE_CONFIG_DIR` env var, then the default `~/.claude`.
+    var configDirOverride: String?
 
     init(
         environment: EnvironmentReading = ProcessEnvironmentReader(),
         files: TextFileAccessing = LocalTextFileAccessor(),
         keychain: KeychainAccessing = SecurityKeychainAccessor(),
+        configDir: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.environment = environment
         self.files = files
         self.keychain = keychain
+        self.configDirOverride = configDir
         self.now = now
     }
 
@@ -183,7 +189,11 @@ struct ClaudeAuthStore: Sendable {
     }
 
     func claudeHomeOverride() -> String? {
-        envText("CLAUDE_CONFIG_DIR")
+        if let override = configDirOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return override
+        }
+        return envText("CLAUDE_CONFIG_DIR")
     }
 
     // Resolved OAuth endpoint strings before URL validation. The suffix is derived from the same
@@ -339,7 +349,7 @@ struct ClaudeAuthStore: Sendable {
     }
 
     private func credentialsPath() -> String {
-        "\(envText("CLAUDE_CONFIG_DIR") ?? Self.defaultClaudeHome)/\(Self.credentialFileName)"
+        "\(claudeHomeOverride() ?? Self.defaultClaudeHome)/\(Self.credentialFileName)"
     }
 
     private func envText(_ name: String) -> String? {

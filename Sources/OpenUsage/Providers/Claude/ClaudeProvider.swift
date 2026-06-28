@@ -2,15 +2,8 @@ import Foundation
 
 @MainActor
 final class ClaudeProvider: ProviderRuntime {
-    let provider = Provider(
-        id: "claude",
-        displayName: "Claude",
-        icon: .providerMark("claude"),
-        links: [
-            .init(label: "Status", url: "https://status.anthropic.com/"),
-            .init(label: "Dashboard", url: "https://claude.ai/settings/usage")
-        ]
-    )
+    let account: ProviderAccount
+    let provider: Provider
 
     let authStore: ClaudeAuthStore
     let usageClient: ClaudeUsageClient
@@ -27,23 +20,39 @@ final class ClaudeProvider: ProviderRuntime {
     private static let rateLimitCooldown: TimeInterval = 5 * 60
 
     init(
-        authStore: ClaudeAuthStore = ClaudeAuthStore(),
+        account: ProviderAccount = .makeDefault(providerID: "claude"),
+        authStore: ClaudeAuthStore? = nil,
         usageClient: ClaudeUsageClient = ClaudeUsageClient(),
         ccusageRunner: CcusageRunner = CcusageRunner(),
         now: @escaping @Sendable () -> Date = Date.init
     ) {
-        self.authStore = authStore
+        self.account = account
+        self.provider = Provider(
+            id: account.id,
+            displayName: account.displayName(providerDisplayName: "Claude"),
+            icon: .providerMark("claude"),
+            links: [
+                .init(label: "Status", url: "https://status.anthropic.com/"),
+                .init(label: "Dashboard", url: "https://claude.ai/settings/usage")
+            ]
+        )
+        // When no auth store is injected (production), build one bound to this account's config dir so
+        // each account reads its own credentials. Tests inject a stub directly.
+        self.authStore = authStore ?? ClaudeAuthStore(configDir: account.configDir)
         self.usageClient = usageClient
         self.ccusageRunner = ccusageRunner
         self.now = now
     }
 
+    // Descriptor ids are scoped by the account id (`provider.id`), so two accounts of the same provider
+    // never collide in the layout/data stores. The default account's id == "claude", so its descriptor
+    // ids stay "claude.*" exactly as before (no migration).
     var widgetDescriptors: [WidgetDescriptor] {
         [
-            .percent(id: "claude.session", provider: provider, title: "Session"),
-            .percent(id: "claude.weekly", provider: provider, title: "Weekly"),
-            .percent(id: "claude.sonnet", provider: provider, title: "Sonnet"),
-            .boundedDollars(id: "claude.extra", provider: provider, title: "Extra Usage", metricLabel: "Extra usage spent", limit: 100, valueWord: "spent"),
+            .percent(id: "\(provider.id).session", provider: provider, title: "Session"),
+            .percent(id: "\(provider.id).weekly", provider: provider, title: "Weekly"),
+            .percent(id: "\(provider.id).sonnet", provider: provider, title: "Sonnet"),
+            .boundedDollars(id: "\(provider.id).extra", provider: provider, title: "Extra Usage", metricLabel: "Extra usage spent", limit: 100, valueWord: "spent"),
             .usageTrend(provider: provider)
         ] + WidgetDescriptor.spendTiles(provider: provider)
     }

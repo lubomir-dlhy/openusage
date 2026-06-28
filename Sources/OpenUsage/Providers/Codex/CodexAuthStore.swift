@@ -83,17 +83,30 @@ struct CodexAuthStore: Sendable {
     var files: TextFileAccessing
     var keychain: KeychainAccessing
     var now: @Sendable () -> Date
+    /// Per-account credential-source override — the `CODEX_HOME` value for THIS account. When set it takes
+    /// precedence over the process env so multiple accounts can read different homes within one process.
+    /// `nil` = fall back to the `CODEX_HOME` env var, then the default `~/.config/codex` / `~/.codex`.
+    var configDirOverride: String?
 
     init(
         environment: EnvironmentReading = ProcessEnvironmentReader(),
         files: TextFileAccessing = LocalTextFileAccessor(),
         keychain: KeychainAccessing = SecurityKeychainAccessor(),
+        configDir: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.environment = environment
         self.files = files
         self.keychain = keychain
+        self.configDirOverride = configDir
         self.now = now
+    }
+
+    /// True when this account explicitly pins a config dir. The provider uses this to skip the shared
+    /// "Codex Auth" keychain fallback for non-default accounts (mirrors the Tauri fix), so a work account
+    /// pointed at an empty `<dir>/auth.json` never silently reads the default login from the keychain.
+    var hasExplicitConfigDir: Bool {
+        (configDirOverride?.trimmingCharacters(in: .whitespacesAndNewlines)).map { !$0.isEmpty } ?? false
     }
 
     func loadAuthCandidates() -> ([CodexAuthState], [String]) {
@@ -160,6 +173,10 @@ struct CodexAuthStore: Sendable {
     }
 
     func codexHome() -> String? {
+        if let override = configDirOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return override
+        }
         guard let codexHome = environment.value(for: "CODEX_HOME")?.trimmingCharacters(in: .whitespacesAndNewlines),
               !codexHome.isEmpty
         else {

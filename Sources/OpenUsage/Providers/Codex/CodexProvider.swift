@@ -2,15 +2,8 @@ import Foundation
 
 @MainActor
 final class CodexProvider: ProviderRuntime {
-    let provider = Provider(
-        id: "codex",
-        displayName: "Codex",
-        icon: .providerMark("codex"),
-        links: [
-            .init(label: "Status", url: "https://status.openai.com/"),
-            .init(label: "Dashboard", url: "https://chatgpt.com/codex/settings/usage")
-        ]
-    )
+    let account: ProviderAccount
+    let provider: Provider
 
     let authStore: CodexAuthStore
     let usageClient: CodexUsageClient
@@ -18,23 +11,35 @@ final class CodexProvider: ProviderRuntime {
     let now: @Sendable () -> Date
 
     init(
-        authStore: CodexAuthStore = CodexAuthStore(),
+        account: ProviderAccount = .makeDefault(providerID: "codex"),
+        authStore: CodexAuthStore? = nil,
         usageClient: CodexUsageClient = CodexUsageClient(),
         ccusageRunner: CcusageRunner = CcusageRunner(),
         now: @escaping @Sendable () -> Date = Date.init
     ) {
-        self.authStore = authStore
+        self.account = account
+        self.provider = Provider(
+            id: account.id,
+            displayName: account.displayName(providerDisplayName: "Codex"),
+            icon: .providerMark("codex"),
+            links: [
+                .init(label: "Status", url: "https://status.openai.com/"),
+                .init(label: "Dashboard", url: "https://chatgpt.com/codex/settings/usage")
+            ]
+        )
+        self.authStore = authStore ?? CodexAuthStore(configDir: account.configDir)
         self.usageClient = usageClient
         self.ccusageRunner = ccusageRunner
         self.now = now
     }
 
+    // Descriptor ids scoped by account id (`provider.id`); default account id == "codex" keeps "codex.*".
     var widgetDescriptors: [WidgetDescriptor] {
         [
-            .percent(id: "codex.session", provider: provider, title: "Session"),
-            .percent(id: "codex.weekly", provider: provider, title: "Weekly"),
-            .combined(id: "codex.credits", provider: provider, title: "Extra Usage", metricLabel: "Credits"),
-            .values(id: "codex.rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets"),
+            .percent(id: "\(provider.id).session", provider: provider, title: "Session"),
+            .percent(id: "\(provider.id).weekly", provider: provider, title: "Weekly"),
+            .combined(id: "\(provider.id).credits", provider: provider, title: "Extra Usage", metricLabel: "Credits"),
+            .values(id: "\(provider.id).rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets"),
             .usageTrend(provider: provider)
         ] + WidgetDescriptor.spendTiles(provider: provider)
     }
@@ -54,7 +59,11 @@ final class CodexProvider: ProviderRuntime {
             }
         }
 
-        if let keychainCandidate = await loadOffMainActor({ [authStore] in authStore.loadKeychainAuth() }) {
+        // The shared "Codex Auth" keychain holds a SINGLE login, so a non-default account that pins its own
+        // CODEX_HOME must never fall back to it (it would silently show the default account's usage). Only
+        // the default account (no explicit config dir) uses the keychain fallback.
+        if !authStore.hasExplicitConfigDir,
+           let keychainCandidate = await loadOffMainActor({ [authStore] in authStore.loadKeychainAuth() }) {
             do {
                 return try await probe(authState: keychainCandidate)
             } catch {
