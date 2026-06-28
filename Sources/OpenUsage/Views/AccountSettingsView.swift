@@ -113,7 +113,9 @@ struct AccountSettingsView: View {
         panel.showsHiddenFiles = true
         panel.message = "Select the \(providerDisplayName) config directory"
         panel.prompt = "Choose"
-        if panel.runModal() == .OK, let url = panel.url { configDir = url.path }
+        // Suspend the menu-bar panel's outside-click dismissal so it stays open behind the picker.
+        let response = MenuBarPopover.withDismissalSuspended { panel.runModal() }
+        if response == .OK, let url = panel.url { configDir = url.path }
     }
 
     private func chooseIcon() {
@@ -124,7 +126,9 @@ struct AccountSettingsView: View {
         panel.allowedContentTypes = [.png, .jpeg, .tiff, .gif, .bmp, .heic]
         panel.message = "Choose an icon image (PNG recommended)"
         panel.prompt = "Choose"
-        if panel.runModal() == .OK, let url = panel.url {
+        // Suspend the menu-bar panel's outside-click dismissal so it stays open behind the picker.
+        let response = MenuBarPopover.withDismissalSuspended { panel.runModal() }
+        if response == .OK, let url = panel.url {
             pickedIconURL = url
             clearIcon = false
         }

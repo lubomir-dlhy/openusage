@@ -57,6 +57,10 @@ final class StatusItemController: NSObject {
     /// its duration so the panel growing/shrinking under a stationary cursor can't be misread as an
     /// outside click. Cleared by `scheduleMorphSettle` shortly after the per-frame height stream stops.
     private var isMorphing = false
+    /// True while a native modal dialog opened from inside the panel (e.g. an `NSOpenPanel` config-dir
+    /// or icon picker in the account settings) is on screen. Outside-click dismissal is suspended for its
+    /// duration so the dialog taking key focus — or the click that lands on it — doesn't close the panel.
+    private var isModalDialogPresented = false
     /// Fires once the per-frame height stream goes quiet: clears `isMorphing` and persists the settled
     /// per-screen height (the next open's flash-free starting guess).
     private var morphSettleTask: Task<Void, Never>?
@@ -121,6 +125,11 @@ final class StatusItemController: NSObject {
         MenuBarPopover.clampHeight = { [weak self] raw in
             guard let self else { return raw }
             return min(max(raw, Self.minPanelHeight), self.maxPanelHeight())
+        }
+
+        // Keep the panel open while a native picker (NSOpenPanel) is up; restored when it closes.
+        MenuBarPopover.setModalDialogPresented = { [weak self] presented in
+            self?.isModalDialogPresented = presented
         }
 
         AppLog.info(.statusItem, "Status item ready (button: \(self.statusItem.button != nil), shortcut: \(KeyboardShortcuts.getShortcut(for: .togglePopover)?.description ?? "none"))")
@@ -497,6 +506,8 @@ final class StatusItemController: NSObject {
                 // While the panel is morphing its height, its frame is moving under a possibly
                 // stationary cursor — don't let a click land "outside" a frame that's mid-resize.
                 guard !self.isMorphing else { return }
+                // A native picker (NSOpenPanel) is up — don't dismiss on clicks while it's open.
+                guard !self.isModalDialogPresented else { return }
                 // Clicking the status item must NOT dismiss here — its own action toggles the panel.
                 // Dismissing on this click's mouse-down would close the panel, then the button action
                 // would reopen it on mouse-up (the close-then-reopen flicker).
@@ -524,6 +535,8 @@ final class StatusItemController: NSObject {
     private func shouldKeepPanelOpen(windowID: ObjectIdentifier?, windowTypeName: String?, screenPoint: NSPoint) -> Bool {
         // The frame is moving mid-morph; a hit-test against it would be racy, so keep the panel open.
         if isMorphing { return true }
+        // A native picker (NSOpenPanel) is up — its window / the click on it must not dismiss the panel.
+        if isModalDialogPresented { return true }
         if isOnStatusButton(screenPoint: screenPoint) { return true }
         if panel.frame.contains(screenPoint) { return true }
         guard let windowID, let windowTypeName else { return false }

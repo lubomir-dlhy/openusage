@@ -219,6 +219,20 @@ enum MenuBarPopover {
     static var applyHeight: ((CGFloat) -> Void)?
     static var clampHeight: ((CGFloat) -> CGFloat)?
 
+    /// Installed by `StatusItemController`; suspends the panel's outside-click dismissal while a native
+    /// modal dialog (e.g. an `NSOpenPanel` file/folder picker opened from inside the panel) is on screen.
+    /// Without it the dialog taking key focus / the click that lands on it is read as an "outside click"
+    /// and the panel closes before the user can finish picking.
+    static var setModalDialogPresented: ((Bool) -> Void)?
+
+    /// Run a synchronous, panel-presented modal (e.g. `NSOpenPanel.runModal()`) with outside-click
+    /// dismissal suspended for its duration.
+    static func withDismissalSuspended<T>(_ body: () -> T) -> T {
+        setModalDialogPresented?(true)
+        defer { setModalDialogPresented?(false) }
+        return body()
+    }
+
     /// Closes the popover. Falls back to ordering the given window out if no owner has installed
     /// a handler (which would be a wiring bug, so it's logged loudly by the caller's absence of
     /// effect rather than silently swallowed here).
