@@ -21,7 +21,7 @@ final class CodexProvider: ProviderRuntime {
         self.provider = Provider(
             id: account.id,
             displayName: account.displayName(providerDisplayName: "Codex"),
-            icon: .providerMark("codex"),
+            icon: account.iconFileName.map(IconSource.customFile) ?? .providerMark("codex"),
             links: [
                 .init(label: "Status", url: "https://status.openai.com/"),
                 .init(label: "Dashboard", url: "https://chatgpt.com/codex/settings/usage")

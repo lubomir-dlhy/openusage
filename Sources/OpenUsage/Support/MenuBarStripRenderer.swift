@@ -169,6 +169,19 @@ private struct MenuBarTextStrip: View {
             Image(systemName: name)
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: Self.glyphSide, height: Self.glyphSide)
+        case .customFile(let fileName):
+            // The strip is rendered into a template NSImage, so a custom account icon shows as its
+            // monochrome silhouette beside its metrics (a transparent glyph reads best).
+            if let image = AccountIconStore.image(named: fileName) {
+                Image(nsImage: image)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color.black)
+                    .frame(width: Self.glyphSide, height: Self.glyphSide)
+            } else {
+                Circle().fill(Color.black).frame(width: Self.glyphSide - 1, height: Self.glyphSide - 1)
+            }
         }
     }
 }

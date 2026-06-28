@@ -30,7 +30,7 @@ final class ClaudeProvider: ProviderRuntime {
         self.provider = Provider(
             id: account.id,
             displayName: account.displayName(providerDisplayName: "Claude"),
-            icon: .providerMark("claude"),
+            icon: account.iconFileName.map(IconSource.customFile) ?? .providerMark("claude"),
             links: [
                 .init(label: "Status", url: "https://status.anthropic.com/"),
                 .init(label: "Dashboard", url: "https://claude.ai/settings/usage")
