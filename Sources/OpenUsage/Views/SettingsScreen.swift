@@ -26,11 +26,33 @@ struct SettingsScreen: View {
     /// Surfaced under the Advanced rows when copying the path or revealing the file fails.
     @State private var logActionError: String?
 
+    /// Drives the Add/Edit account sheet (`nil` = closed).
+    @State private var accountEditor: AccountEditorTarget?
+    /// Shown after an account add/edit/delete. The provider list is built at launch (the app is a
+    /// long-lived menu-bar process — see AGENTS.md), so account changes take effect on relaunch.
+    @State private var accountsChangedNote = false
+
+    /// Providers that support multiple accounts (one credential source per account). Matches the
+    /// per-account instantiation in `AppContainer`.
+    private static let multiAccountProviderIDs: Set<String> = ["claude", "codex"]
+
     /// Fills the region the dashboard's pinned footer leaves. Same scroller treatment as Customize:
     /// the overlay scroller stays (the scroll edge effect needs it) but is invisible.
     var body: some View {
         PopoverScrollView {
             content
+        }
+        .sheet(item: $accountEditor) { target in
+            AccountSettingsView(
+                providerID: target.providerID,
+                providerDisplayName: target.providerDisplayName,
+                existing: target.existing,
+                onSave: { label, configDir, pickedIconURL, clearIcon in
+                    saveAccount(target: target, label: label, configDir: configDir,
+                                pickedIconURL: pickedIconURL, clearIcon: clearIcon)
+                },
+                onCancel: { accountEditor = nil }
+            )
         }
     }
 
@@ -108,8 +130,15 @@ struct SettingsScreen: View {
                 }
             }
             section("Providers") {
-                ForEach(container.registry.providers) { provider in
-                    providerRow(provider)
+                ForEach(baseProviders) { base in
+                    if Self.multiAccountProviderIDs.contains(base.id) {
+                        accountGroup(base)
+                    } else {
+                        providerRow(base)
+                    }
+                }
+                if accountsChangedNote {
+                    relaunchNote
                 }
             }
             section("Privacy") {
@@ -279,4 +308,115 @@ struct SettingsScreen: View {
         .padding(.horizontal, 12)
         .padding(.vertical, density.controlRowPadding)
     }
+
+    // MARK: - Accounts (multi-account providers)
+
+    /// One base provider per provider id (the default-account runtime; extras carry a "#" in their id).
+    private var baseProviders: [Provider] {
+        container.registry.providers.filter { !$0.id.contains("#") }
+    }
+
+    /// A multi-account provider: each configured account as a row (default first, then extras with
+    /// edit/delete), followed by an "Add account" button.
+    private func accountGroup(_ base: Provider) -> some View {
+        let accounts = container.accounts.accounts(for: base.id)
+        return VStack(spacing: 0) {
+            ForEach(accounts) { account in
+                accountRow(base: base, account: account)
+            }
+            addAccountButton(base)
+        }
+    }
+
+    private func accountRow(base: Provider, account: ProviderAccount) -> some View {
+        HStack(spacing: 10) {
+            ProviderIcon(source: account.iconFileName.map(IconSource.customFile) ?? base.icon)
+                .frame(width: 18, height: 18)
+            Text(account.displayName(providerDisplayName: base.displayName))
+                .lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 8)
+            if !account.isDefault {
+                Button { accountEditor = AccountEditorTarget(id: account.id, providerID: base.id, providerDisplayName: base.displayName, existing: account) } label: {
+                    Image(systemName: "pencil")
+                }
+                .buttonStyle(.borderless)
+                Button { deleteAccount(account) } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+            }
+            Toggle("", isOn: Binding(
+                get: { container.enablement.isEnabled(account.id) },
+                set: { container.enablement.setEnabled($0, for: account.id) }
+            ))
+            .settingsSwitchStyle()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, density.controlRowPadding)
+    }
+
+    private func addAccountButton(_ base: Provider) -> some View {
+        HStack {
+            Button {
+                accountEditor = AccountEditorTarget(id: "add-\(base.id)", providerID: base.id, providerDisplayName: base.displayName, existing: nil)
+            } label: {
+                Label("Add \(base.displayName) Account", systemImage: "plus")
+            }
+            .buttonStyle(.borderless)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, density.controlRowPadding)
+    }
+
+    private var relaunchNote: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.clockwise.circle")
+            Text("Relaunch OpenUsage to apply account changes.")
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, density.controlRowPadding)
+    }
+
+    private func deleteAccount(_ account: ProviderAccount) {
+        if let fileName = account.iconFileName { AccountIconStore.delete(fileName: fileName) }
+        container.accounts.removeAccount(id: account.id)
+        accountsChangedNote = true
+    }
+
+    private func saveAccount(target: AccountEditorTarget, label: String?, configDir: String?, pickedIconURL: URL?, clearIcon: Bool) {
+        let accounts = container.accounts
+        if let existing = target.existing {
+            var updated = existing
+            updated.label = label
+            updated.configDir = configDir
+            if clearIcon, let fileName = updated.iconFileName {
+                AccountIconStore.delete(fileName: fileName)
+                updated.iconFileName = nil
+            }
+            if let url = pickedIconURL, let fileName = try? AccountIconStore.save(imageAt: url, for: updated.id) {
+                updated.iconFileName = fileName
+            }
+            accounts.updateAccount(updated)
+        } else {
+            let created = accounts.addAccount(providerID: target.providerID, label: label, configDir: configDir)
+            if let url = pickedIconURL, let fileName = try? AccountIconStore.save(imageAt: url, for: created.id) {
+                var withIcon = created
+                withIcon.iconFileName = fileName
+                accounts.updateAccount(withIcon)
+            }
+        }
+        accountsChangedNote = true
+        accountEditor = nil
+    }
+}
+
+/// Identifies which account the Add/Edit sheet targets (`existing == nil` ⇒ adding).
+struct AccountEditorTarget: Identifiable {
+    let id: String
+    let providerID: String
+    let providerDisplayName: String
+    let existing: ProviderAccount?
 }
