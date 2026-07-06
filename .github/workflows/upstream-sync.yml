@@ -88,6 +88,8 @@ jobs:
       - name: Merge upstream into sync branch
         if: steps.check.outputs.go == 'true'
         id: merge
+        env:
+          HAS_PAT: ${{ secrets.SYNC_PAT != '' }}
         run: |
           git checkout -B "$SYNC_BRANCH" "origin/$BASE_BRANCH"
           if git merge --no-edit "upstream/$UPSTREAM_BRANCH"; then
@@ -96,6 +98,18 @@ jobs:
             echo "conflicts=true" >> "$GITHUB_OUTPUT"
             git add -A
             git commit --no-edit -m "merge upstream/$UPSTREAM_BRANCH (CONFLICTS — resolve before merging)"
+          fi
+          # The default GITHUB_TOKEN cannot push changes under .github/workflows/ (that
+          # needs a PAT carrying the `workflow` scope). When no SYNC_PAT is configured,
+          # drop upstream's CI changes from the sync so the push succeeds — this also
+          # protects the fork's customized pipelines from being overwritten. Port any
+          # upstream workflow changes by hand, or add a SYNC_PAT to include them.
+          if [ "$HAS_PAT" != "true" ] && ! git diff --quiet "origin/$BASE_BRANCH" HEAD -- .github/workflows; then
+            echo "workflows_skipped=true" >> "$GITHUB_OUTPUT"
+            rm -rf .github/workflows
+            git checkout "origin/$BASE_BRANCH" -- .github/workflows
+            git add -A .github/workflows
+            git commit -m "chore: keep fork .github/workflows (upstream CI changes excluded — set SYNC_PAT to sync them)"
           fi
           git push -f origin "$SYNC_BRANCH"
 
@@ -109,6 +123,9 @@ jobs:
             STATUS="⚠️ **Merge conflicts** were committed with \`<<<<<<<\` markers. Check out \`$SYNC_BRANCH\`, resolve them, and push before merging."
           else
             STATUS="✅ **Clean merge.** Review and merge."
+          fi
+          if [ "${{ steps.merge.outputs.workflows_skipped }}" = "true" ]; then
+            STATUS=$(printf '%s\n\n%s' "$STATUS" "ℹ️ Upstream changes under \`.github/workflows/\` were **excluded** (the default token can't push workflow files). Port them by hand, or add a \`SYNC_PAT\` secret with the \`workflow\` scope to include them.")
           fi
           BODY=$(printf '%s\n\n%s\n\n%s\n\n%s\n' \
             "Automated sync of upstream **robinebers/openusage@$UPSTREAM_BRANCH** (\`$UP_SHA\`) into \`$BASE_BRANCH\`." \
