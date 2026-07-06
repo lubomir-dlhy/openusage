@@ -1,0 +1,123 @@
+name: Sync upstream
+
+# Keeps this fork in step with the project it was forked from — robinebers/openusage.
+# On a schedule (and on demand) it merges new upstream commits into a sync branch and
+# opens/updates a PR, so a maintainer can review, resolve any conflicts, and merge —
+# picking up upstream fixes/features while preserving our fork-specific commits
+# (multi-account, fork bundle id, self-hosted updater channel).
+#
+# Branch layout this assumes:
+#   main         — near-mirror of upstream's Swift codebase (shares history with upstream).
+#   swift-port   — main + our fork commits. This is the fork's app branch and the DEFAULT
+#                  sync target: merging upstream here keeps our customizations while pulling
+#                  in upstream updates. (To instead keep `main` auto-synced as a plain mirror,
+#                  run this with base_branch=main.)
+#   multi-account / tauri-legacy — the old Tauri (TS/Rust) line. It shares NO git history
+#                  with upstream's Swift rewrite, so syncing there is impossible; the guard
+#                  below no-ops (with a warning) if ever pointed at it.
+#
+# WHY this file lives on `main`:
+#   GitHub only fires *scheduled* workflows from the repository's default branch. The file
+#   therefore sits on `main`, but every run checks out and operates on `swift-port`.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: "Fork branch to sync upstream into"
+        default: swift-port
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_URL: https://github.com/robinebers/openusage.git
+  UPSTREAM_BRANCH: main
+  BASE_BRANCH: ${{ github.event.inputs.base_branch || 'swift-port' }}
+  SYNC_BRANCH: chore/upstream-sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.base_branch || 'swift-port' }}
+          fetch-depth: 0
+          # A PAT (secrets.SYNC_PAT, with `repo` + `workflow` scopes) lets the sync PR
+          # trigger CI and other workflows. Falls back to the default token, in which
+          # case the PR still opens but CI won't auto-run on it.
+          token: ${{ secrets.SYNC_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git + fetch upstream
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch --no-tags upstream "$UPSTREAM_BRANCH"
+
+      - name: Decide whether there is anything to sync
+        id: check
+        run: |
+          if ! git merge-base "upstream/$UPSTREAM_BRANCH" HEAD >/dev/null 2>&1; then
+            echo "::warning::'$BASE_BRANCH' shares no history with upstream/$UPSTREAM_BRANCH — nothing to merge (expected for the Tauri branches). Skipping."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          elif git merge-base --is-ancestor "upstream/$UPSTREAM_BRANCH" HEAD; then
+            echo "'$BASE_BRANCH' already contains all of upstream/$UPSTREAM_BRANCH. Up to date."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --heads origin "$SYNC_BRANCH" >/dev/null 2>&1 \
+               && git fetch --no-tags origin "$SYNC_BRANCH" \
+               && git merge-base --is-ancestor "upstream/$UPSTREAM_BRANCH" FETCH_HEAD; then
+            echo "An open sync branch already contains this upstream head — not clobbering it. Skipping."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            AHEAD=$(git rev-list --count "HEAD..upstream/$UPSTREAM_BRANCH")
+            echo "upstream is $AHEAD commit(s) ahead of '$BASE_BRANCH' — syncing."
+            echo "ahead=$AHEAD" >> "$GITHUB_OUTPUT"
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge upstream into sync branch
+        if: steps.check.outputs.go == 'true'
+        id: merge
+        run: |
+          git checkout -B "$SYNC_BRANCH" "origin/$BASE_BRANCH"
+          if git merge --no-edit "upstream/$UPSTREAM_BRANCH"; then
+            echo "conflicts=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "conflicts=true" >> "$GITHUB_OUTPUT"
+            git add -A
+            git commit --no-edit -m "merge upstream/$UPSTREAM_BRANCH (CONFLICTS — resolve before merging)"
+          fi
+          git push -f origin "$SYNC_BRANCH"
+
+      - name: Open / update pull request
+        if: steps.check.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          UP_SHA=$(git rev-parse --short "upstream/$UPSTREAM_BRANCH")
+          if [ "${{ steps.merge.outputs.conflicts }}" = "true" ]; then
+            STATUS="⚠️ **Merge conflicts** were committed with \`<<<<<<<\` markers. Check out \`$SYNC_BRANCH\`, resolve them, and push before merging."
+          else
+            STATUS="✅ **Clean merge.** Review and merge."
+          fi
+          BODY=$(printf '%s\n\n%s\n\n%s\n\n%s\n' \
+            "Automated sync of upstream **robinebers/openusage@$UPSTREAM_BRANCH** (\`$UP_SHA\`) into \`$BASE_BRANCH\`." \
+            "Brings in **${{ steps.check.outputs.ahead }}** new upstream commit(s), keeping this fork's own commits on top." \
+            "$STATUS" \
+            "<sub>Generated by .github/workflows/upstream-sync.yml. If CI didn't run on this PR, add a \`SYNC_PAT\` repo secret (a PAT with \`repo\` + \`workflow\` scopes).</sub>")
+          if gh pr view "$SYNC_BRANCH" --json number >/dev/null 2>&1; then
+            gh pr edit "$SYNC_BRANCH" --title "⬆️ Sync upstream ($UP_SHA)" --body "$BODY"
+          else
+            gh pr create --base "$BASE_BRANCH" --head "$SYNC_BRANCH" \
+              --title "⬆️ Sync upstream ($UP_SHA)" --body "$BODY"
+          fi
