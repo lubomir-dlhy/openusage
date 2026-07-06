@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.7.6
+
+### New Features
+- Compact density now hides no-data rows (e.g. "Extra Usage — No data", empty spend tiles) to fit more on screen — meters that carry a value, including a fresh "Not started" window, still show. Regular density is unchanged by @lubomir-dlhy
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.5...v0.7.6](https://github.com/lubomir-dlhy/openusage/compare/v0.7.5...v0.7.6)
+
 ## v0.7.5
 
 ### New Features
