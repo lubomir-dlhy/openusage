@@ -2,7 +2,14 @@ import Foundation
 
 @MainActor
 final class DevinProvider: ProviderRuntime {
-    let provider = Provider(id: "devin", displayName: "Devin", icon: .providerMark("devin"))
+    let provider = Provider(
+        id: "devin",
+        displayName: "Devin",
+        icon: .providerMark("devin"),
+        links: [
+            .init(label: "Dashboard", url: "https://app.devin.ai/settings/plans")
+        ]
+    )
 
     let authStore: DevinAuthStore
     let usageClient: DevinUsageClient
@@ -24,6 +31,12 @@ final class DevinProvider: ProviderRuntime {
             .percent(id: "devin.weekly", provider: provider, title: "Weekly", metricLabel: "Weekly quota"),
             .dollarBalance(id: "devin.extra", provider: provider, title: "Extra Balance", metricLabel: "Extra usage balance", valueWord: "left")
         ]
+    }
+
+    func hasLocalCredentials() async -> Bool {
+        // Same sources as `refresh()`: the credentials file, then the Devin app's stored auth.
+        if authStore.loadCredentialsFile() != nil { return true }
+        return await loadOffMainActor { [authStore] in authStore.loadAppAuth() } != nil
     }
 
     func refresh() async -> ProviderSnapshot {

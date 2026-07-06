@@ -48,7 +48,7 @@ struct WidgetGroupedListView: View {
         ProviderSectionHeader(
             provider: group.provider,
             plan: dataStore.plan(for: group.provider.id),
-            warning: dataStore.errorMessage(for: group.provider.id),
+            warning: dataStore.headerNotice(for: group.provider.id),
             refreshing: dataStore.refreshingProviderIDs.contains(group.provider.id),
             staleness: dataStore.stalenessHint(for: group.provider.id),
             showsDragHandle: true
@@ -68,17 +68,19 @@ struct WidgetGroupedListView: View {
                 Task { await dataStore.refresh(providerID: group.provider.id, force: true) }
             }
             Button("Customize…") {
-                withAnimation(Motion.modeSwitch) { layout.isEditing = true }
+                openCustomize(for: group.provider.id)
             }
             Divider()
-            Button("Copy as Image") { shareCard(group) }
+            Button("Share Screenshot") { shareCard(group) }
         }
     }
 
     /// Renders the provider's branded share card and copies the PNG to the clipboard. The appearance is
     /// taken from the popover's own `colorScheme` — this view is hosted in the popover panel, whose
     /// appearance is `AppearanceSetting.current` (explicit for Light/Dark, the menu bar for System) — so
-    /// the export matches the card on screen instead of guessing from `NSApp.effectiveAppearance`.
+    /// the export matches the card on screen instead of guessing from `NSApp.effectiveAppearance`. The
+    /// same render path backs the footer's "Share Screenshot" submenu, which reaches it without a
+    /// right-click.
     private func shareCard(_ group: ProviderGroup) {
         ShareCardRenderer.share(
             group: group,
@@ -241,14 +243,14 @@ struct WidgetGroupedListView: View {
 
     /// Desktop-native management for a single metric: hide it, pin/unpin it, refresh its provider, or jump
     /// into Customize — without a trip through Customize first. Hide leads (the most-reached-for verb), then
-    /// pin, then a divider before the two provider-/app-level actions.
+    /// star, then a divider before the two provider-/app-level actions.
     @ViewBuilder
     private func rowMenu(_ descriptor: WidgetDescriptor, providerID: String) -> some View {
         Button("Hide") {
             layout.setMetricEnabled(descriptor.id, false)
         }
         if descriptor.pinnable {
-            Button(layout.isPinned(descriptor.id) ? "Unpin" : "Pin to menu bar") {
+            Button(layout.isPinned(descriptor.id) ? "Unstar" : "Star for menu bar") {
                 if layout.isPinned(descriptor.id) {
                     layout.setPinned(false, for: descriptor.id)
                 } else if layout.canPin(descriptor.id) {
@@ -265,7 +267,15 @@ struct WidgetGroupedListView: View {
             }
         }
         Button("Customize…") {
-            withAnimation(Motion.modeSwitch) { layout.isEditing = true }
+            openCustomize(for: providerID)
+        }
+    }
+
+    /// From the dashboard, jump straight into this provider's Customize metrics (L2), not the provider list.
+    private func openCustomize(for providerID: String) {
+        withAnimation(Motion.modeSwitch) {
+            layout.customizeProviderID = providerID
+            layout.isEditing = true
         }
     }
 
@@ -299,6 +309,7 @@ struct WidgetGroupedListView: View {
                     }
                     return layout.applyMetricDividerOrder(
                         next,
+                        dragged: descriptor.id,
                         dividerID: expandedDividerID(for: providerID),
                         in: providerID
                     )
