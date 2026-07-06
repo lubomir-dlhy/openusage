@@ -31,6 +31,7 @@
 - Copilot: default both org billing metrics below the expand caret ([#843](https://github.com/robinebers/openusage/pull/843)) by @robinebers
 
 ### Chores
+- Automated upstream-sync workflow: weekly + on-demand PRs merging `robinebers/openusage@main` into `main`, preserving the fork's customizations by @lubomir-dlhy
 - Bump PostHog iOS and actions/checkout ([#848](https://github.com/robinebers/openusage/pull/848), [#847](https://github.com/robinebers/openusage/pull/847)) by @app/dependabot
 - Trigger Pages deploy from Release and pricing-supplement workflow completion by @robinebers
 - Split GrokProviderTests into per-class files by @validatedev
