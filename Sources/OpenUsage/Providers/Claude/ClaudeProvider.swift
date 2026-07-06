@@ -24,7 +24,7 @@ final class ClaudeProvider: ProviderRuntime {
         account: ProviderAccount = .makeDefault(providerID: "claude"),
         authStore: ClaudeAuthStore? = nil,
         usageClient: ClaudeUsageClient = ClaudeUsageClient(),
-        logUsageScanner: ClaudeLogUsageScanner = ClaudeLogUsageScanner(),
+        logUsageScanner: ClaudeLogUsageScanner? = nil,
         now: @escaping @Sendable () -> Date = Date.init,
         pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() }
     ) {
@@ -42,7 +42,9 @@ final class ClaudeProvider: ProviderRuntime {
         // each account reads its own credentials. Tests inject a stub directly.
         self.authStore = authStore ?? ClaudeAuthStore(configDir: account.configDir)
         self.usageClient = usageClient
-        self.logUsageScanner = logUsageScanner
+        // Production: pin the log scanner to this account's config dir so its spend tiles read only
+        // that profile's session logs. Tests inject a scanner directly.
+        self.logUsageScanner = logUsageScanner ?? ClaudeLogUsageScanner(configDir: account.configDir)
         self.now = now
         self.pricing = pricing
     }

@@ -351,6 +351,37 @@ final class ClaudeLogUsageScannerTests: XCTestCase {
         XCTAssertEqual(second.series.daily[0].costUSD ?? 0, 0.30, accuracy: 1e-9)
     }
 
+    func testConfigDirOverridePinsScanToThatAccountAlone() async throws {
+        let now = Date()
+        let timestamp = OpenUsageISO8601.string(from: now)
+        // Two profiles with distinct usage. A named account's own config dir must win even when the
+        // CLAUDE_CONFIG_DIR env var points at a different profile, so per-account spend tiles never
+        // bleed into each other (regression: every account showed the default profile's spend).
+        let profileA = try ClaudeLogFixture.makeHome(files: [
+            "project-a/a.jsonl": ClaudeLogFixture.usageLine(
+                timestamp: timestamp, input: 1000, output: 500, costUSD: 5.00,
+                messageID: "a-1", requestID: "a-1"
+            )
+        ])
+        let profileB = try ClaudeLogFixture.makeHome(files: [
+            "project-b/b.jsonl": ClaudeLogFixture.usageLine(
+                timestamp: timestamp, input: 10, output: 5, costUSD: 0.05,
+                messageID: "b-1", requestID: "b-1"
+            )
+        ])
+        let scanner = ClaudeLogUsageScanner(
+            configDir: profileB.path,
+            environment: FakeEnvironment(["CLAUDE_CONFIG_DIR": profileA.path]),
+            homeDirectory: { FileManager.default.temporaryDirectory.appendingPathComponent("openusage-no-claude-home") }
+        )
+
+        let result = await scanner.scan(now: now, pricing: pricing)
+        let scan = try XCTUnwrap(result)
+        XCTAssertEqual(scan.series.daily.count, 1)
+        XCTAssertEqual(scan.series.daily[0].totalTokens, 15)   // profile B only (10+5), not A's 1500
+        XCTAssertEqual(scan.series.daily[0].costUSD ?? 0, 0.05, accuracy: 1e-9)
+    }
+
     func testScanDeduplicatesReplaysAcrossFiles() async throws {
         let now = Date()
         let timestamp = OpenUsageISO8601.string(from: now)

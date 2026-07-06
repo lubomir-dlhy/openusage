@@ -20,11 +20,18 @@ import Foundation
 actor ClaudeLogUsageScanner {
     private let environment: EnvironmentReading
     private let homeDirectory: @Sendable () -> URL
+    /// When set, the scan is pinned to this single Claude config dir (an account's own `configDir`)
+    /// so its spend tiles reflect that profile's logs alone — not the default `~/.claude`. `nil` =
+    /// the default discovery (`CLAUDE_CONFIG_DIR`, else `~/.config/claude` + `~/.claude`, plus the
+    /// Cowork sandboxes).
+    private let configDirOverride: String?
 
     init(
+        configDir: String? = nil,
         environment: EnvironmentReading = ProcessEnvironmentReader(),
         homeDirectory: @escaping @Sendable () -> URL = { FileManager.default.homeDirectoryForCurrentUser }
     ) {
+        self.configDirOverride = configDir
         self.environment = environment
         self.homeDirectory = homeDirectory
     }
@@ -128,6 +135,22 @@ actor ClaudeLogUsageScanner {
                   seen.insert(url.path).inserted
             else { return }
             roots.append(url)
+        }
+
+        // A named account pins the scan to its own config dir, so its spend tiles reflect that
+        // profile's logs alone — not the default `~/.claude`, the `CLAUDE_CONFIG_DIR` env var, or the
+        // Cowork sandboxes (all of which belong to the default profile).
+        if let override = configDirOverride?.trimmingCharacters(in: .whitespacesAndNewlines), !override.isEmpty {
+            var url = URL(fileURLWithPath: expandHome(override))
+            // Accept the `projects/` directory itself as an alias for its parent config dir.
+            if url.lastPathComponent == "projects", FileManager.default.fileExists(atPath: url.path) {
+                url.deleteLastPathComponent()
+            }
+            addIfValid(url)
+            if roots.isEmpty {
+                AppLog.warn(LogTag.plugin("claude"), "account config dir has no projects/ directory to scan")
+            }
+            return roots
         }
 
         if let raw = environment.value(for: "CLAUDE_CONFIG_DIR")?.trimmingCharacters(in: .whitespacesAndNewlines),
