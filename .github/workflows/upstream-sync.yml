@@ -7,18 +7,17 @@ name: Sync upstream
 # (multi-account, fork bundle id, self-hosted updater channel).
 #
 # Branch layout this assumes:
-#   main         — near-mirror of upstream's Swift codebase (shares history with upstream).
-#   swift-port   — main + our fork commits. This is the fork's app branch and the DEFAULT
-#                  sync target: merging upstream here keeps our customizations while pulling
-#                  in upstream updates. (To instead keep `main` auto-synced as a plain mirror,
-#                  run this with base_branch=main.)
+#   main         — the fork's canonical branch: upstream's Swift codebase + our fork commits
+#                  (multi-account, fork bundle id, self-hosted updater channel). Shares history
+#                  with upstream, so it is the DEFAULT sync target — merging upstream here keeps
+#                  our customizations while pulling in upstream updates.
+#   swift-port   — legacy alias kept in sync with main; overridable via base_branch on manual runs.
 #   multi-account / tauri-legacy — the old Tauri (TS/Rust) line. It shares NO git history
 #                  with upstream's Swift rewrite, so syncing there is impossible; the guard
 #                  below no-ops (with a warning) if ever pointed at it.
 #
-# WHY this file lives on `main`:
-#   GitHub only fires *scheduled* workflows from the repository's default branch. The file
-#   therefore sits on `main`, but every run checks out and operates on `swift-port`.
+# The file lives on `main` because GitHub only fires *scheduled* workflows from the default
+# branch — which is also the branch it syncs into.
 
 on:
   schedule:
@@ -27,7 +26,7 @@ on:
     inputs:
       base_branch:
         description: "Fork branch to sync upstream into"
-        default: swift-port
+        default: main
         required: false
 
 permissions:
@@ -41,7 +40,7 @@ concurrency:
 env:
   UPSTREAM_URL: https://github.com/robinebers/openusage.git
   UPSTREAM_BRANCH: main
-  BASE_BRANCH: ${{ github.event.inputs.base_branch || 'swift-port' }}
+  BASE_BRANCH: ${{ github.event.inputs.base_branch || 'main' }}
   SYNC_BRANCH: chore/upstream-sync
 
 jobs:
@@ -50,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.base_branch || 'swift-port' }}
+          ref: ${{ github.event.inputs.base_branch || 'main' }}
           fetch-depth: 0
           # A PAT (secrets.SYNC_PAT, with `repo` + `workflow` scopes) lets the sync PR
           # trigger CI and other workflows. Falls back to the default token, in which
