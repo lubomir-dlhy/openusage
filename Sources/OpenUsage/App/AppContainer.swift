@@ -16,24 +16,57 @@ final class AppContainer {
     /// Single source of truth for which providers the user has turned off. Both stores consult it (via
     /// injected closures) and the Providers settings tab drives it.
     let enablement: ProviderEnablementStore
+    /// Providers that need a user-supplied API key (OpenRouter today), conforming to `APIKeyManaging`.
+    /// Settings ▸ API Keys lists these and writes key changes through the capability. Empty when no
+    /// installed provider needs a user key, in which case the section hides itself.
+    let apiKeyProviders: [any APIKeyManaging]
+    /// Quota pace notification preferences (master + three triggers). Drives the Settings section and is
+    /// read by `WidgetDataStore.evaluateNotifications`.
+    let notificationSettings: NotificationSettingsStore
     /// Anonymous, opt-out usage telemetry (daily rollups). Exposed so Settings can toggle it and the
     /// app-termination hook can flush any queued events.
     let telemetry: TelemetryRecorder
+    /// Source of truth for the popover's transparency: the persisted Increase Transparency toggle, the
+    /// ephemeral secret-code easter-egg state, and the system accessibility flags it yields to. Read by both
+    /// the SwiftUI surface and the AppKit panel (`StatusItemController`).
+    let transparency: PopoverTransparencyStore
+    /// One-time onboarding state (the first-run Customize hint card). Only ever marked pending by
+    /// `FirstRunSeeder` on a fresh install, so existing installs never see the card.
+    let onboarding: OnboardingStore
+    /// The provider runtimes, kept so on-demand credential detection (the Customize "Reset All" reseed)
+    /// can re-probe `hasLocalCredentials()` the same way first-run seeding does.
+    private let providers: [ProviderRuntime]
     /// Read-only usage API on 127.0.0.1:6736 for other local apps (silently off when the port is taken).
     private let localAPI: LocalUsageServer
     // A `let` of a `Sendable` `Task` is implicitly nonisolated, so the nonisolated `deinit` can cancel it.
     private let refreshTask: Task<Void, Never>
+<<<<<<< HEAD
     /// Watches `AccountsStore` and rebuilds the per-account runtimes in place when the account
     /// configuration changes (add/remove an account, or edit an existing one's icon/label/config dir).
     /// A `let` Task capturing the stores (not `self`), so the nonisolated `deinit` can cancel it.
     private let accountsObserver: Task<Void, Never>
+=======
+    /// The fresh-install credential-detection pass (see `FirstRunSeeder`); `nil` on every later launch.
+    private let seedTask: Task<Void, Never>?
+    /// The new-provider credential-detection pass (see `NewProviderSeeder`); `nil` unless this launch is
+    /// the first with a provider the install has never seen.
+    private let newProviderTask: Task<Void, Never>?
 
-    init() {
+    /// `isFreshInstall` must be captured by the caller BEFORE `SettingsMigrator.migrate()` runs (the
+    /// migrator's schema stamp makes the defaults domain non-empty). See `AppDelegate`.
+    init(isFreshInstall: Bool = false) {
+        // Capture the user's login-shell environment off-main so provider keys exported in a shell
+        // profile (e.g. OPENROUTER_API_KEY) resolve in a Finder/Dock-launched build, not only when
+        // run from a terminal. Warmed here so the first refresh finds the cache ready.
+        LoginShellEnvironment.shared.prewarm()
+>>>>>>> upstream/main
+
         // Default provider order (see AGENTS.md "## Providers"): the three established providers first —
         // Claude, Codex, Cursor — then every other provider alphabetically by display name. This registry
         // order is the default provider order (`LayoutStore.orderedProviderIDs` falls back to it, and
         // `resetToDefault` seeds it), so the dashboard, Customize sections, and the per-provider reset
         // menu all read this way.
+<<<<<<< HEAD
         // Claude and Codex support multiple accounts: one runtime per configured account (the default
         // account first, then user-added extras). Other providers are single-account. Order preserves the
         // AGENTS.md default (Claude, Codex, Cursor, then the rest alphabetically), with a provider's extra
@@ -41,8 +74,23 @@ final class AppContainer {
         // the previous single-instance-per-provider list.
         let accounts = AccountsStore()
         let providers = Self.buildProviders(accounts: accounts)
+=======
+        let providers: [ProviderRuntime] = [
+            ClaudeProvider(),
+            CodexProvider(),
+            CursorProvider(),
+            AntigravityProvider(),
+            CopilotProvider(),
+            DevinProvider(),
+            GrokProvider(),
+            OpenRouterProvider(),
+            ZAIProvider()
+        ]
+>>>>>>> upstream/main
         let registry = WidgetRegistry.from(providers)
+        let apiKeyProviders = providers.compactMap { $0 as? any APIKeyManaging }
         let enablement = ProviderEnablementStore()
+        let notificationSettings = NotificationSettingsStore()
         let layout = LayoutStore(
             registry: registry,
             isProviderEnabled: { [enablement] in enablement.isEnabled($0) }
@@ -51,13 +99,34 @@ final class AppContainer {
             registry: registry,
             providers: providers,
             isProviderEnabled: { [enablement] in enablement.isEnabled($0) },
-            orderedDescriptors: { [layout] in layout.visiblePlaced.compactMap { layout.descriptor(for: $0) } }
+            orderedDescriptors: { [layout] in layout.visiblePlaced.compactMap { layout.descriptor(for: $0) } },
+            notificationSettings: { notificationSettings }
         )
         // Re-enabling a provider should fetch it promptly, so clear any leftover failure backoff before
         // the enablement wake refreshes. `weak` breaks the cycle (dataStore already captures enablement).
         enablement.onProviderEnabled = { [weak dataStore] id in dataStore?.clearFailureBackoff(for: id) }
+        // Fresh installs start minimal: seed the enabled-provider list (Claude/Codex/Cursor right away,
+        // then the detected set once the local credential probe finishes). No-op on every later launch.
+        let onboarding = OnboardingStore()
+        self.seedTask = FirstRunSeeder.seedIfNeeded(
+            isFreshInstall: isFreshInstall,
+            providers: providers,
+            enablement: enablement,
+            onboarding: onboarding
+        )
+        // Providers added by an update get the same credential detection on their first launch — enabled
+        // only when the user actually has the tool. Runs every launch; a no-op unless the registry has a
+        // provider this install has never seen (fresh installs were just baselined by FirstRunSeeder).
+        self.newProviderTask = NewProviderSeeder.reconcileIfNeeded(
+            providers: providers,
+            enablement: enablement
+        )
+        self.providers = providers
+        self.onboarding = onboarding
         self.registry = registry
         self.enablement = enablement
+        self.apiKeyProviders = apiKeyProviders
+        self.notificationSettings = notificationSettings
         self.layout = layout
         self.dataStore = dataStore
         self.accounts = accounts
@@ -91,6 +160,7 @@ final class AppContainer {
             telemetry?.record(providerID: providerID, outcome: outcome, category: category, manual: manual)
         }
         self.telemetry = telemetry
+        self.transparency = PopoverTransparencyStore()
         self.localAPI = LocalUsageServer(state: { [layout, enablement, dataStore] in
             LocalUsageAPI.State(
                 enabledOrderedIDs: layout.providerOrder.filter { enablement.isEnabled($0) },
@@ -100,15 +170,23 @@ final class AppContainer {
         })
         self.refreshTask = Self.startPeriodicRefresh(dataStore: dataStore, telemetry: telemetry)
         localAPI.start()
+<<<<<<< HEAD
 
         // Apply account changes (add/remove, or edit icon/label/config dir) live: rebuild the per-account
         // runtimes and swap the registry into the stores in place, so the dashboard cards and the
         // menu-bar strip reflect the change without a relaunch.
         self.accountsObserver = Self.startAccountsObserver(accounts: accounts, layout: layout, dataStore: dataStore)
+=======
+        // Become the notification-center delegate so banners show while frontmost — a menu-bar accessory
+        // effectively always is. Notification authorization is requested the first time a trigger is
+        // turned on (from Settings), not at launch — triggers default off. No-op under tests.
+        AppNotifications.shared.registerAsDelegate()
+>>>>>>> upstream/main
     }
 
     deinit {
         refreshTask.cancel()
+<<<<<<< HEAD
         accountsObserver.cancel()
     }
 
@@ -148,6 +226,18 @@ final class AppContainer {
                 await dataStore.refreshAll()
             }
         }
+=======
+        seedTask?.cancel()
+        newProviderTask?.cancel()
+    }
+
+    /// Re-runs first-launch credential detection on demand — the enablement half of the Customize
+    /// "Reset All" action (`LayoutStore.resetToDefault` handles metrics, order, pins, and expansion).
+    /// Delegates to `FirstRunSeeder.reseed`; returns its detection task so callers can await it.
+    @discardableResult
+    func reseedEnabledProviders() -> Task<Void, Never> {
+        FirstRunSeeder.reseed(providers: providers, enablement: enablement)
+>>>>>>> upstream/main
     }
 
     /// Drives live updates: refresh on launch, then again every refresh interval. Each pass honors the
@@ -158,6 +248,10 @@ final class AppContainer {
         Task {
             while !Task.isCancelled {
                 await dataStore.refreshAll()
+                // Re-evaluate quota pace milestones every tick — after the refresh so it sees fresh data,
+                // and on every loop (not just on a fetch) so pace worsening from elapsed time alone still
+                // alerts even with the popover closed.
+                await dataStore.evaluateNotifications()
                 // Day-rollover beat: emits `app_daily_active` once per local day and flushes any
                 // prior-day provider rollups. Runs on launch and every interval, so always-running
                 // instances still produce a daily-active signal.

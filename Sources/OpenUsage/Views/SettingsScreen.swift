@@ -1,7 +1,9 @@
 import AppKit
+import Combine
 import KeyboardShortcuts
 import ServiceManagement
 import SwiftUI
+import UserNotifications
 
 /// The in-popover Settings screen — the popover's third mode alongside the dashboard and
 /// Customize. It replaces the old separate Settings window, which forced the popover closed every
@@ -25,6 +27,12 @@ struct SettingsScreen: View {
     @AppStorage(LogLevelSetting.key) private var logLevel = LogLevelSetting.fallback
     /// Surfaced under the Advanced rows when copying the path or revealing the file fails.
     @State private var logActionError: String?
+    /// macOS notification authorization for OpenUsage, surfaced in the Notifications section so a
+    /// warning glyph and action button can appear when alerts can't be delivered. Refreshed on appear,
+    /// when a trigger turns on, and when the app becomes active again (e.g. the user returns from
+    /// System Settings after re-enabling).
+    private enum NotificationsAuthState { case authorized, denied, notDetermined }
+    @State private var notificationsAuth: NotificationsAuthState = .authorized
 
     /// Drives the Add/Edit account sheet (`nil` = closed).
     @State private var accountEditor: AccountEditorTarget?
@@ -57,6 +65,8 @@ struct SettingsScreen: View {
         @Bindable var store = container.dataStore
         @Bindable var layout = container.layout
         @Bindable var updater = updater
+        @Bindable var transparency = container.transparency
+        @Bindable var notifications = container.notificationSettings
         // Same section rhythm as the dashboard and Customize (all read the density setting).
         return VStack(alignment: .leading, spacing: density.sectionSpacing) {
             section("General") {
@@ -110,6 +120,43 @@ struct SettingsScreen: View {
                 row("Time Format") {
                     picker($timeFormat, options: TimeFormatSetting.allCases, label: \.label)
                 }
+                // Translucent popover the proper way (behind-window vibrancy, text stays legible). It
+                // yields to the system accessibility settings, and to the party easter egg while that's
+                // running (the egg drives the look) — either way, see the paused notice below.
+                row("Increase Transparency") {
+                    Toggle("", isOn: $transparency.increaseTransparency)
+                        .settingsSwitchStyle()
+                        // Party mode owns the look while it's active, so disable (dim) the toggle to show
+                        // it has no effect right now — its stored value resumes once the egg is exited.
+                        .disabled(transparency.secretCodeActive)
+                }
+                // Egg first: while Party runs it overrides the toggle regardless of the system flags, so
+                // its notice takes precedence over the accessibility one.
+                if transparency.secretCodeActive {
+                    pausedNotice("Party mode is on, so this stays paused.")
+                } else if transparency.isPaused {
+                    pausedNotice("macOS Reduce Transparency or Increase Contrast is on, so this stays paused.")
+                }
+                // Both rows surface only after the secret code has been entered. Party Mode is the egg's
+                // own switch: turning it off (like re-typing the code) exits the egg and hides both rows,
+                // dropping back to the base state. Drunk Mode escalates the readable party into the woozy,
+                // barely-readable state and back — turning it off stays in the party (4 → 3), while turning
+                // Party Mode off from there clears Drunk Mode too (4 → base).
+                if transparency.secretCodeActive {
+                    row("Party Mode") {
+                        Toggle("", isOn: $transparency.partyModeActive)
+                            .settingsSwitchStyle()
+                    }
+                    row("Drunk Mode") {
+                        Toggle("", isOn: $transparency.drunkMode)
+                            .settingsSwitchStyle()
+                    }
+                    // The egg yields to the accessibility flags too: when one is on the panel stays
+                    // opaque, so explain why the party looks normal rather than leaving it a mystery.
+                    if transparency.partyPaused {
+                        pausedNotice("macOS Reduce Transparency or Increase Contrast is on, so the party stays paused.")
+                    }
+                }
             }
             section("Usage Display") {
                 row("Show Usage As") {
@@ -126,6 +173,7 @@ struct SettingsScreen: View {
                         .hoverTooltip("Show how you're pacing on every metric, not just ones near their limit")
                 }
             }
+<<<<<<< HEAD
             section("Providers") {
                 ForEach(baseProviders) { base in
                     if Self.multiAccountProviderIDs.contains(base.id) {
@@ -135,6 +183,9 @@ struct SettingsScreen: View {
                     }
                 }
             }
+=======
+            notificationsSection
+>>>>>>> upstream/main
             section("Privacy") {
                 row("Share Anonymous Usage") {
                     Toggle("", isOn: Binding(
@@ -179,9 +230,125 @@ struct SettingsScreen: View {
                     .padding(.vertical, density.controlRowPadding)
                 }
             }
+            // Mirror of the Customize cross-link — the layout controls live on the other screen.
+            ScreenCrossLinkRow(
+                systemImage: "slider.horizontal.3",
+                title: "Customize",
+                subtitle: "Choose what's visible and where",
+                destination: .customize
+            )
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+        .task { await refreshNotificationsAuth() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await refreshNotificationsAuth() }
+        }
+    }
+
+    // MARK: - Notifications
+
+    /// Quota pace notifications: three per-trigger toggles (no master switch — turn all three off to
+    /// silence), each with an (i) tooltip. A warning glyph on the section header and an action row under
+    /// the toggles appear when macOS permission isn't authorized and at least one trigger is on. Defaults
+    /// are all off; the app requests authorization the first time a trigger is turned on.
+    private var notificationsSection: some View {
+        @Bindable var notifications = container.notificationSettings
+        let needsAttention = notificationsAuth != .authorized && anyToggleOn
+        return VStack(alignment: .leading, spacing: density.headerToCardSpacing) {
+            HStack(spacing: 6) {
+                Text("Notifications")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                if needsAttention {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .hoverTooltip(notificationsAuth == .denied
+                            ? "Notifications are turned off for OpenUsage. Enable them in System Settings."
+                            : "OpenUsage needs permission to send alerts.")
+                }
+            }
+            .padding(.horizontal, 8)
+            VStack(spacing: 0) {
+                notifToggleRow(.underTenPercent, isOn: $notifications.underTenPercent)
+                notifToggleRow(.healthyToClose, isOn: $notifications.healthyToClose)
+                notifToggleRow(.closeToRunningOut, isOn: $notifications.closeToRunningOut)
+                if needsAttention {
+                    notificationsActionRow
+                }
+            }
+            .cardSurface()
+        }
+        .onChange(of: anyToggleOn) { _, on in
+            if on {
+                // The first time a trigger is turned on, ask macOS for permission (memoized — it only
+                // prompts while authorization is still not determined). Then refresh so the
+                // warning/action row reflects the new status.
+                AppNotifications.shared.requestAuthorization()
+                Task { await refreshNotificationsAuth() }
+            }
+        }
+    }
+
+    /// One trigger row: the setting label, an (i) info icon with a one-sentence tooltip, and the toggle.
+    private func notifToggleRow(_ milestone: PaceMilestone, isOn: Binding<Bool>) -> some View {
+        HStack(spacing: 6) {
+            Text(milestone.settingLabel)
+            Image(systemName: "info.circle")
+                .imageScale(.small)
+                .foregroundStyle(.secondary)
+                .hoverTooltip(milestone.tooltip)
+            Spacer(minLength: 8)
+            Toggle("", isOn: isOn)
+                .settingsSwitchStyle()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, density.controlRowPadding)
+    }
+
+    /// The conditional action under the toggles: a full-width "Open System Settings" button when macOS
+    /// denied permission, or "Allow Notifications" when still undecided. The reason lives in the header
+    /// triangle's tooltip. Shown only when a trigger is on.
+    private var notificationsActionRow: some View {
+        VStack(spacing: 0) {
+            Divider()
+            Button {
+                if notificationsAuth == .denied {
+                    AppNotifications.shared.openSystemNotificationsSettings()
+                } else {
+                    AppNotifications.shared.requestAuthorization()
+                    Task { await refreshNotificationsAuth() }
+                }
+            } label: {
+                Text(notificationsAuth == .denied ? "Open System Settings" : "Allow Notifications")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .padding(.horizontal, 12)
+            .padding(.vertical, density.controlRowPadding)
+        }
+    }
+
+    /// True when at least one trigger is on — the gate for the permission warning + action row.
+    private var anyToggleOn: Bool {
+        let n = container.notificationSettings
+        return n.underTenPercent || n.healthyToClose || n.closeToRunningOut
+    }
+
+    /// Read the live macOS authorization status into `notificationsAuth`, but only when at least one
+    /// trigger is on so no warning shows while all alerts are off.
+    private func refreshNotificationsAuth() async {
+        guard anyToggleOn else {
+            notificationsAuth = .authorized
+            return
+        }
+        let status = await AppNotifications.shared.authorizationStatus()
+        switch status {
+        case .denied: notificationsAuth = .denied
+        case .notDetermined: notificationsAuth = .notDetermined
+        default: notificationsAuth = .authorized
+        }
     }
 
     // MARK: - Advanced (logging)
@@ -270,6 +437,18 @@ struct SettingsScreen: View {
         .padding(.vertical, density.controlRowPadding)
     }
 
+    /// An inline "this setting is paused" caption under a row — the same orange notice idiom as the
+    /// General section's error line. Used for the Increase Transparency row (paused by a system
+    /// accessibility setting, or by Party mode taking over the look).
+    private func pausedNotice(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(Theme.notice)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     /// A trailing popup picker that hugs its selection — segmented controls don't fit the 320pt
     /// popover once options have real words in them.
     private func picker<Value: Hashable>(
@@ -286,6 +465,7 @@ struct SettingsScreen: View {
         .labelsHidden()
         .fixedSize()
     }
+<<<<<<< HEAD
 
     private func providerRow(_ provider: Provider) -> some View {
         HStack(spacing: 10) {
@@ -400,4 +580,6 @@ struct AccountEditorTarget: Identifiable {
     let providerID: String
     let providerDisplayName: String
     let existing: ProviderAccount?
+=======
+>>>>>>> upstream/main
 }
