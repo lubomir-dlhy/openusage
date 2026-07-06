@@ -134,7 +134,6 @@ struct WidgetGroupedListView: View {
         let cardRows = metricCardRows(
             alwaysRows: alwaysRows,
             expandedRows: expandedRows,
-            hasExpandedMetrics: group.hasExpandedMetrics,
             isExpanded: isExpanded,
             links: group.provider.visibleLinks
         )
@@ -160,23 +159,29 @@ struct WidgetGroupedListView: View {
     private func resolvedRows(_ widgets: [PlacedWidget]) -> [ResolvedRow] {
         widgets.compactMap { widget -> ResolvedRow? in
             guard let descriptor = layout.descriptor(for: widget) else { return nil }
-            return ResolvedRow(widget: widget, descriptor: descriptor, data: dataStore.data(for: descriptor))
+            let data = dataStore.data(for: descriptor)
+            // Compact hides rows with no data at all (e.g. "Extra Usage — No data", an empty spend
+            // tile) to reclaim vertical space. A meter that has a value — including a fresh "Not
+            // started" window (0%) — still carries data, so it stays. Regular keeps every row so an
+            // empty metric still advertises that it exists.
+            if density == .compact, !data.hasData { return nil }
+            return ResolvedRow(widget: widget, descriptor: descriptor, data: data)
         }
     }
 
     private func metricCardRows(
         alwaysRows: [ResolvedRow],
         expandedRows: [ResolvedRow],
-        hasExpandedMetrics: Bool,
         isExpanded: Bool,
         links: [ProviderLink]
     ) -> [DashboardMetricCardRow] {
         // #596: provider quick-link buttons live INSIDE the collapsible expanded section, pinned at its
         // bottom, so collapsing the caret hides them along with the expanded metrics — they're part of
-        // the expander, not always-visible chrome. The caret shows for any provider with expanded
-        // content (metrics OR links), so a links-only provider still gets a caret to reveal its buttons.
+        // the expander, not always-visible chrome. The caret shows only when there's actually expanded
+        // content to reveal — expanded metric rows (after Compact's no-data filter) or links — so a
+        // provider whose expanded rows are all empty in Compact doesn't get a caret over nothing.
         let hasLinks = !links.isEmpty
-        let hasExpandedContent = hasExpandedMetrics || hasLinks
+        let hasExpandedContent = !expandedRows.isEmpty || hasLinks
         return alwaysRows.map(DashboardMetricCardRow.metric)
             + (hasExpandedContent ? [.divider] : [])
             + (isExpanded && !expandedRows.isEmpty ? expandedRows.map(DashboardMetricCardRow.metric) : [])
