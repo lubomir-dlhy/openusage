@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.7.5
+
+### New Features
+- Show Claude's **Fable** weekly limit by default — the model-scoped weekly meter (below the expand caret) was mapped from the usage API but wasn't enabled out of the box by @lubomir-dlhy
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.4...v0.7.5](https://github.com/lubomir-dlhy/openusage/compare/v0.7.4...v0.7.5)
+
 ## v0.7.4
 
 ### Bug Fixes
