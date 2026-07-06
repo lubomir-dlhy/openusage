@@ -1,0 +1,28 @@
+name: Upstream status
+
+# Reports how this fork stands against upstream robinebers/openusage — latest releases,
+# default-branch tips + CI, and how far ahead/behind the fork is — into the run's job
+# summary. Read-only; a companion to the `Sync upstream` workflow. Run it on demand from
+# the Actions tab, or read the weekly summary.
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC — an hour after the upstream sync
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-status
+  cancel-in-progress: true
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report fork vs upstream status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash script/upstream-status.sh | tee -a "$GITHUB_STEP_SUMMARY"
