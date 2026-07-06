@@ -7,21 +7,29 @@ import Foundation
 /// here: an empty saved order reconciles to plain registry order in `LayoutStore`.
 enum DefaultLayout {
     static let metricIDs: [String] = [
-        "antigravity.geminiPro", "antigravity.geminiFlash", "antigravity.claude",
+        "antigravity.geminiPro", "antigravity.geminiWeekly", "antigravity.claude", "antigravity.claudeWeekly",
 
         "claude.session", "claude.weekly", "claude.trend",
         "claude.extra", "claude.today", "claude.yesterday", "claude.last30",
 
-        "codex.session", "codex.weekly", "codex.trend",
+        "codex.session", "codex.weekly", "codex.spark", "codex.sparkWeekly", "codex.trend",
         "codex.credits", "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30",
 
         "cursor.usage", "cursor.auto", "cursor.api", "cursor.trend",
         "cursor.onDemand", "cursor.today", "cursor.yesterday", "cursor.last30",
 
+        "copilot.premium", "copilot.extra", "copilot.orgCredits", "copilot.orgSpend",
+        "copilot.chat", "copilot.completions",
+
         "devin.daily", "devin.weekly", "devin.extra",
 
-        "grok.creditsUsed", "grok.trend",
-        "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30"
+        "grok.weekly", "grok.trend",
+        "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30",
+
+        "openrouter.credits", "openrouter.balance",
+        "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
+
+        "zai.session", "zai.weekly", "zai.webSearches"
     ]
 
     /// Frozen snapshot of the default-on metrics from the release that introduced default seeding.
@@ -44,14 +52,17 @@ enum DefaultLayout {
     ]
 
     /// Metrics pinned to the menu bar on first launch, so the app shows real numbers out of the box
-    /// instead of a lone icon. Two per provider for Claude, Codex, and Cursor — the per-provider cap
-    /// (`LayoutStore.maxPinsPerProvider`). Filtered to the active
+    /// instead of a lone icon. Two per provider for Antigravity, Claude, Codex, and Cursor — the
+    /// per-provider cap (`LayoutStore.maxPinsPerProvider`). Filtered to the active
     /// registry by `LayoutStore`, like `metricIDs`.
     static let pinnedMetricIDs: [String] = [
-        "antigravity.geminiPro",
+        "antigravity.geminiPro", "antigravity.geminiWeekly",
         "claude.session", "claude.weekly",
         "codex.session", "codex.weekly",
-        "cursor.auto", "cursor.api"
+        "cursor.auto", "cursor.api",
+        "copilot.premium",
+        "openrouter.credits",
+        "zai.session", "zai.weekly"
     ]
 
     /// Metrics tucked below the per-provider "Shown on expand" divider on a fresh install. This is
@@ -60,18 +71,54 @@ enum DefaultLayout {
     /// Filtered to the active registry by `LayoutStore`, and only seeded on a genuinely fresh launch
     /// (existing layouts keep everything always-shown unless they reset customization).
     static let expandedMetricIDs: [String] = [
-        // Antigravity: Gemini Pro + Flash stay above the fold; only the non-Gemini (Claude) pool is secondary.
-        "antigravity.claude",
-        // Claude is de-emphasized: only its Session meter stays above the fold; everything else sits below
-        // the caret. The dashboard always keeps ≥1 primary row per provider (it promotes metrics when all
-        // are marked secondary), so leaving Session primary is what makes the caret appear at all.
-        // See AGENTS.md "## Providers".
-        "claude.weekly", "claude.trend",
-        "claude.sonnet", "claude.extra", "claude.today", "claude.yesterday", "claude.last30",
+        // Antigravity: the Gemini pool pair (5h + weekly) stays above the fold; the non-Gemini
+        // (Claude) pool pair sits below the caret.
+        "antigravity.claude", "antigravity.claudeWeekly",
+        // Claude's core meters (Session, Weekly, Extra, Usage Trend) stay above the fold; spend-history
+        // rows sit below the caret. Matches every other provider's "core above, history below" shape.
+        "claude.sonnet", "claude.fable", "claude.today", "claude.yesterday", "claude.last30",
+        // Codex's core Session/Weekly meters and Usage Trend stay above the fold; Spark (the optional
+        // model-specific limits), credits, reset details, and spend rows sit below the caret.
+        "codex.spark", "codex.sparkWeekly",
         "codex.credits", "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30",
         "cursor.onDemand", "cursor.requests", "cursor.credits",
         "cursor.today", "cursor.yesterday", "cursor.last30",
+        // Copilot: Credits (the metered premium pool) + Extra Usage stay above the fold; the org
+        // billing pair (org-managed Business/Enterprise seats) and Chat + Completions sit below the
+        // caret. Chat/Completions carry real counts on free only — on paid they're unlimited
+        // (suppressed), so they read "No data" there.
+        "copilot.orgCredits", "copilot.orgSpend", "copilot.chat", "copilot.completions",
         "devin.extra",
-        "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30"
+        "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30",
+        // OpenRouter: Credits meter + Balance stay above the fold; period spend and the per-key cap
+        // sit below the caret.
+        "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
+        // Z.ai: Session meter stays above the fold; Web Searches (monthly count) sits below the caret.
+        "zai.webSearches"
     ]
+
+    /// Expand base default ids (e.g. `"claude.session"`) to every account of that provider present in the
+    /// registry, so a newly-added account gets the same default metrics/pins as the provider's default.
+    /// The default account's id == providerID, so its ids are returned unchanged (single-account installs
+    /// are byte-identical). An extra account `"claude#1"` additionally gets `"claude#1.session"`. Ids whose
+    /// provider has no extra accounts pass through unchanged (and are never duplicated). `LayoutStore` still
+    /// filters the result to what the registry actually defines, so unknown ids drop out.
+    static func expanded(_ baseIDs: [String], forAccountIDs accountIDs: [String]) -> [String] {
+        // base providerID -> [account ids] (default first, then extras), preserving registry order.
+        var accountsByBase: [String: [String]] = [:]
+        for accountID in accountIDs {
+            let base = accountID.split(separator: "#", maxSplits: 1).first.map(String.init) ?? accountID
+            accountsByBase[base, default: []].append(accountID)
+        }
+        var result: [String] = []
+        for baseID in baseIDs {
+            guard let dot = baseID.firstIndex(of: ".") else { result.append(baseID); continue }
+            let base = String(baseID[..<dot])
+            let suffix = String(baseID[baseID.index(after: dot)...])
+            for accountID in accountsByBase[base] ?? [base] {
+                result.append(accountID == base ? baseID : "\(accountID).\(suffix)")
+            }
+        }
+        return result
+    }
 }

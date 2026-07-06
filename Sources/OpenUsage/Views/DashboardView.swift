@@ -16,8 +16,11 @@ import AppKit
 /// the window height in lockstep with the slide (one spring), and the scroll views only take over once
 /// content exceeds the screen-height cap.
 struct DashboardView: View {
+    @Environment(AppContainer.self) private var container
     @Environment(LayoutStore.self) private var layout
     @Environment(WidgetDataStore.self) private var dataStore
+    @Environment(PopoverTransparencyStore.self) private var transparency
+    @Environment(UpdaterController.self) private var updater
     @State private var didInitialRefresh = false
     @State private var reorderLift: ReorderLift?
     /// The panel height SwiftUI drives — the single animation clock. `PanelHeightModifier` follows it
@@ -43,6 +46,10 @@ struct DashboardView: View {
     @State private var animatedSlideID = 0
     /// Reset to the top whenever the popover closes, so it never reopens mid-scroll.
     @State private var dashboardScrollPosition = ScrollPosition(edge: .top)
+    /// Drives the macOS-native confirmation sheet for the Customize "reset all" button. The alert
+    /// attaches to this panel as a sheet (see `StatusItemController`'s attached-sheet guard), so a
+    /// click on its buttons can't be misread as an outside click that dismisses the popover.
+    @State private var isPresentingResetAllConfirm = false
     /// Row rhythm tracks the global density setting live.
     @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
 
@@ -66,11 +73,12 @@ struct DashboardView: View {
             // content's height and this fill is a no-op; when content exceeds the screen cap the window
             // clamps and the scroll views inside take the overflow.
             .frame(maxHeight: .infinity, alignment: .top)
-            // Paint the opaque tray behind all content (and the footer) so the whole popover reads as
-            // one solid panel — the data region never shows the desktop through it. Outermost so the
-            // footer, header, and scroll content all sit on it; separation from the footer comes from
-            // the native soft scroll-edge fade (not a distinct bar). The resize handle is folded into
-            // the footer (see `footerBar`), so there's no separate root-level dragger inset anymore.
+            // Paint the page surface behind all content (and the footer). Opaque by default so the
+            // popover reads as one solid panel; under Increase Transparency / the egg it clears so the
+            // behind-window backdrop (or party gradient) shows through. Outermost so the footer, header,
+            // and scroll content all sit on it; separation from the footer comes from the native soft
+            // scroll-edge fade (not a distinct bar). The resize handle is folded into the footer (see
+            // `footerBar`), so there's no separate root-level dragger inset anymore.
             .background(PopoverSurface())
             // Drive the host panel's height on SwiftUI's clock. At the body root, OUTSIDE `modeBody`'s
             // `.animation(nil, value: layout.screenSlideID)`, so the height rides the active spring (the
@@ -85,17 +93,29 @@ struct DashboardView: View {
             .background(
                 // Esc backs out of Customize / Settings first; only from the dashboard does it close
                 // the popover. Return opens Customize from the dashboard (the same affordance the
-                // footer's Customize button carries) and returns to the
+                // footer's Options ▸ Customize menu item carries) and returns to the
                 // dashboard from Customize or Settings — matching Esc and the prominent "Done" control,
                 // never jumping Settings → Customize. Always consumed, so a bare Return can't fall
                 // through and dismiss the popover.
                 PopoverKeyReader(
                     onEscape: {
+                        // From a provider's L2 detail, back out to the L1 list first; only from L1 /
+                        // Settings drop to the dashboard. Pressing Esc again from L1 closes the popover.
+                        if layout.customizeProviderID != nil {
+                            withAnimation(Motion.spring) { layout.customizeProviderID = nil }
+                            return true
+                        }
                         guard layout.screen != .dashboard else { return false }
                         withAnimation(Motion.modeSwitch) { layout.screen = .dashboard }
                         return true
                     },
                     onReturn: {
+                        // From a provider's L2 detail, back out to the L1 list first — matching Esc —
+                        // so Return steps L2 → L1 → dashboard instead of jumping L2 → dashboard.
+                        if layout.customizeProviderID != nil {
+                            withAnimation(Motion.spring) { layout.customizeProviderID = nil }
+                            return true
+                        }
                         let target: PopoverScreen = layout.screen == .dashboard ? .customize : .dashboard
                         withAnimation(Motion.modeSwitch) { layout.screen = target }
                         return true
@@ -110,6 +130,17 @@ struct DashboardView: View {
                         withAnimation(Motion.modeSwitch) {
                             layout.screen = layout.screen == .settings ? .dashboard : .settings
                         }
+                        return true
+                    },
+                    // ⌘Z walks back the last customization step (remove/add, reorder, pin/unpin, caret
+                    // move) — app-wide, since Hide and Pin happen via the dashboard's context menus too,
+                    // not only in Customize. Always consumed here: by the time the monitor calls this it
+                    // has already confirmed the panel owns the keystroke and no text field is editing
+                    // (those keep their own ⌘Z), so returning false would only let AppKit beep on an empty
+                    // undo. With nothing to undo we swallow it silently instead.
+                    onUndo: {
+                        guard layout.canUndo else { return true }
+                        withAnimation(Motion.spring) { _ = layout.undo() }
                         return true
                     }
                 )
@@ -135,6 +166,13 @@ struct DashboardView: View {
             .onChange(of: layout.screen) {
                 reorderLift = nil
                 layout.cancelDrag()
+            }
+            // The Reset All alert attaches to the Customize L1 nav bar. Leaving the list — back to the
+            // dashboard or into a provider's L2 detail — unmounts that host, which dismisses the alert
+            // but leaves `isPresentingResetAllConfirm` `true`. Drop it whenever L1 stops being visible
+            // so the destructive confirmation can't reappear stale on return without a fresh tap.
+            .onChange(of: layout.screen == .customize && layout.customizeProviderID == nil) { _, isL1Visible in
+                if !isL1Visible { isPresentingResetAllConfirm = false }
             }
             // Each screen switch: pin to the outgoing screen for one render (`slideProgress = 0`),
             // then spring to the incoming one on the next runloop tick. Deferring the animation one
@@ -190,6 +228,25 @@ struct DashboardView: View {
                 didInitialRefresh = true
                 await dataStore.refreshAll()
             }
+            // Watches for the secret transparency code while the panel is key and toggles the egg. A
+            // sibling of `PopoverKeyReader` that only observes (never consumes), so it can't disturb
+            // navigation or typing.
+            .background(TooMuchTransparencyKeyReader { transparency.toggleSecretCode() })
+            // Reaches `modeBody`, the `PopoverSurface` background, and every card: drives whether surfaces
+            // paint their opaque base or clear to the behind-window vibrancy backdrop.
+            .environment(\.popoverSurfaceTreatment, transparency.surfaceTreatment)
+            // The easter egg's visuals: the readable party (gradient backdrop + glowing rim, text crisp
+            // on frosted cards) for the secret code, or the woozy, barely-readable pink-glass drunk mode
+            // for "Drunk Mode". No-op for the normal/increased styles. Controls stay clickable (overlays
+            // don't hit-test), so the Settings "Drunk Mode" toggle is reachable while it's running.
+            .tooMuchTransparency(transparency.effectiveStyle)
+            // Gate the egg's animation loops on whether the popover is on-screen. Applied OUTSIDE
+            // `.tooMuchTransparency` so it reaches both the gradient/rim/drunk layers that modifier adds
+            // and the in-content `partyPulse`. Hidden → the loops unmount their `TimelineView` clocks, so a
+            // left-on egg spends no CPU; a fresh mount on reopen / in-place activation starts them at once.
+            // Sourced from the controller's show/hide chokepoints (`popoverShown`), not occlusion — a
+            // `.canJoinAllSpaces` panel is briefly occluded mid Space-switch while still on-screen.
+            .environment(\.popoverIsVisible, transparency.popoverShown)
     }
 
     private func resetTransientState() {
@@ -198,9 +255,17 @@ struct DashboardView: View {
         // Trend hover popover rides the same backstop.
         HoverTooltips.dismissAll()
         TrendHoverState.dismissAll()
+        ModelHoverState.dismissAll()
         if layout.screen != .dashboard { layout.screen = .dashboard }
         reorderLift = nil
         layout.cancelDrag()
+        // A "Copied to clipboard" pill mid-countdown would otherwise reappear stale on the next open,
+        // since the layout store survives the popover and only the timer clears it.
+        layout.clearShareConfirmation()
+        layout.clearCustomizationNotice()
+        // Dismiss a pending Reset All confirmation if the popover closes mid-alert — the SwiftUI tree
+        // survives `orderOut`, so without this the sheet would reappear stale on the next open.
+        isPresentingResetAllConfirm = false
         // Drop the driven height so the next open re-establishes it (un-animated) from the reopened
         // screen's measurement instead of springing from this session's last value. Until then the
         // 0 sentinel keeps `PanelHeightModifier` from pushing, so the controller's opening guess stands.
@@ -337,9 +402,49 @@ struct DashboardView: View {
         case .dashboard:
             EmptyView()
         case .customize:
-            navBar(title: "Customize", showsReset: true)
+            // L2 (provider detail) shows a per-provider reset button; L1 (the list) carries the
+            // "reset all customization" button in the same trailing slot. Title swaps to the provider
+            // name on L2; back is context-aware (L2 → L1, L1 → dashboard).
+            if let id = layout.customizeProviderID {
+                navBar(title: customizeTitle, back: customizeBack) {
+                    resetButton(for: id)
+                }
+            } else {
+                navBar(title: customizeTitle, back: customizeBack) {
+                    resetAllButton()
+                }
+                .alert("Reset All Customization?", isPresented: $isPresentingResetAllConfirm) {
+                    Button("Reset All", role: .destructive) {
+                        withAnimation(Motion.spring) {
+                            layout.resetToDefault()
+                            container.reseedEnabledProviders()
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Turns providers back on for the tools you have installed and resets every provider's metrics and order. Are you sure?")
+                }
+            }
         case .settings:
-            navBar(title: "Settings")
+            navBar(title: "Settings") {
+                withAnimation(Motion.modeSwitch) { layout.screen = .dashboard }
+            } trailing: {
+                EmptyView()
+            }
+        }
+    }
+
+    /// The Customize top-bar title: the provider's name when its L2 detail is open, otherwise "Customize".
+    private var customizeTitle: String {
+        layout.customizeProviderID.flatMap { layout.provider(id: $0)?.displayName } ?? "Customize"
+    }
+
+    /// Customize's context-aware back: L2 → L1 (the slide), L1 → dashboard (the usual screen slide).
+    private func customizeBack() {
+        if layout.customizeProviderID != nil {
+            withAnimation(Motion.spring) { layout.customizeProviderID = nil }
+        } else {
+            withAnimation(Motion.modeSwitch) { layout.screen = .dashboard }
         }
     }
 
@@ -349,11 +454,30 @@ struct DashboardView: View {
     /// scroll position, so that modifier stays here on the scroll view.
     private var scrollingDashboard: some View {
         PopoverScrollView {
-            widgetContent
-                .padding(.horizontal, Self.outerPadding)
-                .padding(.top, density.contentTopPadding)
-                .padding(.bottom, Self.contentBottomGap)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 0) {
+                // A pending update found by a scheduled Sparkle check tops everything — it's the
+                // reminder the buried Sparkle window can't deliver for a dockless app.
+                if let updateVersion = updater.availableUpdateVersion {
+                    UpdateBannerCard(version: updateVersion)
+                        .padding(.bottom, density.sectionSpacing)
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
+                // The one-time first-run hint sits above the provider sections (and above the
+                // empty-state line, which a fresh install can hit while nothing has data yet).
+                // It scrolls with the content — a grouped card, not chrome.
+                if container.onboarding.isCustomizeHintPending {
+                    CustomizeHintCard()
+                        .padding(.bottom, density.sectionSpacing)
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
+                widgetContent
+            }
+            .animation(Motion.spring, value: container.onboarding.isCustomizeHintPending)
+            .animation(Motion.spring, value: updater.availableUpdateVersion)
+            .padding(.horizontal, Self.outerPadding)
+            .padding(.top, density.contentTopPadding)
+            .padding(.bottom, Self.contentBottomGap)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollPosition($dashboardScrollPosition)
     }
@@ -385,12 +509,11 @@ struct DashboardView: View {
     /// Customize/Settings and clears on the dashboard, while the content slides beneath it. Its
     /// `barGlass()` (Liquid Glass) background lenses the content scrolling under it — the same
     /// content-aware glass as the footer.
-    private func navBar(title: String, showsReset: Bool = false) -> some View {
-        // Centered title with the back control floating leading and the reset menu trailing — the macOS
+    private func navBar<Trailing: View>(title: String, back: @escaping () -> Void, @ViewBuilder trailing: () -> Trailing) -> some View {
+        // Centered title with the back control floating leading and a trailing action — the macOS
         // toolbar convention (leading navigation · centered title · trailing actions). The title is
         // centered against the *full* bar width (a ZStack layer, not an HStack slot) so it stays
-        // optically centered regardless of the leading/trailing control widths, and both flanks are
-        // matching circular glass controls.
+        // optically centered regardless of the leading/trailing control widths.
         ZStack {
             Text(title)
                 .font(.headline)
@@ -398,11 +521,9 @@ struct DashboardView: View {
                 .frame(maxWidth: .infinity)
 
             HStack(spacing: 0) {
-                backButton
+                backButton(action: back)
                 Spacer(minLength: 8)
-                if showsReset {
-                    resetMenu
-                }
+                trailing()
             }
         }
         .padding(.horizontal, Self.footerHorizontalPadding)
@@ -413,11 +534,10 @@ struct DashboardView: View {
     }
 
     /// The round glass back button (chevron leading), matching the footer's glass control idiom. Esc
-    /// and the system shortcuts back out too; this is the visible, expected affordance.
-    private var backButton: some View {
-        Button {
-            withAnimation(Motion.modeSwitch) { layout.screen = .dashboard }
-        } label: {
+    /// and the system shortcuts back out too; this is the visible, expected affordance. The action is
+    /// supplied by the caller so Customize can back L2 → L1 before L1 → dashboard.
+    private func backButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Label("Back", systemImage: "chevron.backward")
                 .labelStyle(.iconOnly)
                 .frame(width: 16, height: 16)
@@ -429,48 +549,45 @@ struct DashboardView: View {
         .accessibilityLabel("Back")
     }
 
-    /// The trailing "More" pull-down on the Customize header: a circular glass control mirroring the
-    /// leading back chevron, holding a per-provider reset for each provider plus "Reset all providers".
-    /// Resets are secondary, occasional actions — the macOS toolbar convention routes those into a More
-    /// menu rather than giving each a prominent bar button. Glass goes on the container via
-    /// `interactiveGlass(in: Circle())` with a `.plain`/`.menuStyle(.button)` menu: the system
-    /// `.buttonStyle(.glass)` renders flat on a `Menu` (its own chrome wins), so this matches the
-    /// footer's split-button idiom (`HeaderView`).
-    private var resetMenu: some View {
-        Menu {
-            resetMenuItems
+    /// The trailing reset button on a provider's L2 detail — a circular glass control mirroring the
+    /// leading back chevron. Resets just that provider's metrics, order, stars, and On Demand
+    /// membership (`resetProvider`), leaving other providers and the provider order untouched. Only
+    /// shown on L2; the L1 list has no trailing action.
+    private func resetButton(for providerID: String) -> some View {
+        Button {
+            withAnimation(Motion.spring) { layout.resetProvider(providerID) }
         } label: {
-            Image(systemName: "ellipsis")
+            Image(systemName: "arrow.counterclockwise")
                 .font(.system(size: 13, weight: .semibold))
-                .frame(width: 28, height: 28)
+                .frame(width: 16, height: 16)
                 .contentShape(Rectangle())
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .interactiveGlass(in: Circle())
+        .glassButtonStyle()
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .hoverTooltip("Reset \(layout.provider(id: providerID)?.displayName ?? providerID)")
         .accessibilityLabel("Reset")
     }
 
-    /// One "Reset <Provider>" per provider currently shown in Customize (so the list tracks the enabled
-    /// providers and stays in the alphabetical registry order), then "Reset all providers" below a
-    /// divider. Per-provider items reset that provider's contents only; "Reset all" (destructive) is the
-    /// full `resetToDefault`, including provider order. No confirmation — a menu pick isn't a misfire,
-    /// and the destructive role flags the all-providers item.
-    @ViewBuilder
-    private var resetMenuItems: some View {
-        ForEach(layout.customizeGroups, id: \.provider.id) { group in
-            Button("Reset \(group.provider.displayName)") {
-                withAnimation(Motion.spring) { layout.resetProvider(group.provider.id) }
-            }
+    /// The trailing "reset all customization" button on the L1 Customize list — the all-providers
+    /// counterpart to `resetButton`. Same circular glass idiom and reset icon; the scope (everything
+    /// vs. one provider) is conveyed by the tooltip and the confirmation sheet it opens. The sheet
+    /// (`isPresentingResetAllConfirm`) is a real macOS alert, so a destructive "Reset All" is a
+    /// deliberate two-step action — never a single mis-click that wipes the whole layout.
+    private func resetAllButton() -> some View {
+        Button {
+            isPresentingResetAllConfirm = true
+        } label: {
+            Image(systemName: "arrow.counterclockwise")
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
         }
-
-        Divider()
-
-        Button("Reset all providers", role: .destructive) {
-            withAnimation(Motion.spring) { layout.resetToDefault() }
-        }
+        .glassButtonStyle()
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .hoverTooltip("Reset All Customization")
+        .accessibilityLabel("Reset All Customization")
     }
 
     // MARK: - Pinned footer
@@ -490,14 +607,9 @@ struct DashboardView: View {
     private func footerBar(for screen: PopoverScreen) -> some View {
         Group {
             if screen == .customize {
-                // Customize summarizes the layout — active (enabled) metrics and how many are pinned —
-                // centered, using the same middot the metric rows use.
-                Text(layout.pinLimitNotice ?? "\(activeMetricCount) active · \(layout.pinnedCount) pinned")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(layout.pinLimitNotice == nil ? AnyShapeStyle(.secondary) : Theme.notice)
-                    .denyShake(trigger: layout.pinNoticeShakeTrigger)
-                    .frame(maxWidth: .infinity)
-                    .animation(Motion.spring, value: layout.pinLimitNotice)
+                // No footer on Customize — the summary was retired with the old flat layout. A denied
+                // star shakes in place (StarButton) instead of surfacing a footer notice here.
+                EmptyView()
             } else {
                 HStack(alignment: .center, spacing: 8) {
                     footerIdentity
@@ -520,16 +632,45 @@ struct DashboardView: View {
             measuredFooter[screen] = height
             recomposeIdeal(for: screen)
         }
+        // A successful "Share Screenshot" springs a small "Copied ✓" pill up just above the footer —
+        // a floating success toast that's more glanceable than the in-footer text line, and separate
+        // from it. Dashboard-only (share is a dashboard action). The pill re-identifies on the trigger
+        // so back-to-back copies of the same provider each replay the pop-in.
+        .overlay(alignment: .top) {
+            if screen == .dashboard, layout.shareConfirmation {
+                shareCopiedPill
+                    // Float just above the footer's top edge with a small gap (the pill is ~28pt, so -34
+                    // leaves ~6pt of clear space) — a toast over the bottom content, not covering the
+                    // footer's own identity row / Settings button.
+                    .offset(y: -34)
+            }
+        }
+        .animation(Motion.spring, value: layout.shareConfirmation)
+        .animation(Motion.spring, value: layout.shareConfirmationTrigger)
+    }
+
+    /// The floating "Copied to clipboard" pill that springs up just above the footer when a provider
+    /// screenshot is copied — a small frosted capsule that reads as a transient success toast. `.id` on
+    /// the trigger so a repeat copy of the same provider re-pops instead of sitting motionless.
+    private var shareCopiedPill: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 11, weight: .semibold))
+            Text("Copied to clipboard")
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundStyle(Theme.positive)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(.separator, lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+        .id(layout.shareConfirmationTrigger)
+        .transition(.scale(scale: 0.85).combined(with: .opacity))
     }
 
     /// Count of enabled ("active") metrics across providers — the "N active" half of the Customize footer
     /// summary. Pinned metrics are a subset of these.
-    private var activeMetricCount: Int {
-        layout.customizeGroups.reduce(0) { count, group in
-            count + group.metrics.filter { layout.isMetricEnabled($0.id) }.count
-        }
-    }
-
     /// Leading side of the footer. Normal mode shows the app name with the live "Next update in …"
     /// line beneath it; Customize mode shows the pin count ("4 pinned") in the same slot.
     /// Settings keeps the normal identity — the version line doubles as the About info there.
@@ -613,8 +754,20 @@ struct DashboardView: View {
 /// glass bar on top of this (in-window), so glass stays chrome over solid content. Never hit-tests,
 /// so it can't steal clicks from the content above it.
 private struct PopoverSurface: View {
+    @Environment(\.popoverSurfaceTreatment) private var treatment
+
     var body: some View {
-        Theme.traySurface
-            .allowsHitTesting(false)
+        Group {
+            switch treatment {
+            case .opaque:
+                Theme.traySurface
+            case .translucent:
+                // Clear so what's behind the page shows through: the behind-window vibrancy backdrop —
+                // the blurred desktop for increased/drunk, and the same desktop tinted by the party
+                // gradient for party mode.
+                Color.clear
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

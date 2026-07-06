@@ -4,6 +4,7 @@ import SwiftUI
 enum IconSource: Hashable {
     case providerMark(String)   // provider id, e.g. "claude"
     case symbol(String)         // SF Symbol name
+    case customFile(String)     // per-account custom icon file name in AccountIconStore
 }
 
 /// Renders an `IconSource` in monochrome (`Theme.iconGray`): on the glass popover, icon color
@@ -29,6 +30,20 @@ struct ProviderIcon: View {
         case .symbol(let name):
             Image(systemName: name)
                 .foregroundStyle(Theme.iconGray)
+        case .customFile(let fileName):
+            if let image = AccountIconStore.image(named: fileName) {
+                // Monochrome template to match the design language (icon color reads as noise on the
+                // glass popover); a transparent glyph reads best, an opaque image renders as a silhouette.
+                Image(nsImage: image)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(inset * 100 * 0.18) // proportional breathing room, ~matches mark inset
+                    .foregroundStyle(Theme.iconGray)
+            } else {
+                Image(systemName: "person.crop.circle")
+                    .foregroundStyle(Theme.iconGray)
+            }
         }
     }
 }
@@ -93,6 +108,8 @@ enum ProviderMarks {
         case "codex": return "circle.hexagongrid"
         case "cursor": return "cube"
         case "grok": return "bolt.fill"
+        case "openrouter": return "point.3.connected.trianglepath.dotted"
+        case "zai": return "z.signal"
         default: return "app.dashed"
         }
     }

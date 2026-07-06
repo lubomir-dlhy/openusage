@@ -52,7 +52,7 @@ protocol CategorizedError: Error {
 extension ClaudeAuthError: CategorizedError {
     var errorCategory: ErrorCategory {
         switch self {
-        case .notLoggedIn: .notLoggedIn
+        case .notLoggedIn, .desktopAppOnly: .notLoggedIn
         case .sessionExpired, .tokenExpired: .authExpired
         case .invalidOAuthURL: .authInvalid
         }
@@ -144,6 +144,67 @@ extension DevinUsageError: CategorizedError {
         switch self {
         case .invalidResponse: .decoding
         case .quotaUnavailable: .notAvailable
+        }
+    }
+}
+
+extension CopilotAuthError: CategorizedError {
+    var errorCategory: ErrorCategory {
+        switch self {
+        case .notLoggedIn: .notLoggedIn
+        case .tokenInvalid: .authExpired
+        }
+    }
+}
+
+extension CopilotUsageError: CategorizedError {
+    var errorCategory: ErrorCategory {
+        switch self {
+        case .connectionFailed: .network
+        case .invalidResponse: .decoding
+        case .requestFailed(let status): ErrorCategory.http(status)
+        case .quotaUnavailable: .notAvailable
+        }
+    }
+}
+
+extension OpenRouterAuthError: CategorizedError {
+    var errorCategory: ErrorCategory {
+        switch self {
+        case .missingKey: .notLoggedIn
+        case .invalidKey: .authInvalid
+        case .saveFailed, .deleteFailed: .other
+        }
+    }
+}
+
+extension OpenRouterUsageError: CategorizedError {
+    var errorCategory: ErrorCategory {
+        switch self {
+        case .connectionFailed: .network
+        case .invalidResponse: .decoding
+        case .requestFailed(let status): ErrorCategory.http(status)
+        }
+    }
+}
+
+extension ZAIAuthError: CategorizedError {
+    var errorCategory: ErrorCategory {
+        switch self {
+        case .missingKey: .notLoggedIn
+        case .invalidKey: .authInvalid
+        case .saveFailed, .deleteFailed: .other
+        }
+    }
+}
+
+extension ZAIUsageError: CategorizedError {
+    var errorCategory: ErrorCategory {
+        switch self {
+        case .connectionFailed: .network
+        case .invalidResponse: .decoding
+        case .requestFailed(let status): ErrorCategory.http(status)
+        case .noCodingPlan: .notAvailable
         }
     }
 }

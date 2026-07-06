@@ -2,33 +2,66 @@ import Foundation
 
 @MainActor
 final class CodexProvider: ProviderRuntime {
-    let provider = Provider(id: "codex", displayName: "Codex", icon: .providerMark("codex"))
+    let account: ProviderAccount
+    let provider: Provider
 
     let authStore: CodexAuthStore
     let usageClient: CodexUsageClient
-    let ccusageRunner: CcusageRunner
+    let logUsageScanner: CodexLogUsageScanner
     let now: @Sendable () -> Date
+    let pricing: @Sendable () async -> ModelPricing
 
     init(
-        authStore: CodexAuthStore = CodexAuthStore(),
+        account: ProviderAccount = .makeDefault(providerID: "codex"),
+        authStore: CodexAuthStore? = nil,
         usageClient: CodexUsageClient = CodexUsageClient(),
-        ccusageRunner: CcusageRunner = CcusageRunner(),
-        now: @escaping @Sendable () -> Date = Date.init
+        logUsageScanner: CodexLogUsageScanner = CodexLogUsageScanner(),
+        now: @escaping @Sendable () -> Date = Date.init,
+        pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() }
     ) {
-        self.authStore = authStore
+        self.account = account
+        self.provider = Provider(
+            id: account.id,
+            displayName: account.displayName(providerDisplayName: "Codex"),
+            icon: account.iconFileName.map(IconSource.customFile) ?? .providerMark("codex"),
+            links: [
+                .init(label: "Status", url: "https://status.openai.com/"),
+                .init(label: "Dashboard", url: "https://chatgpt.com/codex/settings/usage")
+            ]
+        )
+        self.authStore = authStore ?? CodexAuthStore(configDir: account.configDir)
         self.usageClient = usageClient
-        self.ccusageRunner = ccusageRunner
+        self.logUsageScanner = logUsageScanner
         self.now = now
+        self.pricing = pricing
     }
 
+    // Descriptor ids scoped by account id (`provider.id`); default account id == "codex" keeps "codex.*".
     var widgetDescriptors: [WidgetDescriptor] {
         [
-            .percent(id: "codex.session", provider: provider, title: "Session"),
-            .percent(id: "codex.weekly", provider: provider, title: "Weekly"),
-            .combined(id: "codex.credits", provider: provider, title: "Extra Usage", metricLabel: "Credits"),
-            .values(id: "codex.rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets"),
+            .percent(id: "\(provider.id).session", provider: provider, title: "Session"),
+            .percent(id: "\(provider.id).weekly", provider: provider, title: "Weekly"),
+            // Model-specific Spark limits (GPT-5.3-Codex-Spark), parsed from `additional_rate_limits`.
+            // Declared right after Weekly so they group with the core rate-limit meters; seeded as
+            // secondary (below the caret) and unpinned in `DefaultLayout`.
+            .percent(id: "\(provider.id).spark", provider: provider, title: "Spark"),
+            .percent(id: "\(provider.id).sparkWeekly", provider: provider, title: "Spark Weekly"),
+            .combined(id: "\(provider.id).credits", provider: provider, title: "Extra Usage", metricLabel: "Credits"),
+            .values(id: "\(provider.id).rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets"),
             .usageTrend(provider: provider)
         ] + WidgetDescriptor.spendTiles(provider: provider)
+    }
+
+    func hasLocalCredentials() async -> Bool {
+        // Same sources as `refresh()`: auth.json candidates first, keychain as the fallback. Only a
+        // usable access token counts (see `hasUsableAccessToken`) — an API-key-only auth.json can't
+        // serve the usage API, so seeding it on would just show an error row.
+        let (fileCandidates, _) = authStore.loadAuthCandidates()
+        if fileCandidates.contains(where: \.hasUsableAccessToken) {
+            return true
+        }
+        let keychain = await loadOffMainActor { [authStore] in authStore.loadKeychainAuth() }
+        return keychain?.hasUsableAccessToken == true
     }
 
     func refresh() async -> ProviderSnapshot {
@@ -46,7 +79,11 @@ final class CodexProvider: ProviderRuntime {
             }
         }
 
-        if let keychainCandidate = await loadOffMainActor({ [authStore] in authStore.loadKeychainAuth() }) {
+        // The shared "Codex Auth" keychain holds a SINGLE login, so a non-default account that pins its own
+        // CODEX_HOME must never fall back to it (it would silently show the default account's usage). Only
+        // the default account (no explicit config dir) uses the keychain fallback.
+        if !authStore.hasExplicitConfigDir,
+           let keychainCandidate = await loadOffMainActor({ [authStore] in authStore.loadKeychainAuth() }) {
             do {
                 return try await probe(authState: keychainCandidate)
             } catch {
@@ -69,6 +106,17 @@ final class CodexProvider: ProviderRuntime {
             throw CodexAuthError.notLoggedIn
         }
 
+        if authStore.needsRefresh(authState.auth) {
+            // The `codex` CLI may have rotated the token on disk since we loaded it. Re-read the live
+            // credential first and adopt its (newer) access token — refreshing our stale copy would send
+            // an already-rotated refresh_token and trip `refresh_token_reused` (issue #516).
+            if let live = reloadLiveAuth(source: authState.source),
+               let liveToken = live.auth.tokens?.accessToken, !liveToken.isEmpty {
+                authState = live
+                accessToken = liveToken
+            }
+        }
+
         if authStore.needsRefresh(authState.auth),
            let refreshToken = authState.auth.tokens?.refreshToken,
            !refreshToken.isEmpty {
@@ -85,10 +133,20 @@ final class CodexProvider: ProviderRuntime {
         )
         var mapped = try CodexUsageMapper.mapUsageResponse(response, resetCredits: resetCredits, now: now())
 
-        await SpendTileMapper.appendCcusageUsage(
-            using: ccusageRunner, provider: .codex, homePath: authStore.codexHome(),
-            to: &mapped.lines, now: now()
-        )
+        // Local spend tiles, scanned natively from the Codex CLI's session rollouts and priced
+        // through the shared pricing store. `scan` runs on the scanner actor, off the main actor.
+        if let scan = await logUsageScanner.scan(now: now(), pricing: pricing()) {
+            SpendTileMapper.appendTokenUsage(
+                scan.series, to: &mapped.lines, now: now(),
+                unknownModelsByDay: scan.unknownModelsByDay,
+                modelUsage: scan.modelUsage,
+                modelSourceNote: "From your Codex logs (estimated)"
+            )
+            SpendTileMapper.appendUsageTrend(
+                scan.series, to: &mapped.lines, now: now(),
+                note: "From your Codex logs (estimated)"
+            )
+        }
 
         MetricLine.appendNoDataIfNeeded(&mapped.lines)
         return ProviderSnapshot.make(provider: provider, plan: mapped.plan, lines: mapped.lines, refreshedAt: now())
@@ -128,6 +186,19 @@ final class CodexProvider: ProviderRuntime {
             connectionFailed: CodexUsageError.connectionFailed,
             authExpired: CodexAuthError.tokenExpired
         )
+    }
+
+    /// Re-reads the credential from its original source (the same on-disk file or keychain entry) so a
+    /// token the `codex` CLI rotated out-of-band is picked up before we attempt our own refresh. Reads
+    /// only that one source — matching how `codex` reads the single `auth.json` from `CODEX_HOME` —
+    /// rather than re-scanning every candidate path.
+    private func reloadLiveAuth(source: CodexAuthState.Source) -> CodexAuthState? {
+        switch source {
+        case .file(let path):
+            return authStore.loadAuth(at: path)
+        case .keychain:
+            return authStore.loadKeychainAuth()
+        }
     }
 
     private func refreshAccessToken(authState: inout CodexAuthState, refreshToken: String) async throws -> String {

@@ -34,6 +34,13 @@ struct CodexAuthState: Hashable, Sendable {
 
     var auth: CodexAuth
     var source: Source
+
+    /// Whether this candidate carries a non-empty OAuth access token — the same bar `refresh()`'s
+    /// probe requires before fetching usage (an API-key-only auth.json can't serve the usage API).
+    /// `hasLocalCredentials()`'s first-run detection checks this, so the two can never drift.
+    var hasUsableAccessToken: Bool {
+        auth.tokens?.accessToken?.isEmpty == false
+    }
 }
 
 enum CodexAuthError: Error, LocalizedError, Equatable {
@@ -76,6 +83,9 @@ enum CodexAuthError: Error, LocalizedError, Equatable {
 
 struct CodexAuthStore: Sendable {
     static let keychainService = "Codex Auth"
+    /// Refresh once the access token is within this window of its JWT `exp` — the same 5-minute slack
+    /// the `codex` CLI itself uses, so OpenUsage rotates on the same schedule rather than guessing.
+    static let accessTokenRefreshWindow: TimeInterval = 5 * 60
     private static let authFile = "auth.json"
     private static let defaultAuthHomes = ["~/.config/codex", "~/.codex"]
 
@@ -83,17 +93,30 @@ struct CodexAuthStore: Sendable {
     var files: TextFileAccessing
     var keychain: KeychainAccessing
     var now: @Sendable () -> Date
+    /// Per-account credential-source override — the `CODEX_HOME` value for THIS account. When set it takes
+    /// precedence over the process env so multiple accounts can read different homes within one process.
+    /// `nil` = fall back to the `CODEX_HOME` env var, then the default `~/.config/codex` / `~/.codex`.
+    var configDirOverride: String?
 
     init(
         environment: EnvironmentReading = ProcessEnvironmentReader(),
         files: TextFileAccessing = LocalTextFileAccessor(),
         keychain: KeychainAccessing = SecurityKeychainAccessor(),
+        configDir: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.environment = environment
         self.files = files
         self.keychain = keychain
+        self.configDirOverride = configDir
         self.now = now
+    }
+
+    /// True when this account explicitly pins a config dir. The provider uses this to skip the shared
+    /// "Codex Auth" keychain fallback for non-default accounts (mirrors the Tauri fix), so a work account
+    /// pointed at an empty `<dir>/auth.json` never silently reads the default login from the keychain.
+    var hasExplicitConfigDir: Bool {
+        (configDirOverride?.trimmingCharacters(in: .whitespacesAndNewlines)).map { !$0.isEmpty } ?? false
     }
 
     func loadAuthCandidates() -> ([CodexAuthState], [String]) {
@@ -101,20 +124,29 @@ struct CodexAuthStore: Sendable {
         var missing: [String] = []
 
         for path in authPaths() {
-            guard files.exists(path) else {
+            if let state = loadAuth(at: path) {
+                candidates.append(state)
+            } else if !files.exists(path) {
                 missing.append(path)
-                continue
             }
-            guard let text = try? files.readText(path),
-                  let auth = Self.parseAuth(text),
-                  Self.hasTokenLikeAuth(auth)
-            else {
-                continue
-            }
-            candidates.append(CodexAuthState(auth: auth, source: .file(path: path)))
         }
 
         return (candidates, missing)
+    }
+
+    /// Reads the credential from a single on-disk auth file — the targeted counterpart to
+    /// `loadKeychainAuth()`, used when reloading the exact source we already loaded from so we don't
+    /// re-scan every candidate path. Returns `nil` when the file is missing, unreadable, or doesn't
+    /// carry token-like auth.
+    func loadAuth(at path: String) -> CodexAuthState? {
+        guard files.exists(path),
+              let text = try? files.readText(path),
+              let auth = Self.parseAuth(text),
+              Self.hasTokenLikeAuth(auth)
+        else {
+            return nil
+        }
+        return CodexAuthState(auth: auth, source: .file(path: path))
     }
 
     func loadKeychainAuth() -> CodexAuthState? {
@@ -143,13 +175,33 @@ struct CodexAuthStore: Sendable {
         }
     }
 
+    /// Whether the access token should be proactively refreshed.
+    ///
+    /// Prefers the access token's own JWT `exp` — refresh only when it is at (or within
+    /// `accessTokenRefreshWindow` of) expiry, mirroring the `codex` CLI. The hardcoded 8-day
+    /// wall-clock age is only a fallback for tokens whose `exp` we can't read; on its own it forced a
+    /// refresh while the access token was still valid, tripping `refresh_token_reused` (issue #516).
+    /// A brand-new login with no `last_refresh` and no readable `exp` does NOT need a refresh.
     func needsRefresh(_ auth: CodexAuth) -> Bool {
+        if let accessToken = auth.tokens?.accessToken,
+           let expiresAt = accessTokenExpiresAt(accessToken) {
+            return expiresAt.timeIntervalSince(now()) <= Self.accessTokenRefreshWindow
+        }
         guard let lastRefresh = auth.lastRefresh,
               let date = OpenUsageISO8601.date(from: lastRefresh)
         else {
-            return true
+            return false
         }
         return now().timeIntervalSince(date) > 8 * 24 * 60 * 60
+    }
+
+    /// The access token's expiry from its JWT `exp` claim, or `nil` when the token isn't a decodable
+    /// JWT or omits `exp`.
+    func accessTokenExpiresAt(_ token: String) -> Date? {
+        guard let exp = ProviderParse.jwtPayload(token)?["exp"].flatMap(ProviderParse.number) else {
+            return nil
+        }
+        return Date(timeIntervalSince1970: exp)
     }
 
     func authPaths() -> [String] {
@@ -160,6 +212,10 @@ struct CodexAuthStore: Sendable {
     }
 
     func codexHome() -> String? {
+        if let override = configDirOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return override
+        }
         guard let codexHome = environment.value(for: "CODEX_HOME")?.trimmingCharacters(in: .whitespacesAndNewlines),
               !codexHome.isEmpty
         else {

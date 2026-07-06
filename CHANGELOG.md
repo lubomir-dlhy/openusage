@@ -1,5 +1,447 @@
 # Changelog
 
+## v0.7.3
+
+### New Features
+- Native log scanners and dynamic model pricing; drop ccusage ([#827](https://github.com/robinebers/openusage/pull/827)) by @robinebers
+- Fresh installs start with detected providers and a welcome card ([#830](https://github.com/robinebers/openusage/pull/830)) by @robinebers
+- Credential-detect providers added by updates; unify installs on enabled-list mode ([#838](https://github.com/robinebers/openusage/pull/838)) by @robinebers
+- Copilot org-level AI credit usage for org-managed Business/Enterprise seats ([#843](https://github.com/robinebers/openusage/pull/843)) by @robinebers
+- In-popover update banner and Sparkle 2.9.4 focus fix ([#842](https://github.com/robinebers/openusage/pull/842)) by @robinebers
+- Replace footer split button with a single Options menu ([#841](https://github.com/robinebers/openusage/pull/841)) by @robinebers
+- Include Cowork session logs in Claude local spend tiles ([#845](https://github.com/robinebers/openusage/pull/845)) by @robinebers
+- Per-model spend breakdown when hovering Today / Yesterday / Last 30 Days rows ([#850](https://github.com/robinebers/openusage/pull/850)) by @robinebers
+- Reset All re-detects installed tools ([#853](https://github.com/robinebers/openusage/pull/853)) by @robinebers
+- Codex status dot for reset-credit expiry ([#854](https://github.com/robinebers/openusage/pull/854)) by @robinebers
+- Grok weekly shared-pool meter from the credits config by @validatedev
+
+### Bug Fixes
+- Opus 4.7/4.8 fast-mode rates match Cursor's published pricing ([#835](https://github.com/robinebers/openusage/pull/835)) by @robinebers
+- Claude: explain CLI login when only the desktop app is signed in ([#828](https://github.com/robinebers/openusage/pull/828)) by @robinebers
+- Copilot: keep probing other orgs when one org's billing has an outage ([#843](https://github.com/robinebers/openusage/pull/843)) by @robinebers
+- Copilot: don't let a placeholder Extra Usage row block the org billing lookup ([#844](https://github.com/robinebers/openusage/pull/844)) by @robinebers
+- Open the popover when a pace notification is tapped ([#840](https://github.com/robinebers/openusage/pull/840)) by @robinebers
+- Claude: surface rate-limited state as a header warning instead of a silent blank ([#849](https://github.com/robinebers/openusage/pull/849)) by @robinebers
+- Exclude unpriceable usage from every displayed spend total ([#853](https://github.com/robinebers/openusage/pull/853)) by @robinebers
+- Model breakdown opens only from the value column; breakdown percentages always sum to 100 ([#850](https://github.com/robinebers/openusage/pull/850)) by @robinebers
+- Grok: reject protobuf varints whose 10th byte overflows 64 bits by @validatedev
+
+### Refactor
+- Grok: read weekly pool from the CLI JSON credits endpoint and drop the legacy monthly meter by @robinebers
+- Copilot: default both org billing metrics below the expand caret ([#843](https://github.com/robinebers/openusage/pull/843)) by @robinebers
+
+### Chores
+- Bump PostHog iOS and actions/checkout ([#848](https://github.com/robinebers/openusage/pull/848), [#847](https://github.com/robinebers/openusage/pull/847)) by @app/dependabot
+- Trigger Pages deploy from Release and pricing-supplement workflow completion by @robinebers
+- Split GrokProviderTests into per-class files by @validatedev
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.2...v0.7.3](https://github.com/robinebers/openusage/compare/v0.7.2...v0.7.3)
+
+- [68cc5c6](https://github.com/robinebers/openusage/commit/68cc5c6f712bda45490a16469119fcaab5256896) feat(spend): native log scanners + dynamic model pricing, drop ccusage by @robinebers
+- [be66c05](https://github.com/robinebers/openusage/commit/be66c0510eb3b4e7f66c5ab06a1ba0863988a7a7) fix(claude): explain CLI login when only the desktop app is signed in by @robinebers
+- [5ea794a](https://github.com/robinebers/openusage/commit/5ea794a75d7a975c9f2cb7a3ef54dde0607ee13f) fix(claude): only show desktop-app hint when no CLI credentials are stored by @robinebers
+- [7aeead1](https://github.com/robinebers/openusage/commit/7aeead1ca9e0615289b3e43bef3c5a594aa539b3) docs: add pricing-update skill for syncing the pricing supplement by @robinebers
+- [59008dd](https://github.com/robinebers/openusage/commit/59008dddc2758f76df1d1a8c5ed4f4f170b49bcb) feat(onboarding): fresh installs start with detected providers + welcome card by @robinebers
+- [e26b1c8](https://github.com/robinebers/openusage/commit/e26b1c83554933d86d585c9a4d2676a5a4cfcfa1) fix(tests): repair desktop-app-hint test broken by ccusage removal on main by @robinebers
+- [4fe8d17](https://github.com/robinebers/openusage/commit/4fe8d17a43a0dd8880a2311f6e8b4b5e73a1543c) fix(tests): port #828's desktop-app test off the removed CcusageRunner by @robinebers
+- [3c5882a](https://github.com/robinebers/openusage/commit/3c5882abb9a23cc85e7776395f0fd0130061c7ec) fix(pricing): override Opus 4.7/4.8 fast-mode rates with Cursor's published pricing by @robinebers
+- [8904e73](https://github.com/robinebers/openusage/commit/8904e73206e8a6d2af8a8f2f95205de99beb06bb) docs: changelog for v0.7.3-beta.1 by @robinebers
+- [1b077d1](https://github.com/robinebers/openusage/commit/1b077d18b30f2cbbda2787735bb23020218e891e) feat(providers): credential-detect providers added by updates; unify installs on enabled-list mode by @robinebers
+- [224c987](https://github.com/robinebers/openusage/commit/224c987c442a3d87ff14b4366835f7c683727dd4) Open the popover when a pace notification is tapped. by @robinebers
+- [db821dd](https://github.com/robinebers/openusage/commit/db821dd2191e94a9a9443adf8af5bc41b21d0948) feat(ui): replace footer split button with a single Options menu by @robinebers
+- [7cf5645](https://github.com/robinebers/openusage/commit/7cf564507738c4e4af06d6243e11a5c733dffc0c) feat(updates): in-popover update banner + Sparkle 2.9.4 focus fix by @robinebers
+- [8b567ae](https://github.com/robinebers/openusage/commit/8b567aeeb8f53d094dba8af79711e3eaff7679dc) feat(copilot): show org-level AI credit usage for org-managed Business/Enterprise seats by @robinebers
+- [1171895](https://github.com/robinebers/openusage/commit/1171895a30ea2a5764ad6a9c65dbd8cd305b17b2) refactor(copilot): default both org billing metrics below the expand caret by @robinebers
+- [b15a47e](https://github.com/robinebers/openusage/commit/b15a47ed6df02a5ce6eb0672ed5ffc5aac65e702) fix(copilot): keep probing other orgs when one org's billing has an outage by @robinebers
+- [2d275d5](https://github.com/robinebers/openusage/commit/2d275d564c6abea4b16071184ecc60b9ba04c878) docs: changelog for v0.7.3-beta.2 by @robinebers
+- [9709169](https://github.com/robinebers/openusage/commit/9709169108004785d34b7d5ecc1cccfd6fd2d8e2) fix(copilot): don't let a placeholder Extra Usage row block the org billing lookup by @robinebers
+- [e30769d](https://github.com/robinebers/openusage/commit/e30769d31d18ba967e4cd1dc57e7aebf0039ff69) docs: changelog for v0.7.3-beta.3 by @robinebers
+- [9fa1923](https://github.com/robinebers/openusage/commit/9fa1923113de6205af83c7dd412ad07ccd77dc9b) chore(deps): bump actions/checkout from 4 to 7 (#847) by @app/dependabot
+- [0b8c39f](https://github.com/robinebers/openusage/commit/0b8c39f1ffeb61015f5deb6b91121d9083878c97) chore(deps): bump github.com/posthog/posthog-ios from 3.62.0 to 3.64.1 (#848) by @app/dependabot
+- [5936841](https://github.com/robinebers/openusage/commit/5936841f0dc9a278dd46329082008ccf272b978c) fix(claude): surface rate-limited state as a header warning instead of a silent blank (#849) by @robinebers
+- [c8f3097](https://github.com/robinebers/openusage/commit/c8f30971419bf19bce6c7a7a711c72b087beb24a) docs: changelog for v0.7.3-beta.4 by @robinebers
+- [2366bb3](https://github.com/robinebers/openusage/commit/2366bb3cd8d81d4f6efebb87925c935fc7b61a84) docs(skills): update Pages stall guidance for the Actions-based deploy by @robinebers
+- [daccf05](https://github.com/robinebers/openusage/commit/daccf05a3d048e8fa4e9db0c2f96eff56f823f1d) feat(claude): include Cowork session logs in the local spend tiles (#845) by @robinebers
+- [722e808](https://github.com/robinebers/openusage/commit/722e808b20a48288d3f57131195c58e2c6b2e751) docs: changelog for v0.7.3-beta.5 by @robinebers
+- [4566101](https://github.com/robinebers/openusage/commit/4566101ba130f1fbf30f8b43126f87daa56412f7) ci: trigger Pages deploy from Release/pricing-supplement completion by @robinebers
+- [c11f0d5](https://github.com/robinebers/openusage/commit/c11f0d578103b560dfbb8c6baf7ccc71fc43fba4) feat(dashboard): per-model spend breakdown on spend-row hover by @robinebers
+- [5ea4ba4](https://github.com/robinebers/openusage/commit/5ea4ba4f059d30b50ce31852339e6d1e55cdb08c) style(dashboard): center the source-note footer in the breakdown and trend popovers by @robinebers
+- [0d03230](https://github.com/robinebers/openusage/commit/0d03230e3d5d9214e0a84addd15804a21f013565) fix(dashboard): breakdown percentages always total 100; share the popover footer by @robinebers
+- [f5f57ae](https://github.com/robinebers/openusage/commit/f5f57ae07085f80482f1f6ff0093ba4e3fc5c566) style(dashboard): one source-note string per provider across both popovers by @robinebers
+- [1917874](https://github.com/robinebers/openusage/commit/191787453f507fb6170f94ba3cdaca1e6fa3c03a) docs: research notes behind the model breakdown hover design by @robinebers
+- [9bbe86f](https://github.com/robinebers/openusage/commit/9bbe86fbfc37c195fa1e049bfc4c5bf6c6b2b5b4) fix(dashboard): trigger the model breakdown only on the value column by @robinebers
+- [45b05c6](https://github.com/robinebers/openusage/commit/45b05c69ce2a31b6d8747b385ec9355ab17bbc3e) feat(customize): Reset All re-runs installed-tool detection by @robinebers
+- [d3459af](https://github.com/robinebers/openusage/commit/d3459af2c1316e779de5815f7db26395ab3d4786) fix(spend): exclude unpriceable usage from every displayed total by @robinebers
+- [88aa423](https://github.com/robinebers/openusage/commit/88aa423995b98f701ca294abda89eb91729106f9) feat(codex): status dot for reset-credit expiry by @robinebers
+- [7462c08](https://github.com/robinebers/openusage/commit/7462c087774ca85714362d81e9426a7b7cacdaeb) docs: changelog for v0.7.3-beta.6 by @robinebers
+- [88efe734](https://github.com/robinebers/openusage/commit/88efe73492c0c7416c25d907631a8c5dd81cb265) test(grok): split GrokProviderTests into per-class files by @validatedev
+- [d94b5fb](https://github.com/robinebers/openusage/commit/d94b5fbb1b7bb8e6ccb34821ede33166c5931bc3) feat(grok): weekly shared-pool meter via the gRPC-web credits config by @validatedev
+- [9b1357f](https://github.com/robinebers/openusage/commit/9b1357fbb30f9076a7c42c20cec69cf4537825e8) fix(grok): reject varints whose 10th byte overflows 64 bits by @validatedev
+- [5fcb431](https://github.com/robinebers/openusage/commit/5fcb431225e62cb8db365b04fd63aa027507c146) refactor(grok): fetch weekly pool via the CLI's JSON credits endpoint, drop legacy monthly meter by @robinebers
+
+## v0.7.3-beta.6
+
+### New Features
+- Per-model spend breakdown when hovering the Today / Yesterday / Last 30 Days rows ([#850](https://github.com/robinebers/openusage/pull/850)) by @robinebers
+- Reset All re-detects installed tools ([#853](https://github.com/robinebers/openusage/pull/853)) by @robinebers
+- Codex status dot for reset-credit expiry ([#854](https://github.com/robinebers/openusage/pull/854)) by @robinebers
+
+### Bug Fixes
+- Exclude unpriceable usage from every displayed spend total ([#853](https://github.com/robinebers/openusage/pull/853)) by @robinebers
+- Model breakdown opens only from the value column; breakdown percentages always sum to 100 ([#850](https://github.com/robinebers/openusage/pull/850)) by @robinebers
+
+### Chores
+- Trigger Pages deploy from Release and pricing-supplement workflow completion by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.3-beta.5...v0.7.3-beta.6](https://github.com/robinebers/openusage/compare/v0.7.3-beta.5...v0.7.3-beta.6)
+
+- [88aa423](https://github.com/robinebers/openusage/commit/88aa423995b98f701ca294abda89eb91729106f9) feat(codex): status dot for reset-credit expiry by @robinebers
+- [d3459af](https://github.com/robinebers/openusage/commit/d3459af2c1316e779de5815f7db26395ab3d4786) fix(spend): exclude unpriceable usage from every displayed total by @robinebers
+- [45b05c6](https://github.com/robinebers/openusage/commit/45b05c69ce2a31b6d8747b385ec9355ab17bbc3e) feat(customize): Reset All re-runs installed-tool detection by @robinebers
+- [9bbe86f](https://github.com/robinebers/openusage/commit/9bbe86fbfc37c195fa1e049bfc4c5bf6c6b2b5b4) fix(dashboard): trigger the model breakdown only on the value column by @robinebers
+- [1917874](https://github.com/robinebers/openusage/commit/191787453f507fb6170f94ba3cdaca1e6fa3c03a) docs: research notes behind the model breakdown hover design by @robinebers
+- [f5f57ae](https://github.com/robinebers/openusage/commit/f5f57ae07085f80482f1f6ff0093ba4e3fc5c566) style(dashboard): one source-note string per provider across both popovers by @robinebers
+- [0d03230](https://github.com/robinebers/openusage/commit/0d03230e3d5d9214e0a84addd15804a21f013565) fix(dashboard): breakdown percentages always total 100; share the popover footer by @robinebers
+- [5ea4ba4](https://github.com/robinebers/openusage/commit/5ea4ba4f059d30b50ce31852339e6d1e55cdb08c) style(dashboard): center the source-note footer in the breakdown and trend popovers by @robinebers
+- [c11f0d5](https://github.com/robinebers/openusage/commit/c11f0d578103b560dfbb8c6baf7ccc71fc43fba4) feat(dashboard): per-model spend breakdown on spend-row hover by @robinebers
+- [4566101](https://github.com/robinebers/openusage/commit/4566101ba130f1fbf30f8b43126f87daa56412f7) ci: trigger Pages deploy from Release/pricing-supplement completion by @robinebers
+
+## v0.7.3-beta.5
+
+### New Features
+- Include Cowork session logs in the Claude local spend tiles ([#845](https://github.com/robinebers/openusage/pull/845)) by @robinebers
+
+### Chores
+- Update skills' Pages stall guidance for the Actions-based deploy by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.3-beta.4...v0.7.3-beta.5](https://github.com/robinebers/openusage/compare/v0.7.3-beta.4...v0.7.3-beta.5)
+
+- [daccf05](https://github.com/robinebers/openusage/commit/daccf05a3d048e8fa4e9db0c2f96eff56f823f1d) feat(claude): include Cowork session logs in the local spend tiles (#845) by @robinebers
+- [2366bb3](https://github.com/robinebers/openusage/commit/2366bb3cd8d81d4f6efebb87925c935fc7b61a84) docs(skills): update Pages stall guidance for the Actions-based deploy by @robinebers
+
+## v0.7.3-beta.4
+
+### Bug Fixes
+- fix(claude): surface rate-limited state as a header warning instead of a silent blank ([#849](https://github.com/robinebers/openusage/pull/849)) by @robinebers
+
+### Chores
+- chore(deps): bump github.com/posthog/posthog-ios from 3.62.0 to 3.64.1 ([#848](https://github.com/robinebers/openusage/pull/848)) by @app/dependabot
+- chore(deps): bump actions/checkout from 4 to 7 ([#847](https://github.com/robinebers/openusage/pull/847)) by @app/dependabot
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.3-beta.3...v0.7.3-beta.4](https://github.com/robinebers/openusage/compare/v0.7.3-beta.3...v0.7.3-beta.4)
+
+- [5936841](https://github.com/robinebers/openusage/commit/5936841f0dc9a278dd46329082008ccf272b978c) fix(claude): surface rate-limited state as a header warning instead of a silent blank by @robinebers
+- [0b8c39f](https://github.com/robinebers/openusage/commit/0b8c39f1ffeb61015f5deb6b91121d9083878c97) chore(deps): bump github.com/posthog/posthog-ios from 3.62.0 to 3.64.1 by @app/dependabot
+- [9fa1923](https://github.com/robinebers/openusage/commit/9fa1923113de6205af83c7dd412ad07ccd77dc9b) chore(deps): bump actions/checkout from 4 to 7 by @app/dependabot
+
+## v0.7.3-beta.3
+
+### Bug Fixes
+- fix(copilot): don't let a placeholder Extra Usage row block the org billing lookup ([#844](https://github.com/robinebers/openusage/pull/844)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.3-beta.2...v0.7.3-beta.3](https://github.com/robinebers/openusage/compare/v0.7.3-beta.2...v0.7.3-beta.3)
+
+- [9709169](https://github.com/robinebers/openusage/commit/9709169108004785d34b7d5ecc1cccfd6fd2d8e2) fix(copilot): don't let a placeholder Extra Usage row block the org billing lookup by @robinebers
+
+## v0.7.3-beta.2
+
+### New Features
+- feat(providers): credential-detect providers added by updates; unify installs on enabled-list mode ([#838](https://github.com/robinebers/openusage/pull/838)) by @robinebers
+- feat(copilot): show org-level AI credit usage for org-managed Business/Enterprise seats ([#843](https://github.com/robinebers/openusage/pull/843)) by @robinebers
+- feat(updates): in-popover update banner + Sparkle 2.9.4 focus fix ([#842](https://github.com/robinebers/openusage/pull/842)) by @robinebers
+- feat(ui): replace footer split button with a single Options menu ([#841](https://github.com/robinebers/openusage/pull/841)) by @robinebers
+
+### Bug Fixes
+- fix(copilot): keep probing other orgs when one org's billing has an outage ([#843](https://github.com/robinebers/openusage/pull/843)) by @robinebers
+- fix(notifications): open popover when a pace alert is tapped ([#840](https://github.com/robinebers/openusage/pull/840)) by @robinebers
+
+### Refactor
+- refactor(copilot): default both org billing metrics below the expand caret ([#843](https://github.com/robinebers/openusage/pull/843)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.3-beta.1...v0.7.3-beta.2](https://github.com/robinebers/openusage/compare/v0.7.3-beta.1...v0.7.3-beta.2)
+
+- [b15a47e](https://github.com/robinebers/openusage/commit/b15a47ed6df02a5ce6eb0672ed5ffc5aac65e702) fix(copilot): keep probing other orgs when one org's billing has an outage by @robinebers
+- [1171895](https://github.com/robinebers/openusage/commit/1171895a30ea2a5764ad6a9c65dbd8cd305b17b2) refactor(copilot): default both org billing metrics below the expand caret by @robinebers
+- [8b567ae](https://github.com/robinebers/openusage/commit/8b567aeeb8f53d094dba8af79711e3eaff7679dc) feat(copilot): show org-level AI credit usage for org-managed Business/Enterprise seats by @robinebers
+- [7cf5645](https://github.com/robinebers/openusage/commit/7cf564507738c4e4af06d6243e11a5c733dffc0c) feat(updates): in-popover update banner + Sparkle 2.9.4 focus fix by @robinebers
+- [db821dd](https://github.com/robinebers/openusage/commit/db821dd2191e94a9a9443adf8af5bc41b21d0948) feat(ui): replace footer split button with a single Options menu by @robinebers
+- [224c987](https://github.com/robinebers/openusage/commit/224c987c442a3d87ff14b4366835f7c683727dd4) Open the popover when a pace notification is tapped. by @robinebers
+- [1b077d1](https://github.com/robinebers/openusage/commit/1b077d18b30f2cbbda2787735bb23020218e891e) feat(providers): credential-detect providers added by updates; unify installs on enabled-list mode by @robinebers
+
+## v0.7.3-beta.1
+
+### New Features
+- feat(onboarding): fresh installs start with detected providers + welcome card ([#830](https://github.com/robinebers/openusage/pull/830)) by @robinebers
+- feat(spend): native log scanners + dynamic model pricing, drop ccusage ([#827](https://github.com/robinebers/openusage/pull/827)) by @robinebers
+
+### Bug Fixes
+- fix(pricing): override Opus 4.7/4.8 fast-mode rates with Cursor's published pricing ([#835](https://github.com/robinebers/openusage/pull/835)) by @robinebers
+- fix(claude): explain CLI login when only the desktop app is signed in ([#828](https://github.com/robinebers/openusage/pull/828)) by @robinebers
+- fix(claude): only show desktop-app hint when no CLI credentials are stored ([#828](https://github.com/robinebers/openusage/pull/828)) by @robinebers
+- fix(tests): port #828's desktop-app test off the removed CcusageRunner ([#834](https://github.com/robinebers/openusage/pull/834)) by @robinebers
+- fix(tests): repair desktop-app-hint test broken by ccusage removal on main ([#830](https://github.com/robinebers/openusage/pull/830)) by @robinebers
+
+### Chores
+- docs: add pricing-update skill for syncing the pricing supplement ([#831](https://github.com/robinebers/openusage/pull/831)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.2...v0.7.3-beta.1](https://github.com/robinebers/openusage/compare/v0.7.2...v0.7.3-beta.1)
+
+- [3c5882a](https://github.com/robinebers/openusage/commit/3c5882abb9a23cc85e7776395f0fd0130061c7ec) fix(pricing): override Opus 4.7/4.8 fast-mode rates with Cursor's published pricing by @robinebers
+- [4fe8d17](https://github.com/robinebers/openusage/commit/4fe8d17a43a0dd8880a2311f6e8b4b5e73a1543c) fix(tests): port #828's desktop-app test off the removed CcusageRunner by @robinebers
+- [e26b1c8](https://github.com/robinebers/openusage/commit/e26b1c83554933d86d585c9a4d2676a5a4cfcfa1) fix(tests): repair desktop-app-hint test broken by ccusage removal on main by @robinebers
+- [59008dd](https://github.com/robinebers/openusage/commit/59008dddc2758f76df1d1a8c5ed4f4f170b49bcb) feat(onboarding): fresh installs start with detected providers + welcome card by @robinebers
+- [7aeead1](https://github.com/robinebers/openusage/commit/7aeead1ca9e0615289b3e43bef3c5a594aa539b3) docs: add pricing-update skill for syncing the pricing supplement by @robinebers
+- [5ea794a](https://github.com/robinebers/openusage/commit/5ea794a75d7a975c9f2cb7a3ef54dde0607ee13f) fix(claude): only show desktop-app hint when no CLI credentials are stored by @robinebers
+- [be66c05](https://github.com/robinebers/openusage/commit/be66c0510eb3b4e7f66c5ab06a1ba0863988a7a7) fix(claude): explain CLI login when only the desktop app is signed in by @robinebers
+- [68cc5c6](https://github.com/robinebers/openusage/commit/68cc5c6f712bda45490a16469119fcaab5256896) feat(spend): native log scanners + dynamic model pricing, drop ccusage by @robinebers
+
+## v0.7.2
+
+### New Features
+- feat(popover): make Customize the primary footer button and cross-link the two screens by @robinebers
+- feat(customize): add Reset All Customization button with confirmation ([#815](https://github.com/robinebers/openusage/pull/815)) by @robinebers
+- feat(appearance): Increase Transparency toggle + secret-code Party/Drunk easter egg ([#784](https://github.com/robinebers/openusage/pull/784)) by @validatedev
+
+### Bug Fixes
+- fix(dashboard): open provider Customize from context menu on metrics by @robinebers
+- fix(antigravity): rename pool rows to Session/Weekly for cross-provider consistency by @validatedev
+- fix(codex): tolerate fetch latency in fresh-window detection so untouched sessions stop reading 99% left by @robinebers
+- fix(antigravity): merged Gemini pool + weekly limits via RetrieveUserQuotaSummary by @validatedev
+- fix(notifications): ignore reset timestamp jitter ([#816](https://github.com/robinebers/openusage/pull/816)) by @robinebers
+
+### Chores
+- chore(worktree-setup): exclude stale agent worktrees from rsync by @robinebers
+- docs(release-swift): stable changelogs span last-stable to this-stable by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.1...v0.7.2](https://github.com/robinebers/openusage/compare/v0.7.1...v0.7.2)
+
+- [ed7ef3c](https://github.com/robinebers/openusage/commit/ed7ef3c9393b1ffb14c7aad87cf7423773c1e8d7) chore(worktree-setup): exclude stale agent worktrees from rsync by @robinebers
+- [a16ee82](https://github.com/robinebers/openusage/commit/a16ee828e2f1f12df9ff1a572d1cb6d586d9e331) fix(dashboard): open provider Customize from context menu on metrics by @robinebers
+- [7ab9208](https://github.com/robinebers/openusage/commit/7ab92087fde58915ea2d2fc5b540cfce5f369d95) fix(antigravity): rename pool rows to Session/Weekly for cross-provider consistency by @validatedev
+- [a090ba6](https://github.com/robinebers/openusage/commit/a090ba60b08c29a3b66d2cbeec31b4a503b421bb) fix(codex): tolerate fetch latency in fresh-window detection so untouched sessions stop reading 99% left by @robinebers
+- [1ce97bc](https://github.com/robinebers/openusage/commit/1ce97bcc7955e72d95a981c5dde971546264a8ae) fix(antigravity): merged Gemini pool + weekly limits via RetrieveUserQuotaSummary by @validatedev
+- [d7411a8](https://github.com/robinebers/openusage/commit/d7411a8d8c78fa72a2d5309878c41bf58b5e2e8a) feat(popover): make Customize the primary footer button and cross-link the two screens by @robinebers
+- [d152b09](https://github.com/robinebers/openusage/commit/d152b090d5707adfcb920de2ca2b597355df0b34) fix(notifications): ignore reset timestamp jitter (#816) by @robinebers
+- [21a109a](https://github.com/robinebers/openusage/commit/21a109ab4e963a1529caeccacf175bc092308dab) feat(customize): add Reset All Customization button with confirmation (#815) by @robinebers
+- [6e513ec](https://github.com/robinebers/openusage/commit/6e513eccf47bea8527420f8cdfc7fcc50702029f) feat(appearance): Increase Transparency toggle + secret-code Party/Drunk easter egg (#784) by @validatedev
+- [6aca8aa](https://github.com/robinebers/openusage/commit/6aca8aa1030bf9e4d11292bfd5c5b0205754ee2e) docs(release-swift): stable changelogs span last-stable to this-stable by @robinebers
+
+## v0.7.1
+
+### New Features
+- feat(claude): track Fable model-scoped weekly limit from the limits array ([#814](https://github.com/robinebers/openusage/pull/814)) by @robinebers
+- feat(copilot): track AI Credits + Extra Usage; fix paid quota rendering ([#807](https://github.com/robinebers/openusage/pull/807)) by @robinebers
+- feat(codex): bring back GPT-5.3-Codex-Spark rate-limit meters ([#796](https://github.com/robinebers/openusage/pull/806)) by @robinebers
+- feat(zai): add Z.ai provider for GLM Coding Plan usage tracking ([#783](https://github.com/robinebers/openusage/pull/793)) by @robinebers
+- feat(openrouter): add OpenRouter usage provider ([#763](https://github.com/robinebers/openusage/pull/763)) by @robinebers
+- feat(copilot): add GitHub Copilot usage provider ([#764](https://github.com/robinebers/openusage/pull/764)) by @robinebers
+- feat(notifications): quota pace alerts — 3 triggers, launch-prime, per-app stacking ([#633](https://github.com/robinebers/openusage/pull/786)) by @robinebers
+- feat(cursor): re-enable spend tracking + warn on unknown-model spend ([#789](https://github.com/robinebers/openusage/pull/789)) by @robinebers
+- feat(cursor): price GLM 5.2 in the spend manifest ([#781](https://github.com/robinebers/openusage/pull/781)) by @robinebers
+- feat(share): per-provider Copy as Image card ([#762](https://github.com/robinebers/openusage/pull/778)) by @robinebers
+- feat(share): Share Screenshot footer submenu + copied-to-clipboard pill ([#785](https://github.com/robinebers/openusage/pull/785)) by @robinebers
+- feat(providers): bring back provider quick-link buttons ([#596](https://github.com/robinebers/openusage/pull/779)) by @robinebers
+- feat(providers): add quick-link buttons for Devin and Copilot ([#799](https://github.com/robinebers/openusage/pull/799)) by @robinebers
+- feat(openrouter): add Activity and Credits quick-link buttons ([#795](https://github.com/robinebers/openusage/pull/795)) by @robinebers
+- feat(customize): undo widget removal ([#603](https://github.com/robinebers/openusage/pull/771)) by @robinebers
+- Customize: provider list → detail, on/off + API keys in Customize, stars ([#797](https://github.com/robinebers/openusage/pull/797)) by @robinebers
+
+### Bug Fixes
+- fix(cursor): price Claude Sonnet 5 in spend imputation manifest ([#813](https://github.com/robinebers/openusage/pull/813)) by @robinebers
+- fix: dynamic widget height for single-provider users ([#800](https://github.com/robinebers/openusage/pull/810)) by @robinebers
+- fix(claude): surface re-login warning when login lacks user:profile scope ([#782](https://github.com/robinebers/openusage/pull/794)) by @robinebers
+- fix(spend): no-usage period reads "No data" for every provider ([#790](https://github.com/robinebers/openusage/pull/790)) by @robinebers
+- fix(providers): resolve env-var API keys from the login shell in packaged builds ([#788](https://github.com/robinebers/openusage/pull/788)) by @robinebers
+- fix(codex): refresh OAuth token by JWT exp, not a hardcoded 8-day age ([#516](https://github.com/robinebers/openusage/pull/769)) by @robinebers
+- fix(antigravity): show "Not started" for unused 5-hour quota pools ([#761](https://github.com/robinebers/openusage/pull/761)) by @robinebers
+- fix(tests): allow OpenRouter Activity/Credits quick-link labels ([#805](https://github.com/robinebers/openusage/pull/805)) by @robinebers
+
+### Chores
+- chore(notifications): debug-log each pace-notification decision ([#811](https://github.com/robinebers/openusage/pull/811)) by @robinebers
+- chore: strict issue-first PR policy + faster stale + AGENTS-aligned PR template ([#804](https://github.com/robinebers/openusage/pull/804)) by @robinebers
+- chore(codex): drop parsing of retired per-model and review rate limits by @robinebers
+- chore(deps): bump github.com/sindresorhus/keyboardshortcuts ([#766](https://github.com/robinebers/openusage/pull/766)) by @dependabot[bot]
+- chore(deps): bump actions/checkout from 6 to 7 ([#765](https://github.com/robinebers/openusage/pull/765)) by @dependabot[bot]
+- docs: restore README hero screenshot and trailing newline by @robinebers
+- docs: add Installation section with Homebrew cask and latest release DMG by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.0...v0.7.1](https://github.com/robinebers/openusage/compare/v0.7.0...v0.7.1)
+
+## v0.7.1-beta.7
+
+### Bug Fixes
+- cursor: price Claude Sonnet 5 in spend imputation manifest ([#813](https://github.com/robinebers/openusage/pull/813)) by @robinebers
+- Dynamic widget height for single-provider users ([#810](https://github.com/robinebers/openusage/pull/810)) by @robinebers
+
+### Chores
+- notifications: debug-log each pace-notification decision ([#811](https://github.com/robinebers/openusage/pull/811)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.1-beta.6...v0.7.1-beta.7](https://github.com/robinebers/openusage/compare/v0.7.1-beta.6...v0.7.1-beta.7)
+
+- [e56c360](https://github.com/robinebers/openusage/commit/e56c360b230924658da36f8ac16fdce06add29ab) chore(notifications): debug-log each pace-notification decision (#811) by @robinebers
+- [f0aacfc](https://github.com/robinebers/openusage/commit/f0aacfca006ced72ef5ca086d27dbe5a75bea381) fix(cursor): price Claude Sonnet 5 in spend imputation manifest (#813) by @robinebers
+- [0ebd9e4](https://github.com/robinebers/openusage/commit/0ebd9e44a81d3063da583158fe31abf1cbb5b38a) fix: dynamic widget height for single-provider users (#800) (#810) by @robinebers
+
+## v0.7.1-beta.6
+
+### New Features
+- copilot: track AI Credits + Extra Usage; fix paid quota rendering ([#807](https://github.com/robinebers/openusage/pull/807)) by @robinebers
+- codex: bring back GPT-5.3-Codex-Spark rate-limit meters ([#806](https://github.com/robinebers/openusage/pull/806)) by @robinebers
+- openrouter: add Activity and Credits quick-link buttons ([#795](https://github.com/robinebers/openusage/pull/795)) by @robinebers
+- providers: add quick-link buttons for Devin and Copilot ([#799](https://github.com/robinebers/openusage/pull/799)) by @robinebers
+- Customize: provider list → detail, on/off + API keys in Customize, stars ([#797](https://github.com/robinebers/openusage/pull/797)) by @robinebers
+
+### Bug Fixes
+- tests: allow OpenRouter Activity/Credits quick-link labels ([#805](https://github.com/robinebers/openusage/pull/805)) by @robinebers
+
+### Chores
+- strict issue-first PR policy + faster stale + AGENTS-aligned PR template ([#804](https://github.com/robinebers/openusage/pull/804)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.1-beta.5...v0.7.1-beta.6](https://github.com/robinebers/openusage/compare/v0.7.1-beta.5...v0.7.1-beta.6)
+
+- [c6e4cb9](https://github.com/robinebers/openusage/commit/c6e4cb95137d9d0be3d953d6f512628153054265) feat(copilot): track AI Credits + Extra Usage; fix paid quota rendering (#807) by @robinebers
+- [149dcd9](https://github.com/robinebers/openusage/commit/149dcd94ef00968826a2427a79be23a335e40b23) feat(codex): bring back GPT-5.3-Codex-Spark rate-limit meters (#796) (#806) by @robinebers
+- [5452c3f](https://github.com/robinebers/openusage/commit/5452c3f4ae7efdd852683b62889c33f2f114a47b) fix(tests): allow OpenRouter Activity/Credits quick-link labels (#805) by @robinebers
+- [7a5daaa](https://github.com/robinebers/openusage/commit/7a5daaa3dc307244a48bcb539941996c93e1557e) chore: strict issue-first PR policy + faster stale + AGENTS-aligned PR template (#804) by @robinebers
+- [807ee3f](https://github.com/robinebers/openusage/commit/807ee3f1bfd15f9528c59d4bc10102645d3809b3) feat(openrouter): add Activity and Credits quick-link buttons (#795) by @robinebers
+- [402824d](https://github.com/robinebers/openusage/commit/402824d9cafb7fa47585c2c3621a212d9d7e8c9c) feat(providers): add quick-link buttons for Devin and Copilot (#799) by @robinebers
+- [2fccb51](https://github.com/robinebers/openusage/commit/2fccb5127fff7b86d13b728f9f0b45ffd167e3d6) Customize: provider list → detail, on/off + API keys in Customize, stars (#797) by @robinebers
+
+## v0.7.1-beta.5
+
+### New Features
+- Add Z.ai provider for GLM Coding Plan usage tracking ([#793](https://github.com/robinebers/openusage/pull/793)) by @robinebers
+
+### Bug Fixes
+- Surface re-login warning when Claude login lacks the user:profile scope ([#794](https://github.com/robinebers/openusage/pull/794)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.1-beta.4...v0.7.1-beta.5](https://github.com/robinebers/openusage/compare/v0.7.1-beta.4...v0.7.1-beta.5)
+
+- [9790407](https://github.com/robinebers/openusage/commit/9790407efcdd0c2a1775d7779d46eecd1d675be4) feat(zai): add Z.ai provider for GLM Coding Plan usage tracking (#783) (#793) by @robinebers
+- [e040e86](https://github.com/robinebers/openusage/commit/e040e86241f453323027e131c7fbeed257b9644b) fix(claude): surface re-login warning when login lacks user:profile scope (#782) (#794) by @robinebers
+
+## v0.7.1-beta.4
+
+### New Features
+- Re-enable Cursor spend tracking and warn on unknown-model spend ([#789](https://github.com/robinebers/openusage/pull/789)) by @robinebers
+
+### Bug Fixes
+- No-usage period reads "No data" for every provider ([#790](https://github.com/robinebers/openusage/pull/790)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.1-beta.3...v0.7.1-beta.4](https://github.com/robinebers/openusage/compare/v0.7.1-beta.3...v0.7.1-beta.4)
+
+- [9f5eb51](https://github.com/robinebers/openusage/commit/9f5eb51bcdaa01a7612ad0cd0ef557325fdfcb99) feat(cursor): re-enable spend tracking + warn on unknown-model spend (#789) by @robinebers
+- [028c25c](https://github.com/robinebers/openusage/commit/028c25cf686b17c439e19192b3e5a1a466c7f887) fix(spend): no-usage period reads "No data" for every provider (#790) by @robinebers
+
+## v0.7.1-beta.3
+
+### Bug Fixes
+- Resolve env-var API keys (e.g. `OPENROUTER_API_KEY`) from the login shell in packaged builds, and remove the "Stored in …" caption from the API Keys editor ([#788](https://github.com/robinebers/openusage/pull/788)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.1-beta.2...v0.7.1-beta.3](https://github.com/robinebers/openusage/compare/v0.7.1-beta.2...v0.7.1-beta.3)
+
+- [8d0b6c7](https://github.com/robinebers/openusage/commit/8d0b6c74415a644ef4f39258433df1da261fae25) fix(providers): resolve env-var API keys from the login shell in packaged builds (#788) by @robinebers
+
+## v0.7.1-beta.2
+
+### New Features
+- Add OpenRouter usage provider ([#763](https://github.com/robinebers/openusage/pull/763)) by @robinebers
+- Quota pace alerts — 3 triggers, launch-prime, per-app stacking ([#786](https://github.com/robinebers/openusage/pull/786)) by @robinebers
+- Share Screenshot footer submenu + copied-to-clipboard pill ([#785](https://github.com/robinebers/openusage/pull/785)) by @robinebers
+
+### Bug Fixes
+- Refresh Codex OAuth token by JWT exp, not a hardcoded 8-day age ([#769](https://github.com/robinebers/openusage/pull/769)) by @robinebers
+
+### Chores
+- Drop parsing of retired Codex per-model and review rate limits by @robinebers
+- Restore README hero screenshot and trailing newline by @robinebers
+- Add Installation section with Homebrew cask and latest release DMG by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.1-beta.1...v0.7.1-beta.2](https://github.com/robinebers/openusage/compare/v0.7.1-beta.1...v0.7.1-beta.2)
+
+- [386fcfe](https://github.com/robinebers/openusage/commit/386fcfeb3186ec9f3fe3bd43a8c7d7a4db8efd21) chore(codex): drop parsing of retired per-model and review rate limits by @robinebers
+- [8360e93](https://github.com/robinebers/openusage/commit/8360e93717c3af04ff27cf49cd1d7274693dac4f) feat(openrouter): add OpenRouter usage provider (#763) by @robinebers
+- [1cf2eb4](https://github.com/robinebers/openusage/commit/1cf2eb4f418299707aac50b60df324c1556a2374) feat(notifications): quota pace alerts — 3 triggers, launch-prime, per-app stacking (#633) (#786) by @robinebers
+- [fd0890e](https://github.com/robinebers/openusage/commit/fd0890ef65536ffdd4875e7a75a1531850f70ba1) feat(share): Share Screenshot footer submenu + copied-to-clipboard pill (#785) by @robinebers
+- [b50efbb](https://github.com/robinebers/openusage/commit/b50efbb41f71520112be32f823c896de34813823) docs: restore README hero screenshot and trailing newline by @robinebers
+- [2eada69](https://github.com/robinebers/openusage/commit/2eada69bc904e9268264713bc87761afe94f8f7a) docs: add Installation section with Homebrew cask and latest release DMG by @robinebers
+- [42ce1e2](https://github.com/robinebers/openusage/commit/42ce1e2cde443d443dde59c9ccd941adf26af44b) fix(codex): refresh OAuth token by JWT exp, not a hardcoded 8-day age (#516) (#769) by @robinebers
+
+## v0.7.1-beta.1
+
+### New Features
+- Add GitHub Copilot usage provider ([#764](https://github.com/robinebers/openusage/pull/764)) by @robinebers
+- Undo widget removal ([#603](https://github.com/robinebers/openusage/pull/771)) by @robinebers
+- Price GLM 5.2 in the spend manifest ([#781](https://github.com/robinebers/openusage/pull/781)) by @robinebers
+- Bring back provider quick-link buttons ([#596](https://github.com/robinebers/openusage/pull/779)) by @robinebers
+- Per-provider Copy as Image card ([#762](https://github.com/robinebers/openusage/pull/778)) by @robinebers
+
+### Bug Fixes
+- Show "Not started" for unused 5-hour quota pools (Antigravity) ([#761](https://github.com/robinebers/openusage/pull/761)) by @robinebers
+
+### Chores
+- Bump github.com/sindresorhus/keyboardshortcuts ([#766](https://github.com/robinebers/openusage/pull/766)) by @dependabot
+- Bump actions/checkout from 6 to 7 ([#765](https://github.com/robinebers/openusage/pull/765)) by @dependabot
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.0...v0.7.1-beta.1](https://github.com/robinebers/openusage/compare/v0.7.0...v0.7.1-beta.1)
+
+- [c74998a](https://github.com/robinebers/openusage/commit/c74998a6bc1f0e53855c936a36e3a2ef71a4df98) feat(copilot): add GitHub Copilot usage provider (#764) by @robinebers
+- [7530469](https://github.com/robinebers/openusage/commit/75304694e84ed86b5e3cdc425e4c3fb24bc3b26c) fix(antigravity): show "Not started" for unused 5-hour quota pools (#761) by @robinebers
+- [6c3d034](https://github.com/robinebers/openusage/commit/6c3d034a990bdb618d8a3ea7cab3d0c8002ac9d9) feat(customize): undo widget removal (#603) (#771) by @robinebers
+- [f159788](https://github.com/robinebers/openusage/commit/f159788361fc29f6ee84ac722d8e087a327a4de9) feat(cursor): price GLM 5.2 in the spend manifest (#781) by @robinebers
+- [bf7fa4d](https://github.com/robinebers/openusage/commit/bf7fa4d6e89fc6a34e11f02f65b645257d985a02) feat(providers): bring back provider quick-link buttons (#596) (#779) by @robinebers
+- [78ef4a7](https://github.com/robinebers/openusage/commit/78ef4a70c368f847302ebf71da296445146271eb) feat(share): per-provider Copy as Image card (#762) (#778) by @robinebers
+- [c148a4c](https://github.com/robinebers/openusage/commit/c148a4c35c929fb8fd3d0363181f625f71d3418a) chore(deps): bump github.com/sindresorhus/keyboardshortcuts (#766) by @dependabot
+- [e62400d](https://github.com/robinebers/openusage/commit/e62400de6ce09eeb911013721ac15705815e3771) chore(deps): bump actions/checkout from 6 to 7 (#765) by @dependabot
+
 ## v0.7.0
 
 **A brand-new OpenUsage.** The app has been rebuilt from the ground up to be faster, lighter, and feel right at home on your Mac.

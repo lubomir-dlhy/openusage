@@ -28,7 +28,7 @@ cd "$ROOT_DIR"
 : "${OPENUSAGE_VERSION:?set OPENUSAGE_VERSION, e.g. 0.7.0}"
 
 APP_NAME="OpenUsage"
-BUNDLE_ID="com.robinebers.openusage"
+BUNDLE_ID="com.lubomirdlhy.openusage"
 MIN_SYSTEM_VERSION="15.0"
 VERSION="$OPENUSAGE_VERSION"
 # CFBundleShortVersionString carries the full version, including any pre-release suffix (e.g.
@@ -37,7 +37,7 @@ VERSION="$OPENUSAGE_VERSION"
 # monotonic commit count below), not this string, and Developer ID notarization does not require it to
 # be numeric. (Sparkle's own docs use a beta short version, e.g. "2.0b1".)
 BUILD="${OPENUSAGE_BUILD:-$(git rev-list --count HEAD)}"
-FEED_URL="${FEED_URL:-https://robinebers.github.io/openusage/appcast.xml}"
+FEED_URL="${FEED_URL:-https://lubomir-dlhy.github.io/openusage/appcast.xml}"
 DMG_NAME="$APP_NAME-$VERSION.dmg"
 
 DIST_DIR="$ROOT_DIR/dist"

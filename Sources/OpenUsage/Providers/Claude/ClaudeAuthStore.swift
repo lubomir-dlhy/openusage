@@ -37,6 +37,13 @@ struct ClaudeCredentialState: Hashable, Sendable {
     var fullData: ClaudeCredentialsFile?
     var inferenceOnly: Bool
 
+    /// Whether this candidate carries a non-blank access token — the single definition of "usable"
+    /// shared by `refresh()`'s candidate filter and `hasLocalCredentials()`'s first-run detection, so
+    /// the two can never drift.
+    var hasUsableAccessToken: Bool {
+        oauth.accessToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
     /// A token-free, log-safe one-line descriptor for diagnosing auth failures from a default-level
     /// (info) log: the source kind plus booleans for whether this candidate carries a refresh token and
     /// whether its access token is already expired (`expiresAt`, epoch ms, vs `now`). NEVER includes any
@@ -57,6 +64,7 @@ struct ClaudeCredentialState: Hashable, Sendable {
 
 enum ClaudeAuthError: Error, LocalizedError, Equatable {
     case notLoggedIn
+    case desktopAppOnly
     case sessionExpired
     case tokenExpired
     case invalidOAuthURL(String)
@@ -65,6 +73,8 @@ enum ClaudeAuthError: Error, LocalizedError, Equatable {
         switch self {
         case .notLoggedIn:
             return "Not logged in. Run `claude` to authenticate."
+        case .desktopAppOnly:
+            return "Signed in to the Claude desktop app? OpenUsage needs a CLI login — run `claude` in a terminal and sign in once."
         case .sessionExpired:
             return "Session expired. Run `claude` to log in again."
         case .tokenExpired:
@@ -84,7 +94,7 @@ enum ClaudeAuthError: Error, LocalizedError, Equatable {
         switch self {
         case .sessionExpired, .tokenExpired:
             return true
-        case .notLoggedIn, .invalidOAuthURL:
+        case .notLoggedIn, .desktopAppOnly, .invalidOAuthURL:
             return false
         }
     }
@@ -110,16 +120,22 @@ struct ClaudeAuthStore: Sendable {
     var files: TextFileAccessing
     var keychain: KeychainAccessing
     var now: @Sendable () -> Date
+    /// Per-account credential-source override — the `CLAUDE_CONFIG_DIR` value for THIS account. When set it
+    /// takes precedence over the process env so multiple accounts can read different config dirs within one
+    /// process. `nil` = fall back to the `CLAUDE_CONFIG_DIR` env var, then the default `~/.claude`.
+    var configDirOverride: String?
 
     init(
         environment: EnvironmentReading = ProcessEnvironmentReader(),
         files: TextFileAccessing = LocalTextFileAccessor(),
         keychain: KeychainAccessing = SecurityKeychainAccessor(),
+        configDir: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.environment = environment
         self.files = files
         self.keychain = keychain
+        self.configDirOverride = configDir
         self.now = now
     }
 
@@ -151,6 +167,21 @@ struct ClaudeAuthStore: Sendable {
         loadCredentialCandidates().first
     }
 
+    /// Data folders the Claude desktop app keeps under `~/Library/Application Support` — the standalone
+    /// Claude Code app and the Claude Code area inside the main Claude app. Their presence (checked only
+    /// when no CLI credentials exist anywhere) means the user likely signed in through the desktop app,
+    /// whose session lives in an Electron `safeStorage`-encrypted blob OpenUsage can't read (#825).
+    private static let desktopAppDataPaths = [
+        "~/Library/Application Support/Claude Code",
+        "~/Library/Application Support/Claude/claude-code"
+    ]
+
+    /// Whether a desktop-app login is the likely reason no CLI credentials were found, so the provider
+    /// can explain that a one-time `claude` CLI login is needed instead of a bare "Not logged in".
+    func hasDesktopAppData() -> Bool {
+        Self.desktopAppDataPaths.contains { files.exists($0) }
+    }
+
     func needsRefresh(_ oauth: ClaudeOAuth) -> Bool {
         guard let expiresAt = oauth.expiresAt else { return false }
         return expiresAt - now().timeIntervalSince1970 * 1000 <= 5 * 60 * 1000
@@ -176,14 +207,42 @@ struct ClaudeAuthStore: Sendable {
         AppLog.debug(LogTag.auth("claude"), "persisted rotated credentials (source=\(state.source.label))")
     }
 
+    /// Why the live-usage endpoint (`/api/oauth/usage`, which backs Session / Weekly / Sonnet / Extra
+    /// Usage) can or can't be called for a credential. Reading usage requires the `user:profile` scope,
+    /// so a token that only carries `user:inference` (e.g. one minted by `claude setup-token`) can't —
+    /// and the provider surfaces that as a friendly "re-login" notice instead of silently blank bars.
+    enum LiveUsageAvailability: Equatable, Sendable {
+        case available
+        /// An explicit `CLAUDE_CODE_OAUTH_TOKEN`: inference-only by design, so there's nothing to fetch
+        /// and nothing to nag about — the spend tiles still load from local logs.
+        case inferenceOnlyToken
+        /// A stored login whose granted scopes lack `user:profile`. The usage endpoint would reject it,
+        /// so the session/weekly bars can't load until the user signs in again with `claude`.
+        case missingProfileScope
+    }
+
+    /// The required scope for the usage endpoint. A credential missing it can authenticate for inference
+    /// but can't read subscription usage windows.
+    static let usageScope = "user:profile"
+
+    func liveUsageAvailability(_ state: ClaudeCredentialState) -> LiveUsageAvailability {
+        if state.inferenceOnly { return .inferenceOnlyToken }
+        // Older credentials predate the scopes field; treat an absent/empty list as "unknown, allow" so
+        // we don't suppress usage for tokens that actually carry the access (and would 403 loudly if not).
+        guard let scopes = state.oauth.scopes, !scopes.isEmpty else { return .available }
+        return scopes.contains(Self.usageScope) ? .available : .missingProfileScope
+    }
+
     func canFetchLiveUsage(_ state: ClaudeCredentialState) -> Bool {
-        guard !state.inferenceOnly else { return false }
-        guard let scopes = state.oauth.scopes, !scopes.isEmpty else { return true }
-        return scopes.contains("user:profile")
+        liveUsageAvailability(state) == .available
     }
 
     func claudeHomeOverride() -> String? {
-        envText("CLAUDE_CONFIG_DIR")
+        if let override = configDirOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !override.isEmpty {
+            return override
+        }
+        return envText("CLAUDE_CONFIG_DIR")
     }
 
     // Resolved OAuth endpoint strings before URL validation. The suffix is derived from the same
@@ -339,7 +398,7 @@ struct ClaudeAuthStore: Sendable {
     }
 
     private func credentialsPath() -> String {
-        "\(envText("CLAUDE_CONFIG_DIR") ?? Self.defaultClaudeHome)/\(Self.credentialFileName)"
+        "\(claudeHomeOverride() ?? Self.defaultClaudeHome)/\(Self.credentialFileName)"
     }
 
     private func envText(_ name: String) -> String? {

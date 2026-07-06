@@ -13,6 +13,10 @@ enum MenuBarStripRenderer {
     /// `ImageRenderer` (which retains a little memory per run on macOS) to actual visual changes.
     private static var lastRender: (content: MenuBarContent, style: MenuBarStyle, image: NSImage?)?
 
+    /// Drop the memoized render. Needed when a custom account icon is *replaced* under the same file
+    /// name (the `IconSource` is unchanged, so the content compares equal even though the image differs).
+    static func invalidateCache() { lastRender = nil }
+
     /// The strip image for the given content and style, or `nil` when the content renders nothing
     /// in that style (caller falls back to the app icon). Memoized: equal inputs return the
     /// previously rendered instance.
@@ -169,6 +173,19 @@ private struct MenuBarTextStrip: View {
             Image(systemName: name)
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: Self.glyphSide, height: Self.glyphSide)
+        case .customFile(let fileName):
+            // The strip is rendered into a template NSImage, so a custom account icon shows as its
+            // monochrome silhouette beside its metrics (a transparent glyph reads best).
+            if let image = AccountIconStore.image(named: fileName) {
+                Image(nsImage: image)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color.black)
+                    .frame(width: Self.glyphSide, height: Self.glyphSide)
+            } else {
+                Circle().fill(Color.black).frame(width: Self.glyphSide - 1, height: Self.glyphSide - 1)
+            }
         }
     }
 }
