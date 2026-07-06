@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.7.4
+
+### Bug Fixes
+- Multi-account: each Claude account's spend tiles (Today / Yesterday / Last 30 Days and Usage Trend) now read that account's own config dir, instead of every account showing the default profile's usage by @lubomir-dlhy
+
+### Chores
+- Sync upstream every 6 hours (was weekly) and add a fork-vs-upstream status report workflow by @lubomir-dlhy
+- Serve GitHub Pages from the `gh-pages` branch with a landing page; drop upstream's Actions-based Pages deploy by @lubomir-dlhy
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.3...v0.7.4](https://github.com/lubomir-dlhy/openusage/compare/v0.7.3...v0.7.4)
+
 ## v0.7.3
 
 ### New Features
