@@ -56,6 +56,7 @@ final class ResetDisplayTests: XCTestCase {
                    "antigravity.geminiPro", "antigravity.claude"] {
             var data = WidgetData(title: "Session", icon: .symbol("clock"), kind: .percent, used: 0, limit: 100)
             data.widgetID = id
+            data.isSessionWindow = true   // descriptor opt-in the session tiles now carry
             data.periodDurationMs = Int(period * 1000)
             // Half the window has elapsed on the clock, so pace would otherwise project — but usage is
             // still zero, which is what "Not started" keys off (see `isFreshSessionWindow`).
