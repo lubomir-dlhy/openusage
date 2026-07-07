@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.7.7
+
+### New Features
+- **Compact density redesign:** denser meters — label + value/reset on one line with a **full-width progress bar** beneath it — plus a shorter reset countdown ("2d 15h"). No-data rows are hidden (an all-idle provider still shows a single "No data" row instead of a blank card). Regular density is unchanged by @lubomir-dlhy
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.6...v0.7.7](https://github.com/lubomir-dlhy/openusage/compare/v0.7.6...v0.7.7)
+
 ## v0.7.6
 
 ### New Features
