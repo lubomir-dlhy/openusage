@@ -94,13 +94,97 @@ struct WidgetRowView: View {
     /// The label, bar, and reading are one perceptual unit, so they sit on the tight step of the
     /// grid (`rowInnerSpacing`); the row's vertical padding provides the separation from
     /// neighboring rows.
+    @ViewBuilder
     private var boundedRow: some View {
         let state = data.meterState()
-        return VStack(alignment: .leading, spacing: density.rowInnerSpacing) {
-            boundedLabelRow(state)
-            meter(state)
-            primaryTextRow
+        if density == .compact {
+            compactBoundedRow(state)
+        } else {
+            VStack(alignment: .leading, spacing: density.rowInnerSpacing) {
+                boundedLabelRow(state)
+                meter(state)
+                primaryTextRow
+            }
         }
+    }
+
+    /// Compact one-line meter: label · inline capsule bar · value + reset on a single row (the dense
+    /// "more on screen" mode). The bar flexes to fill between the fixed-width ends; the pace verdict is
+    /// carried by the bar color + tick and an inline flame when a limit is imminent, so the row stays
+    /// one line. Regular density keeps the roomy two-line treatment above.
+    private func compactBoundedRow(_ state: WidgetData.MeterState) -> some View {
+        // Two compact lines: label + value/reset on top, then a full-width progress bar. Denser than
+        // the three-line Regular row (label / bar / reading), but the bar keeps the whole width so it
+        // reads as a real progress indicator instead of a squeezed stub.
+        VStack(alignment: .leading, spacing: density.rowInnerSpacing) {
+            HStack(spacing: 6) {
+                Text(data.title)
+                    .font(labelFont)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                compactWarningGlyph(state)
+                // The value is the payload — full size + primary. The reset is quiet context: a step
+                // smaller/dimmer and prefix-free ("2d 15h").
+                headlineText
+                    .font(supportingFont)
+                if data.compactTrailingText() != nil {
+                    Text("·")
+                        .font(resetFont)
+                        .foregroundStyle(.tertiary)
+                    compactTrailingContext
+                        .font(resetFont)
+                }
+            }
+            .lineLimit(1)
+            meter(state)
+        }
+    }
+
+    /// Compact trailing: the short reset ("2d 15h") with the same tap-to-flip toggle + tooltip as the
+    /// roomy `trailingContext`, but rendered from `compactTrailingText` so it drops the "Resets in" prefix.
+    @ViewBuilder
+    private var compactTrailingContext: some View {
+        if let text = data.compactTrailingText() {
+            if data.hasResetLabel(), let onToggleResetDisplay {
+                Button(action: onToggleResetDisplay) {
+                    Text(text).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .hoverTooltip(data.resetTooltip())
+            } else {
+                Text(text).foregroundStyle(.secondary)
+                    .hoverTooltip(data.resetTooltip())
+            }
+        }
+    }
+
+    /// The reset countdown in the compact row: a step smaller than the value so it reads as context.
+    private var resetFont: Font {
+        .system(size: max(9, density.supportingPointSize - 1))
+    }
+
+
+    /// Just the escalating flame for the imminent-limit states, inlined before the value in Compact.
+    /// Healthy/level/no-data show nothing; the bar's own color already reads the verdict.
+    @ViewBuilder
+    private func compactWarningGlyph(_ state: WidgetData.MeterState) -> some View {
+        switch state {
+        case .spent:
+            flameGlyph(state, accessibility: "Limit reached")
+        case .runningOut:
+            flameGlyph(state, accessibility: "Will reach limit")
+        default:
+            EmptyView()
+        }
+    }
+
+    private func flameGlyph(_ state: WidgetData.MeterState, accessibility: String) -> some View {
+        Image(systemName: "flame.fill")
+            .font(.system(size: density.supportingPointSize - 1))
+            .foregroundStyle(severityColor(state.severity))
+            .hoverTooltip(state.tooltip)
+            .accessibilityLabel(accessibility)
     }
 
     /// Label with the pace warning right-aligned on the same line — one slot, escalating with the

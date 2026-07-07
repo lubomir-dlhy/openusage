@@ -1,9 +1,11 @@
 import XCTest
 @testable import OpenUsage
 
-/// Compact must be tighter than Default on every density-driven dimension — the setting's whole
-/// point. A tweak that accidentally inverts or equalizes a pair would make Density "do nothing"
-/// again without any compile error.
+/// Compact must be tighter than Default on every *spacing* dimension — the setting's whole point. A
+/// tweak that accidentally inverts or equalizes a pair would make Density "do nothing" again without
+/// any compile error. `meterHeight` is the deliberate exception: Compact's one/two-line meter row
+/// gives the progress bar its own full width, so the bar is intentionally *taller* (more prominent),
+/// asserted separately below.
 final class DensitySettingTests: XCTestCase {
     func testCompactIsTighterOnEveryDimension() {
         let spacing: [(String, KeyPath<DensitySetting, CGFloat>)] = [
@@ -16,7 +18,6 @@ final class DensitySettingTests: XCTestCase {
             ("cardGutter", \.cardGutter),
             ("controlRowPadding", \.controlRowPadding),
             ("contentTopPadding", \.contentTopPadding),
-            ("meterHeight", \.meterHeight),
             ("estimatedMetricRowHeight", \.estimatedMetricRowHeight),
         ]
         for (name, dimension) in spacing {
@@ -26,6 +27,11 @@ final class DensitySettingTests: XCTestCase {
                 "\(name) should be tighter in Compact"
             )
         }
+    }
+
+    func testCompactMeterBarIsMoreProminent() {
+        // Compact's full-width meter deliberately makes the bar taller than Regular, not thinner.
+        XCTAssertGreaterThan(DensitySetting.compact.meterHeight, DensitySetting.regular.meterHeight)
     }
 
     func testCompactStepsTypeDownOneSize() {

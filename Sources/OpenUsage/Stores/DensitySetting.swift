@@ -51,7 +51,7 @@ enum DensitySetting: String, Hashable, Sendable, CaseIterable {
 
     /// Capsule meter height — a thin hairline like Claude Code's usage bars (a 10pt bar read as a
     /// chunky slab next to them). Default's bar is one step taller to match its airier rhythm.
-    var meterHeight: CGFloat { self == .compact ? 4 : 5 }
+    var meterHeight: CGFloat { self == .compact ? 7 : 5 }
 
     /// Usage Trend sparkline height. Steps down in Compact so the chart row tightens with the rest of
     /// the card instead of standing taller than its neighbors.

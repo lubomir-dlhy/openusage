@@ -126,8 +126,17 @@ struct WidgetGroupedListView: View {
         // recomputed several times per row (twice per adjacent pair plus once in `row`).
         let providerID = group.provider.id
         let isExpanded = layout.isProviderExpanded(providerID)
-        let alwaysRows = resolvedRows(group.alwaysShownWidgets)
-        let expandedRows = resolvedRows(group.expandedWidgets)
+        let hideEmpty = density == .compact
+        var alwaysRows = resolvedRows(group.alwaysShownWidgets, hideEmpty: hideEmpty)
+        var expandedRows = resolvedRows(group.expandedWidgets, hideEmpty: hideEmpty)
+        // Hide-empty must never collapse a whole provider to a blank card: when a provider has no data
+        // anywhere (e.g. OpenRouter with no key), keep its first metric so the section still reads as
+        // "present but idle" — a single "No data" row — instead of empty chrome.
+        if hideEmpty, alwaysRows.isEmpty, expandedRows.isEmpty,
+           let fallback = resolvedRows(group.alwaysShownWidgets, hideEmpty: false).first
+               ?? resolvedRows(group.expandedWidgets, hideEmpty: false).first {
+            alwaysRows = [fallback]
+        }
         // The caret is a boundary between primary and expanded rows, so text-row condensing should not
         // bridge across it. Each side tightens only against rows on the same side of the separator.
         let condensedIDs = visibleCondensedTextRowIDs(alwaysRows: alwaysRows, expandedRows: isExpanded ? expandedRows : [])
@@ -156,15 +165,14 @@ struct WidgetGroupedListView: View {
         }
     }
 
-    private func resolvedRows(_ widgets: [PlacedWidget]) -> [ResolvedRow] {
+    /// Resolve placed widgets to rows. `hideEmpty` (Compact) drops rows with no data at all (e.g.
+    /// "Extra Usage — No data", an empty spend tile) to reclaim space; a meter that carries a value —
+    /// including a fresh "Not started" 0% window — still has data and stays.
+    private func resolvedRows(_ widgets: [PlacedWidget], hideEmpty: Bool) -> [ResolvedRow] {
         widgets.compactMap { widget -> ResolvedRow? in
             guard let descriptor = layout.descriptor(for: widget) else { return nil }
             let data = dataStore.data(for: descriptor)
-            // Compact hides rows with no data at all (e.g. "Extra Usage — No data", an empty spend
-            // tile) to reclaim vertical space. A meter that has a value — including a fresh "Not
-            // started" window (0%) — still carries data, so it stays. Regular keeps every row so an
-            // empty metric still advertises that it exists.
-            if density == .compact, !data.hasData { return nil }
+            if hideEmpty, !data.hasData { return nil }
             return ResolvedRow(widget: widget, descriptor: descriptor, data: data)
         }
     }
