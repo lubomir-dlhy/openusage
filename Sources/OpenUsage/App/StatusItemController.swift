@@ -28,6 +28,8 @@ final class StatusItemController: NSObject {
     private let container: AppContainer
     private let updater: UpdaterController
     private let statusItem: NSStatusItem
+    /// Owns the menu-bar strip render loop (created in `init` once the status button exists).
+    private var imageUpdater: StatusItemImageUpdater?
     private let panel: MenuBarPanel
     private let hostingController: NSHostingController<AnyView>
     /// The panel's backdrop: an opaque tray by default, swapped to a behind-window vibrancy view when
@@ -97,7 +99,10 @@ final class StatusItemController: NSObject {
 
         configurePanel()
         configureStatusItem()
-        updateButtonImage()
+        imageUpdater = StatusItemImageUpdater(container: container) { [weak self] image in
+            self?.statusItem.button?.image = image
+        }
+        imageUpdater?.update()
         applyTransparency()
 
         appearanceObserver = NotificationCenter.default.addObserver(
@@ -202,49 +207,6 @@ final class StatusItemController: NSObject {
         // Left-click toggles the popover; right-click (or control-click) drops the context menu.
         // Both arrive through `statusButtonClicked`, which branches on the triggering event.
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-    }
-
-    // MARK: - Status item image
-
-    /// Coalesces re-render requests: a burst of snapshot writes (a multi-provider refresh pass) must
-    /// produce ~one re-render, not O(writes) MainActor Task hops + ImageRenderer passes. `nil` when idle.
-    private var pendingRenderTask: Task<Void, Never>?
-
-    /// Re-renders the menu-bar strip whenever anything it reads changes (pins, live data, meter
-    /// style, menu-bar style). `withObservationTracking`'s `onChange` is one-shot, so each render
-    /// re-arms it. The re-arm is debounced (see `scheduleButtonImageUpdate`).
-    private func updateButtonImage() {
-        let image = withObservationTracking {
-            renderButtonImage()
-        } onChange: { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.scheduleButtonImageUpdate()
-            }
-        }
-        statusItem.button?.image = image
-    }
-
-    /// Debounce the re-render so a refresh-storm burst of snapshot writes collapses into a single
-    /// render once the burst settles, instead of one render per write — the feedback loop that can
-    /// starve the MainActor and drop the status item (the "menu bar disappears" failure mode).
-    private func scheduleButtonImageUpdate() {
-        pendingRenderTask?.cancel()
-        pendingRenderTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(50))
-            guard !Task.isCancelled else { return }
-            self?.updateButtonImage()
-        }
-    }
-
-    /// The pinned-metrics strip in the chosen style, or the app icon when nothing is pinned.
-    private func renderButtonImage() -> NSImage {
-        let content = MenuBarContentBuilder.build(
-            groups: container.layout.pinnedGroups,
-            data: { container.dataStore.data(for: $0) }
-        )
-        return MenuBarStripRenderer.image(for: content, style: container.layout.menuBarStyle)
-            ?? MenuBarIcon.image
-            ?? MenuBarStripRenderer.fallbackIcon
     }
 
     // MARK: - Transparency
