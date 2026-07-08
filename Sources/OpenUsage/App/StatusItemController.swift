@@ -304,17 +304,18 @@ final class StatusItemController: NSObject {
             AppLog.error(.statusItem, "Cannot show panel: status item has no button")
             return
         }
+        let buttonRectOnScreen = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        // Record the display before changing the visibility signal. That signal makes SwiftUI
+        // immediately clamp the measured height; without the display anchor the clamp falls back to
+        // the fixed opening guess, making large and small displays open at the same height.
+        heightController.prepareForOpening(below: buttonRectOnScreen)
         // Mark the popover on-screen before laying out, so the egg's animation loops mount their
         // `TimelineView` clocks in time for the first displayed frame. Read by the SwiftUI egg via
         // `\.popoverIsVisible`; a closed popover keeps the loops unmounted, so a left-on egg costs no CPU.
         container.transparency.setPopoverShown(true)
 
-        heightController.beginOpening()
         // Lay the content out first so the panel opens at the right size (no first-frame flash).
         hostingController.view.layoutSubtreeIfNeeded()
-
-        let buttonRectOnScreen = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
-        heightController.positionForOpening(below: buttonRectOnScreen)
 
         // `canBecomeKey` + `.nonactivatingPanel` makes this key without activating the app — no
         // activation race, so the dashboard receives keys on the first try.
