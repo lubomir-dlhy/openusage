@@ -1,63 +1,38 @@
 import SwiftUI
 import Observation
 
-/// The screen showing inside the menu-bar popover. Customize and Settings replace the dashboard
-/// in place (the popover has no window stack); Esc backs out to the dashboard first.
-enum PopoverScreen: Hashable, Sendable {
-    case dashboard
-    case customize
-    case settings
-
-    /// Left-to-right order for the popover's horizontal screen-switch slide: the dashboard is home on
-    /// the left, with Customize and Settings to its right. The slide reads its direction from these
-    /// ranks — a higher-ranked target enters from the trailing edge, a lower one from the leading edge.
-    var slideRank: Int {
-        switch self {
-        case .dashboard: 0
-        case .customize: 1
-        case .settings: 2
-        }
-    }
-}
-
 /// Mutable layout: which widgets are enabled, provider order, and each provider's metric order.
 /// `placed` is the enabled set (with stable widget ids); `metricOrderByProvider` is the user's custom order.
 @MainActor
 @Observable
 final class LayoutStore {
     var placed: [PlacedWidget]
-    /// Which in-popover screen is showing. Lives here (not per-view state) so the footer buttons,
-    /// the Esc handler, and the popover-closed reset all drive the same mode.
-    var screen = PopoverScreen.dashboard {
-        didSet {
-            guard screen != oldValue else { return }
-            // Recorded synchronously with the change — not via SwiftUI's `onChange`, which fires a
-            // frame later and would let the popover paint the destination before the slide begins.
-            // DashboardView reads these on its very next render to slide in from the screen being left.
-            screenSlideFrom = oldValue
-            screenSlideID += 1
-            // Leaving Customize drops the L2 detail selection so reopening Customize shows the list,
-            // never a stranded detail screen. The popover-closed reset sets `screen = .dashboard`, so
-            // this also covers close/reopen.
-            if screen != .customize { customizeProviderID = nil }
-        }
+
+    /// In-popover navigation (screen, Customize master/detail, screen-switch slide). Its own store so
+    /// screen routing isn't tangled with layout state; the `screen`/`isEditing`/`customizeProviderID`/
+    /// `screenSlide*` surface below forwards to it, so existing call sites are unchanged. Private so the
+    /// forwarding surface stays the ONLY spelling — two live paths to the same state invites drift.
+    private let navigation = PopoverNavigationStore()
+
+    /// Which in-popover screen is showing. Drives the footer buttons, the Esc handler, and the
+    /// popover-closed reset alike.
+    var screen: PopoverScreen {
+        get { navigation.screen }
+        set { navigation.screen = newValue }
     }
-    /// Supports DashboardView's horizontal screen-switch slide: the screen being left, plus a counter
-    /// that ticks on every switch so the view can detect and animate each transition. UI-only; not persisted.
-    private(set) var screenSlideFrom = PopoverScreen.dashboard
-    private(set) var screenSlideID = 0
-    /// Whether the Customize screen (per-provider metric toggles + reorder) is showing — a bridge
-    /// over `screen` for the many call sites that think in terms of edit mode.
+    /// The screen being left plus a per-switch counter, for DashboardView's horizontal slide.
+    var screenSlideFrom: PopoverScreen { navigation.screenSlideFrom }
+    var screenSlideID: Int { navigation.screenSlideID }
+    /// Whether the Customize screen is showing — a bridge over `screen` for edit-mode call sites.
     var isEditing: Bool {
-        get { screen == .customize }
-        set { screen = newValue ? .customize : .dashboard }
+        get { navigation.isEditing }
+        set { navigation.isEditing = newValue }
     }
-    /// The provider whose Customize detail (L2) is showing. nil shows the provider list (L1); a set id
-    /// shows that provider's metric sections and API key. UI-only (not persisted): transient navigation
-    /// like `draggingID`, cleared when leaving Customize (see `screen`'s didSet) and on popover close
-    /// (DashboardView resets `screen` to `.dashboard`). Kept separate from `expandedProviderIDs` —
-    /// that's the dashboard caret, unrelated to this master/detail route.
-    var customizeProviderID: String?
+    /// The provider whose Customize detail (L2) is showing (nil shows the L1 list).
+    var customizeProviderID: String? {
+        get { navigation.customizeProviderID }
+        set { navigation.customizeProviderID = newValue }
+    }
     /// Placed widget being drag-reordered (transient). `PlacedWidget.id`, never persisted.
     var draggingID: UUID?
     /// Persisted provider display order (provider IDs). Drives both the dashboard groups and the
@@ -83,34 +58,33 @@ final class LayoutStore {
     /// stay open across popover closes and app restarts.
     private(set) var expandedProviderIDs: Set<String>
 
-    /// Transient explanation for a denied pin attempt (the WhatsApp-style "you can only pin N chats"
-    /// feedback). Set by `notePinDenied`, cleared automatically a few seconds later; the popover footer
-    /// renders it in place of the pin counter. Never persisted.
-    private(set) var pinLimitNotice: String?
-    /// Bumped on every denied pin click so the footer notice plays its deny shake each time — including
-    /// repeated clicks while the notice is already showing (where the text itself doesn't change).
-    private(set) var pinNoticeShakeTrigger = 0
-    private var pinNoticeClearTask: Task<Void, Never>?
+    /// The three transient popover pills, each an auto-clearing `TransientNotice` (was three copy-pasted
+    /// value+trigger+clearTask machines). The public `pinLimitNotice`/`shareConfirmation`/
+    /// `customizationNotice` surface below forwards to these, so call sites are unchanged.
+    private let pinNotice = TransientNotice<String?>(clearedValue: nil, timeout: .seconds(3))
+    private let shareNotice = TransientNotice<Bool>(clearedValue: false, timeout: .seconds(2.5))
+    private let customizeNotice = TransientNotice<CustomizationNoticeContent?>(clearedValue: nil, timeout: .seconds(2.5))
 
-    /// Transient confirmation that a provider's screenshot was copied to the clipboard — drives the
-    /// floating "Copied to clipboard" pill above the footer. Set by `presentShareConfirmation`,
-    /// cleared automatically a couple of seconds later. Never persisted.
-    private(set) var shareConfirmation = false
-    /// Bumped on every successful share so the pill replays its pop-in even when the same provider is
-    /// copied twice in a row (the pill's text doesn't change, so without this it wouldn't re-animate).
-    private(set) var shareConfirmationTrigger = 0
-    private var shareConfirmationClearTask: Task<Void, Never>?
+    /// Transient explanation for a denied pin attempt; the popover footer renders it in place of the pin
+    /// counter. Set by `notePinDenied`, auto-cleared a few seconds later.
+    var pinLimitNotice: String? { pinNotice.value }
+    /// Bumped on every denied pin click so the footer notice plays its deny shake each time.
+    var pinNoticeShakeTrigger: Int { pinNotice.trigger }
 
-    /// Transient in-Customize notice that drives the floating pill above the Customize content (e.g.
-    /// "Starred for menu bar", or the orange "Up to 2 stars per provider" denial). Set by
-    /// `presentCustomizationNotice`, cleared automatically after a couple of seconds. Never persisted;
-    /// cleared on popover close via `clearCustomizationNotice`.
-    private(set) var customizationNotice: String?
-    /// The notice's tone: `.positive` (green checkmark, success) or `.notice` (orange, the cap denial).
-    private(set) var customizationNoticeTone: CustomizationNoticeTone = .positive
+    /// Transient "Copied to clipboard" confirmation for the floating pill above the footer.
+    var shareConfirmation: Bool { shareNotice.value }
+    /// Bumped on every successful share so the pill replays its pop-in even on a repeat copy.
+    var shareConfirmationTrigger: Int { shareNotice.trigger }
+
+    /// Transient in-Customize notice (e.g. "Starred for menu bar", or the orange cap denial).
+    var customizationNotice: String? { customizeNotice.value?.message }
+    /// The notice's tone: `.positive` (green checkmark) or `.notice` (orange denial). Falls back to
+    /// `.positive` once cleared (tone is only read while `customizationNotice` is non-nil, so the
+    /// snap-back is unobservable — message and tone now clear atomically, which the old split state
+    /// machine couldn't guarantee).
+    var customizationNoticeTone: CustomizationNoticeTone { customizeNotice.value?.tone ?? .positive }
     /// Bumped on every present so the pill replays its pop-in even when the same notice repeats.
-    private(set) var customizationNoticeTrigger = 0
-    private var customizationNoticeClearTask: Task<Void, Never>?
+    var customizationNoticeTrigger: Int { customizeNotice.trigger }
 
     /// Bounded, app-wide undo stack for layout customization (remove/add a metric, reorder metrics or
     /// providers, pin/unpin, move across the expand caret). UI-only state (not persisted): undo is a
@@ -123,9 +97,10 @@ final class LayoutStore {
 
     /// Menu-bar display style (Text strip vs. compact Bars). Persisted; defaults to `.text`.
     var menuBarStyle: MenuBarStyle {
-        didSet { defaults.set(menuBarStyle.rawValue, forKey: menuBarStyleKey) }
+        didSet { persistence.saveMenuBarStyle(menuBarStyle) }
     }
 
+<<<<<<< HEAD
     private var registry: WidgetRegistry
     private let defaults: UserDefaults
     private let storageKey: String
@@ -137,8 +112,11 @@ final class LayoutStore {
     private let expandOnEnableKey: String
     private let expandedProvidersKey: String
     private let menuBarStyleKey: String
+=======
+    private let registry: WidgetRegistry
+    private let persistence: LayoutPersistence
+>>>>>>> upstream/main
     private let defaultMetricIDs: [String]
-    private let migrationBaselineMetricIDs: [String]
     private let defaultPinnedMetricIDs: [String]
     private let defaultExpandedMetricIDs: [String]
     private var defaultExpandedOnEnableIDs: Set<String>
@@ -165,127 +143,36 @@ final class LayoutStore {
         let defaultExpandedMetricIDs = DefaultLayout.expanded(defaultExpandedMetricIDs, forAccountIDs: accountIDs)
 
         self.registry = registry
-        self.defaults = defaults
-        self.storageKey = storageKey
-        self.providerOrderKey = "\(storageKey).providerOrder"
-        self.metricOrderKey = "\(storageKey).metricOrderByProvider"
-        self.seededDefaultsKey = "\(storageKey).seededDefaults"
-        self.pinsKey = "\(storageKey).menuBarPins"
-        self.expandedMetricsKey = "\(storageKey).expandedMetrics"
-        self.expandOnEnableKey = "\(storageKey).expandOnEnable"
-        self.expandedProvidersKey = "\(storageKey).expandedProviders"
-        self.menuBarStyleKey = "\(storageKey).menuBarStyle"
+        let persistence = LayoutPersistence(defaults: defaults, storageKey: storageKey)
+        self.persistence = persistence
         self.defaultMetricIDs = defaultMetricIDs
-        self.migrationBaselineMetricIDs = migrationBaselineMetricIDs
         self.defaultPinnedMetricIDs = defaultPinnedMetricIDs
         self.defaultExpandedMetricIDs = defaultExpandedMetricIDs
         self.isProviderEnabled = isProviderEnabled
 
-        let hasStoredLayout = defaults.data(forKey: storageKey) != nil
-        var initialPlaced: [PlacedWidget]
-        if let saved = Self.decodeStored([PlacedWidget].self, from: defaults, forKey: storageKey) {
-            initialPlaced = saved.filter { registry.descriptor(id: $0.descriptorID) != nil }
-        } else {
-            initialPlaced = defaultMetricIDs
-                .filter { registry.descriptor(id: $0) != nil }
-                .map { PlacedWidget(descriptorID: $0) }
-        }
-        let seededResult = Self.seedNewDefaultMetrics(
-            into: initialPlaced,
-            defaults: defaults,
-            key: seededDefaultsKey,
-            hasStoredLayout: hasStoredLayout,
+        let initial = LayoutBootstrap.load(
             registry: registry,
-            defaultMetricIDs: defaultMetricIDs,
-            migrationBaselineMetricIDs: migrationBaselineMetricIDs
+            persistence: persistence,
+            defaults: LayoutDefaultSet(
+                metricIDs: defaultMetricIDs,
+                migrationBaselineMetricIDs: migrationBaselineMetricIDs,
+                pinnedMetricIDs: defaultPinnedMetricIDs,
+                expandedMetricIDs: defaultExpandedMetricIDs
+            )
         )
-        initialPlaced = seededResult.placed
-        placed = initialPlaced
+        placed = initial.placed
+        providerOrder = initial.providerOrder
+        metricOrderByProvider = initial.metricOrderByProvider
+        pinnedMetricIDs = initial.pinnedMetricIDs
+        expandedMetricIDs = initial.expandedMetricIDs
+        expandedProviderIDs = initial.expandedProviderIDs
+        defaultExpandedOnEnableIDs = initial.defaultExpandedOnEnableIDs
+        menuBarStyle = initial.menuBarStyle
 
-        let initialProviderOrder: [String]
-        if let saved = Self.decodeStored([String].self, from: defaults, forKey: providerOrderKey) {
-            initialProviderOrder = saved
-        } else {
-            initialProviderOrder = registry.providers.map(\.id)
-        }
-        providerOrder = initialProviderOrder
-
-        let initialMetricOrder: [String: [String]]
-        if let saved = Self.decodeStored([String: [String]].self, from: defaults, forKey: metricOrderKey) {
-            initialMetricOrder = Self.normalizedMetricOrder(saved, registry: registry)
-        } else {
-            initialMetricOrder = Self.defaultMetricOrder(registry: registry)
-        }
-        metricOrderByProvider = initialMetricOrder
-
-        // Seed default pins on first launch (no saved value) so the menu bar shows real numbers out of
-        // the box; a saved value — including an empty one the user produced by unpinning — is respected.
-        if let savedPins = defaults.stringArray(forKey: pinsKey) {
-            pinnedMetricIDs = Set(savedPins.filter { registry.descriptor(id: $0) != nil })
-        } else {
-            pinnedMetricIDs = Set(defaultPinnedMetricIDs.filter { registry.descriptor(id: $0) != nil })
-        }
-
-        // Seed default expanded membership only on a genuinely fresh launch. An existing layout with no
-        // saved value predates this feature, so its metrics stay always-shown — never silently tuck a
-        // metric the user already lived with behind a new caret.
-        var shouldPersistExpanded = false
-        if let savedExpanded = defaults.stringArray(forKey: expandedMetricsKey) {
-            expandedMetricIDs = Set(savedExpanded.filter { registry.descriptor(id: $0) != nil })
-        } else if hasStoredLayout {
-            expandedMetricIDs = []
-        } else {
-            expandedMetricIDs = Set(defaultExpandedMetricIDs.filter { registry.descriptor(id: $0) != nil })
-            shouldPersistExpanded = true
-        }
-        // Finalized below once `expandedMetricIDs` is settled; seeded here so every stored property is
-        // initialized before the reads that compute the real value.
-        defaultExpandedOnEnableIDs = []
-        menuBarStyle = defaults.enumValue(forKey: menuBarStyleKey, default: .text)
-
-        if let savedExpandedProviders = defaults.stringArray(forKey: expandedProvidersKey) {
-            expandedProviderIDs = Set(savedExpandedProviders.filter { registry.provider(id: $0) != nil })
-        } else {
-            expandedProviderIDs = []
-        }
-        // A metric added to the defaults since the user's last layout (auto-enabled above by
-        // `seedNewDefaultMetrics`) is brand new to them — so when it's a default-expanded metric, tuck it
-        // below the caret now instead of surfacing it above the fold. Without this, an existing layout's
-        // saved (or empty) expanded set never learns about the new metric and it lands always-shown. Only
-        // newly-placed ids qualify, so a metric the user already lived with is never silently hidden.
-        let newlyExpanded = Set(seededResult.newlyPlaced)
-            .intersection(defaultExpandedMetricIDs)
-            .filter { registry.descriptor(id: $0) != nil }
-        if !newlyExpanded.isSubset(of: expandedMetricIDs) {
-            expandedMetricIDs.formUnion(newlyExpanded)
-            shouldPersistExpanded = true
-        }
-
-        // A default-expanded metric that is neither already an expanded member nor placed enters below
-        // the caret the first time the user enables it. This queue is *persisted*, not recomputed each
-        // launch: a saved set is loaded as-is (only re-filtered for metrics that have since been placed
-        // or expanded), so a metric the user explicitly moved above the fold while disabled — which
-        // consumes its queue entry — stays above the fold after a relaunch instead of being resurrected.
-        // It's seeded once (no saved value yet) from the default-expanded metrics not already shown, which
-        // is what carries a legacy layout's optional metrics (e.g. `cursor.requests`) below the caret.
-        let placedIDs = Set(placed.map(\.descriptorID))
-        let expandedNow = expandedMetricIDs
-        let isExpandOnEnableCandidate: (String) -> Bool = { [registry] id in
-            registry.descriptor(id: id) != nil && !expandedNow.contains(id) && !placedIDs.contains(id)
-        }
-        if let savedOnEnable = defaults.stringArray(forKey: expandOnEnableKey) {
-            defaultExpandedOnEnableIDs = Set(savedOnEnable.filter(isExpandOnEnableCandidate))
-        } else {
-            defaultExpandedOnEnableIDs = Set(defaultExpandedMetricIDs.filter(isExpandOnEnableCandidate))
-            persistExpandOnEnable()
-        }
-
-        if shouldPersistExpanded { persistExpanded() }
-
-        if seededResult.shouldPersistSeededDefaults {
-            persistSeededDefaults(seededResult.seededDefaults)
-        }
-        syncPlacedOrder(persistChanges: seededResult.shouldPersistPlaced)
+        if initial.shouldPersistExpandOnEnable { persistExpandOnEnable() }
+        if initial.shouldPersistExpanded { persistExpanded() }
+        if let seededDefaults = initial.seededDefaultsToPersist { persistSeededDefaults(seededDefaults) }
+        syncPlacedOrder(persistChanges: initial.shouldPersistPlaced)
     }
 
     func provider(id: String) -> Provider? { registry.provider(id: id) }
@@ -360,6 +247,23 @@ final class LayoutStore {
 
     func isMetricEnabled(_ descriptorID: String) -> Bool {
         placed.contains { $0.descriptorID == descriptorID }
+    }
+
+    /// Whether any enabled provider ships the local spend tiles — the capability gate for the
+    /// Total Spend card. Keyed off the registry's descriptors, not off refreshed data, so the card
+    /// can show its "No spend data" state on a fresh morning instead of vanishing.
+    var hasSpendCapableProvider: Bool {
+        !spendCapableProviders.isEmpty
+    }
+
+    /// Enabled providers that ship the local spend tiles (`WidgetDescriptor.spendTiles`), in the
+    /// user's provider order — the exact set the Total Spend card aggregates. Deliberately *not*
+    /// `displayGroups`: a provider whose every metric is hidden in Customize still spends money and
+    /// must still count, and look-alike dollar rows from other providers (OpenRouter's API-spend
+    /// "Today") must not.
+    var spendCapableProviders: [Provider] {
+        let capableIDs = Set(registry.descriptors.filter(\.isSpendTile).map(\.providerID))
+        return orderedProviders().filter { capableIDs.contains($0.id) && isProviderEnabled($0.id) }
     }
 
     // MARK: - Provider grouping
@@ -463,10 +367,6 @@ final class LayoutStore {
         return ordered.filter { !expandedMetricIDs.contains($0) }
             + [dividerID]
             + ordered.filter { expandedMetricIDs.contains($0) }
-    }
-
-    func isMetricExpanded(_ descriptorID: String) -> Bool {
-        expandedMetricIDs.contains(descriptorID)
     }
 
     func isProviderExpanded(_ providerID: String) -> Bool {
@@ -643,39 +543,6 @@ final class LayoutStore {
         return true
     }
 
-    /// Move a metric across the "Shown on expand" divider without a drag — the per-row control in
-    /// Customize. Moving into the expanded section parks it as the first expanded metric; moving back
-    /// parks it as the last always-shown metric, so the stored order stays grouped the way it renders.
-    /// Returns whether anything changed.
-    @discardableResult
-    func setMetricExpanded(_ descriptorID: String, _ expanded: Bool) -> Bool {
-        recordingUndoStep { setMetricExpandedImpl(descriptorID, expanded) }
-    }
-
-    private func setMetricExpandedImpl(_ descriptorID: String, _ expanded: Bool) -> Bool {
-        guard let providerID = registry.descriptor(id: descriptorID)?.providerID else { return false }
-        guard expandedMetricIDs.contains(descriptorID) != expanded else { return false }
-        if defaultExpandedOnEnableIDs.remove(descriptorID) != nil { persistExpandOnEnable() }
-
-        let ordered = metricOrder(for: providerID)
-        guard ordered.contains(descriptorID) else { return false }
-
-        if expanded {
-            expandedMetricIDs.insert(descriptorID)
-        } else {
-            expandedMetricIDs.remove(descriptorID)
-        }
-        // Reinsert the moved metric right at the divider — last always-shown going up, first expanded
-        // going down — which is the same position in the combined sequence either way.
-        let alwaysShown = ordered.filter { $0 != descriptorID && !expandedMetricIDs.contains($0) }
-        let expandedIDs = ordered.filter { $0 != descriptorID && expandedMetricIDs.contains($0) }
-        metricOrderByProvider[providerID] = alwaysShown + [descriptorID] + expandedIDs
-        persistMetricOrder()
-        persistExpanded()
-        syncPlacedOrder()
-        return true
-    }
-
     /// Apply a provider metric order that includes one visual divider sentinel. Metrics before the
     /// sentinel become always-shown; metrics after it become shown-on-expand. This is the clean drag
     /// model for Customize: the divider participates in target geometry like a row, but persistence
@@ -833,60 +700,34 @@ final class LayoutStore {
     /// with a deny shake on every attempt).
     func notePinDenied(_ descriptorID: String) {
         guard let reason = pinDenialReason(descriptorID) else { return }
-        pinLimitNotice = reason
-        pinNoticeShakeTrigger += 1
-        pinNoticeClearTask?.cancel()
-        pinNoticeClearTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled else { return }
-            self?.pinLimitNotice = nil
-        }
+        pinNotice.present(reason)
     }
 
     /// Record a successful "Share Screenshot" copy so the floating "Copied to clipboard" pill can
     /// confirm it. Shown for a couple of seconds then cleared — the success-side counterpart to
     /// `notePinDenied`'s transient denial notice, with the same lifecycle.
     func presentShareConfirmation() {
-        shareConfirmation = true
-        shareConfirmationTrigger += 1
-        shareConfirmationClearTask?.cancel()
-        shareConfirmationClearTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            self?.shareConfirmation = false
-        }
+        shareNotice.present(true)
     }
 
     /// Clear any showing "Copied to clipboard" confirmation and cancel its auto-clear task. Called when
     /// the popover closes so a pill mid-countdown can't reappear stale on the next open — the timer is
     /// otherwise the only clearer, and the layout store outlives the popover.
     func clearShareConfirmation() {
-        shareConfirmation = false
-        shareConfirmationClearTask?.cancel()
-        shareConfirmationClearTask = nil
+        shareNotice.clear()
     }
 
     /// Show a transient in-Customize pill (the floating confirmation above the Customize content).
     /// `tone` picks the green success style or the orange denial style. Auto-clears after a couple of
     /// seconds; also cleared on popover close via `clearCustomizationNotice`.
     func presentCustomizationNotice(_ message: String, tone: CustomizationNoticeTone = .positive) {
-        customizationNotice = message
-        customizationNoticeTone = tone
-        customizationNoticeTrigger += 1
-        customizationNoticeClearTask?.cancel()
-        customizationNoticeClearTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            self?.customizationNotice = nil
-        }
+        customizeNotice.present(CustomizationNoticeContent(message: message, tone: tone))
     }
 
     /// Clear any showing Customize pill and cancel its auto-clear task. Called when the popover closes
     /// so a pill mid-countdown can't reappear stale on the next open.
     func clearCustomizationNotice() {
-        customizationNotice = nil
-        customizationNoticeClearTask?.cancel()
-        customizationNoticeClearTask = nil
+        customizeNotice.clear()
     }
 
     /// Pin or unpin a metric for the menu bar. Pinning is a no-op when it would exceed a cap, so callers
@@ -924,25 +765,20 @@ final class LayoutStore {
         }
     }
 
-    /// Flattened pinned descriptor ids in display order.
-    var pinnedDescriptorIDsInOrder: [String] {
-        pinnedGroups.flatMap { $0.metrics.map(\.id) }
-    }
-
     private func persistPins() {
-        defaults.set(Array(pinnedMetricIDs), forKey: pinsKey)
+        persistence.savePins(pinnedMetricIDs)
     }
 
     private func persistExpanded() {
-        defaults.set(Array(expandedMetricIDs), forKey: expandedMetricsKey)
+        persistence.saveExpandedMetrics(expandedMetricIDs)
     }
 
     private func persistExpandOnEnable() {
-        defaults.set(Array(defaultExpandedOnEnableIDs), forKey: expandOnEnableKey)
+        persistence.saveExpandOnEnable(defaultExpandedOnEnableIDs)
     }
 
     private func persistExpandedProviders() {
-        defaults.set(Array(expandedProviderIDs), forKey: expandedProvidersKey)
+        persistence.saveExpandedProviders(expandedProviderIDs)
     }
 
     // MARK: - Mutations
@@ -972,7 +808,7 @@ final class LayoutStore {
             .map { PlacedWidget(descriptorID: $0) }
         providerOrder = registry.providers.map(\.id)
         persistProviderOrder()
-        metricOrderByProvider = Self.defaultMetricOrder(registry: registry)
+        metricOrderByProvider = LayoutOrdering.defaultMetricOrder(registry: registry)
         persistMetricOrder()
         pinnedMetricIDs = Set(defaultPinnedMetricIDs.filter { registry.descriptor(id: $0) != nil })
         persistPins()
@@ -982,7 +818,7 @@ final class LayoutStore {
         persistExpandOnEnable()
         expandedProviderIDs = []
         persistExpandedProviders()
-        persistSeededDefaults(Set(Self.knownMetricIDs(defaultMetricIDs, registry: registry)))
+        persistSeededDefaults(Set(LayoutOrdering.knownMetricIDs(defaultMetricIDs, registry: registry)))
         persist()
     }
 
@@ -1039,111 +875,25 @@ final class LayoutStore {
     }
 
     private func persist() {
-        persistEncodable(placed, forKey: storageKey)
+        persistence.savePlaced(placed)
     }
 
     private func persistProviderOrder() {
-        persistEncodable(providerOrder, forKey: providerOrderKey)
+        persistence.saveProviderOrder(providerOrder)
     }
 
     private func persistMetricOrder() {
-        persistEncodable(metricOrderByProvider, forKey: metricOrderKey)
+        persistence.saveMetricOrder(metricOrderByProvider)
     }
 
     private func persistSeededDefaults(_ ids: Set<String>) {
-        persistEncodable(Array(ids).sorted(), forKey: seededDefaultsKey)
-    }
-
-    /// Fail loudly: a swallowed encode would silently fail to persist a layout change with zero signal,
-    /// contradicting the project's loud-fail rule (and `ProviderSnapshotCache.save` one store over).
-    private func persistEncodable<T: Encodable>(_ value: T, forKey key: String) {
-        do {
-            defaults.set(try JSONEncoder().encode(value), forKey: key)
-        } catch {
-            AppLog.warn(.config, "failed to persist layout '\(key)': \(error.localizedDescription)")
-        }
-    }
-
-    /// Decode a persisted value, distinguishing "no data" (first launch — silent nil) from "present but
-    /// undecodable" (schema drift / corruption — warn loudly, then nil so init reseeds the default).
-    /// A silent reseed of the user's customized layout is exactly the invisible state loss the rule forbids.
-    private static func decodeStored<T: Decodable>(_ type: T.Type, from defaults: UserDefaults, forKey key: String) -> T? {
-        guard let data = defaults.data(forKey: key) else { return nil }
-        do {
-            return try JSONDecoder().decode(type, from: data)
-        } catch {
-            AppLog.warn(.config, "saved layout '\(key)' failed to decode; reseeding default: \(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    private struct SeededDefaultsResult {
-        let placed: [PlacedWidget]
-        let seededDefaults: Set<String>
-        let shouldPersistPlaced: Bool
-        let shouldPersistSeededDefaults: Bool
-        /// Metric ids newly auto-enabled this launch (a default added since the user's last layout).
-        /// Brand-new metrics the user never lived with, so a default-expanded one among them can be
-        /// tucked below the caret without the "don't silently hide a metric they already saw" concern.
-        let newlyPlaced: [String]
-    }
-
-    private static func seedNewDefaultMetrics(
-        into placed: [PlacedWidget],
-        defaults: UserDefaults,
-        key: String,
-        hasStoredLayout: Bool,
-        registry: WidgetRegistry,
-        defaultMetricIDs: [String],
-        migrationBaselineMetricIDs: [String]
-    ) -> SeededDefaultsResult {
-        let knownDefaults = knownMetricIDs(defaultMetricIDs, registry: registry)
-        let knownDefaultSet = Set(knownDefaults)
-        let hasStoredSeededDefaults = defaults.data(forKey: key) != nil
-
-        let seededDefaults: Set<String>
-        var shouldPersistSeededDefaults = false
-        if let saved = decodeStored([String].self, from: defaults, forKey: key) {
-            seededDefaults = Set(knownMetricIDs(saved, registry: registry))
-            shouldPersistSeededDefaults = seededDefaults != Set(saved)
-        } else if hasStoredLayout {
-            seededDefaults = Set(knownMetricIDs(migrationBaselineMetricIDs, registry: registry))
-            shouldPersistSeededDefaults = true
-        } else {
-            seededDefaults = knownDefaultSet
-            shouldPersistSeededDefaults = true
-        }
-
-        let placedIDs = Set(placed.map(\.descriptorID))
-        let toAdd = knownDefaults.filter { !seededDefaults.contains($0) && !placedIDs.contains($0) }
-        let nextPlaced = placed + toAdd.map { PlacedWidget(descriptorID: $0) }
-        let nextSeededDefaults = seededDefaults.union(knownDefaultSet)
-        shouldPersistSeededDefaults = shouldPersistSeededDefaults
-            || !hasStoredSeededDefaults
-            || nextSeededDefaults != seededDefaults
-
-        return SeededDefaultsResult(
-            placed: nextPlaced,
-            seededDefaults: nextSeededDefaults,
-            shouldPersistPlaced: !toAdd.isEmpty,
-            shouldPersistSeededDefaults: shouldPersistSeededDefaults,
-            newlyPlaced: toAdd
-        )
-    }
-
-    private static func knownMetricIDs(_ ids: [String], registry: WidgetRegistry) -> [String] {
-        var seen = Set<String>()
-        return ids.filter { id in
-            guard registry.descriptor(id: id) != nil, !seen.contains(id) else { return false }
-            seen.insert(id)
-            return true
-        }
+        persistence.saveSeededDefaults(ids)
     }
 
     private func metricOrder(for providerID: String) -> [String] {
         let valid = registry.descriptors(for: providerID).map(\.id)
         let saved = metricOrderByProvider[providerID] ?? []
-        return Self.normalizedMetricIDs(saved, validIDs: valid)
+        return LayoutOrdering.normalizedMetricIDs(saved, validIDs: valid)
     }
 
     private func syncPlacedOrder(persistChanges: Bool = true) {
@@ -1161,40 +911,6 @@ final class LayoutStore {
         if persistChanges { persist() }
     }
 
-    private static func defaultMetricOrder(registry: WidgetRegistry) -> [String: [String]] {
-        var result: [String: [String]] = [:]
-        for provider in registry.providers {
-            let valid = registry.descriptors(for: provider.id).map(\.id)
-            result[provider.id] = valid
-        }
-        return result
-    }
-
-    private static func normalizedMetricOrder(
-        _ saved: [String: [String]],
-        registry: WidgetRegistry
-    ) -> [String: [String]] {
-        var fallback = defaultMetricOrder(registry: registry)
-        for provider in registry.providers {
-            let valid = registry.descriptors(for: provider.id).map(\.id)
-            if let savedIDs = saved[provider.id] {
-                fallback[provider.id] = normalizedMetricIDs(savedIDs, validIDs: valid)
-            }
-        }
-        return fallback
-    }
-
-    private static func normalizedMetricIDs(_ saved: [String], validIDs: [String]) -> [String] {
-        let validSet = Set(validIDs)
-        var seen = Set<String>()
-        var ordered = saved.filter { id in
-            guard validSet.contains(id), !seen.contains(id) else { return false }
-            seen.insert(id)
-            return true
-        }
-        ordered.append(contentsOf: validIDs.filter { !seen.contains($0) })
-        return ordered
-    }
 }
 
 /// A provider and its placed (visible) widgets, split into the always-shown rows and the ones tucked
@@ -1252,4 +968,10 @@ struct ProviderRow: Identifiable {
 enum CustomizationNoticeTone {
     case positive
     case notice
+}
+
+/// The message + tone carried by the Customize pill's `TransientNotice`, so its two fields clear together.
+struct CustomizationNoticeContent {
+    var message: String
+    var tone: CustomizationNoticeTone
 }

@@ -44,10 +44,17 @@ final class CodexProvider: ProviderRuntime {
             // Model-specific Spark limits (GPT-5.3-Codex-Spark), parsed from `additional_rate_limits`.
             // Declared right after Weekly so they group with the core rate-limit meters; seeded as
             // secondary (below the caret) and unpinned in `DefaultLayout`.
+<<<<<<< HEAD
             .percent(id: "\(provider.id).spark", provider: provider, title: "Spark"),
             .percent(id: "\(provider.id).sparkWeekly", provider: provider, title: "Spark Weekly"),
             .combined(id: "\(provider.id).credits", provider: provider, title: "Extra Usage", metricLabel: "Credits"),
             .values(id: "\(provider.id).rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets"),
+=======
+            .percent(id: "codex.spark", provider: provider, title: "Spark"),
+            .percent(id: "codex.sparkWeekly", provider: provider, title: "Spark Weekly"),
+            .combined(id: "codex.credits", provider: provider, title: "Extra Usage", metricLabel: "Credits"),
+            .values(id: "codex.rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets", traySuffix: "resets", showsResetExpiries: true),
+>>>>>>> upstream/main
             .usageTrend(provider: provider)
         ] + WidgetDescriptor.spendTiles(provider: provider)
     }
@@ -56,7 +63,7 @@ final class CodexProvider: ProviderRuntime {
         // Same sources as `refresh()`: auth.json candidates first, keychain as the fallback. Only a
         // usable access token counts (see `hasUsableAccessToken`) — an API-key-only auth.json can't
         // serve the usage API, so seeding it on would just show an error row.
-        let (fileCandidates, _) = authStore.loadAuthCandidates()
+        let fileCandidates = authStore.loadAuthCandidates()
         if fileCandidates.contains(where: \.hasUsableAccessToken) {
             return true
         }
@@ -65,7 +72,7 @@ final class CodexProvider: ProviderRuntime {
     }
 
     func refresh() async -> ProviderSnapshot {
-        let (fileCandidates, _) = authStore.loadAuthCandidates()
+        let fileCandidates = authStore.loadAuthCandidates()
         var lastFallbackError: Error?
 
         for candidate in fileCandidates {

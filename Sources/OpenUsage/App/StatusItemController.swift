@@ -28,30 +28,27 @@ final class StatusItemController: NSObject {
     private let container: AppContainer
     private let updater: UpdaterController
     private let statusItem: NSStatusItem
+    /// Owns the menu-bar strip render loop. Its apply closure captures the `NSStatusItem` directly
+    /// (which never retains the controller), so this can be a plain non-optional `let`.
+    private let imageUpdater: StatusItemImageUpdater
     private let panel: MenuBarPanel
+    private let heightController: PanelHeightController
+    private lazy var outsideClickMonitor = PanelOutsideClickMonitor(
+        panel: panel,
+        statusItem: statusItem,
+        isMorphing: { [weak self] in self?.heightController.isMorphing ?? false },
+        onInsidePanelClick: { [weak self] in self?.clearStrayFocus() },
+        onDismiss: { [weak self] in self?.hidePanel() }
+    )
     private let hostingController: NSHostingController<AnyView>
     /// The panel's backdrop: an opaque tray by default, swapped to a behind-window vibrancy view when
     /// the transparency style is non-opaque. Built once and toggled, so it can't race the style observer.
     private let backdrop = PopoverBackdropView(cornerRadius: StatusItemController.cornerRadius)
-    /// The screen the status-item button is on, captured on show — used to clamp the saved panel size
-    /// to whatever display the panel is currently opening on.
-    private var anchorScreen: NSScreen?
-    /// Closes the panel on clicks outside it (the panel is non-activating and dismissal is ours to
-    /// implement, the same model the old `.applicationDefined` popover used).
-    private var outsideClickMonitors: [Any] = []
     /// Token for the appearance-change observer; held to follow the documented removal pattern.
     private var appearanceObserver: NSObjectProtocol?
-    /// Panel top-left in screen coords, captured on show. The panel grows downward from here, so the
-    /// top edge stays pinned just under the status-item button as the user resizes it.
-    private var anchorTopLeft: NSPoint?
-
-    /// One width across both densities (matches `DashboardView.popoverWidth`). The panel is a single
-    /// column of metrics, so width is fixed; only height is user-resizable.
-    private static let panelWidth: CGFloat = 320
-    /// Gap between the menu bar and the panel's top edge.
-    private static let topGap: CGFloat = 4
     /// Corner radius of the panel surface; tuned to read like a system menu-bar popover.
     private static let cornerRadius: CGFloat = 13
+<<<<<<< HEAD
     /// Smallest the panel can be — room for the footer plus a single provider card. Kept low so the
     /// auto-fit morph can shrink the panel to match its content instead of showing blank space when
     /// only one or two providers are enabled (#800).
@@ -69,11 +66,20 @@ final class StatusItemController: NSObject {
     /// Fires once the per-frame height stream goes quiet: clears `isMorphing` and persists the settled
     /// per-screen height (the next open's flash-free starting guess).
     private var morphSettleTask: Task<Void, Never>?
+=======
+>>>>>>> upstream/main
 
     init(container: AppContainer, updater: UpdaterController) {
         self.container = container
         self.updater = updater
-        self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        self.statusItem = statusItem
+        // Captures the status item, not `self` — no retain cycle, and no optional property just to
+        // work around `[weak self]` being unavailable before `super.init()`. The button is resolved
+        // lazily at each apply, so a not-yet-configured button is harmless (same as before the split).
+        self.imageUpdater = StatusItemImageUpdater(container: container) { image in
+            statusItem.button?.image = image
+        }
 
         let hosting = NSHostingController(
             rootView: AnyView(
@@ -85,23 +91,29 @@ final class StatusItemController: NSObject {
                     .environment(updater)
             )
         )
-        // The panel is a fixed, user-resizable size — NOT content-sized. The host view fills the
-        // window (its autoresizing mask) and the content scrolls, so switching screens never resizes
-        // the window. That's what removes the resize stutter: the only resize is the user's own drag.
+        // The host view fills the panel. SwiftUI measures each screen and drives the panel height;
+        // content scrolls only when that height reaches the available-screen limit.
         self.hostingController = hosting
 
-        self.panel = MenuBarPanel(
-            contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.defaultPanelHeight),
+        let panel = MenuBarPanel(
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: PanelHeightController.panelWidth,
+                height: PanelHeightController.defaultHeight
+            ),
             styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        self.panel = panel
+        self.heightController = PanelHeightController(panel: panel) { container.layout.screen }
 
         super.init()
 
         configurePanel()
         configureStatusItem()
-        updateButtonImage()
+        imageUpdater.update()
         applyTransparency()
 
         appearanceObserver = NotificationCenter.default.addObserver(
@@ -129,14 +141,7 @@ final class StatusItemController: NSObject {
             self?.showPopover()
         }
 
-        // The panel auto-fits its content: SwiftUI owns one animated height (the single animation
-        // clock) and the panel just follows it. `applyHeight` is the per-frame follower; `clampHeight`
-        // shares the panel's [min, screen-max] clamp so SwiftUI's target matches where the frame lands.
-        MenuBarPopover.applyHeight = { [weak self] height in self?.applyMorphHeight(height) }
-        MenuBarPopover.clampHeight = { [weak self] raw in
-            guard let self else { return raw }
-            return min(max(raw, Self.minPanelHeight), self.maxPanelHeight())
-        }
+        heightController.installBridge()
 
         // Keep the panel open while a native picker (NSOpenPanel) is up; restored when it closes.
         MenuBarPopover.setModalDialogPresented = { [weak self] presented in
@@ -175,9 +180,8 @@ final class StatusItemController: NSObject {
         let host = hostingController.view
         host.translatesAutoresizingMaskIntoConstraints = false
         host.wantsLayer = true
-        // Redraw the SwiftUI content on every step of a live resize instead of stretching the layer's
-        // cached contents (the default `.onSetNeedsDisplay`), which is what made the cards jitter while
-        // dragging the bottom edge.
+        // Redraw the SwiftUI content on every step of a height change instead of stretching the layer's
+        // cached contents (the default `.onSetNeedsDisplay`), which keeps cards steady during a morph.
         host.layerContentsRedrawPolicy = .duringViewResize
         host.layer?.cornerRadius = Self.cornerRadius
         host.layer?.cornerCurve = .continuous
@@ -197,7 +201,7 @@ final class StatusItemController: NSObject {
         ])
 
         // A plain container VC owns the backdrop; the hosting controller is its child so SwiftUI gets
-        // a proper view-controller hierarchy. The panel itself is sized by `applyPanelSize`.
+        // a proper view-controller hierarchy. Panel placement and height live in `heightController`.
         let rootVC = NSViewController()
         rootVC.view = container
         rootVC.addChild(hostingController)
@@ -213,49 +217,6 @@ final class StatusItemController: NSObject {
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
 
-    // MARK: - Status item image
-
-    /// Coalesces re-render requests: a burst of snapshot writes (a multi-provider refresh pass) must
-    /// produce ~one re-render, not O(writes) MainActor Task hops + ImageRenderer passes. `nil` when idle.
-    private var pendingRenderTask: Task<Void, Never>?
-
-    /// Re-renders the menu-bar strip whenever anything it reads changes (pins, live data, meter
-    /// style, menu-bar style). `withObservationTracking`'s `onChange` is one-shot, so each render
-    /// re-arms it. The re-arm is debounced (see `scheduleButtonImageUpdate`).
-    private func updateButtonImage() {
-        let image = withObservationTracking {
-            renderButtonImage()
-        } onChange: { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.scheduleButtonImageUpdate()
-            }
-        }
-        statusItem.button?.image = image
-    }
-
-    /// Debounce the re-render so a refresh-storm burst of snapshot writes collapses into a single
-    /// render once the burst settles, instead of one render per write — the feedback loop that can
-    /// starve the MainActor and drop the status item (the "menu bar disappears" failure mode).
-    private func scheduleButtonImageUpdate() {
-        pendingRenderTask?.cancel()
-        pendingRenderTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(50))
-            guard !Task.isCancelled else { return }
-            self?.updateButtonImage()
-        }
-    }
-
-    /// The pinned-metrics strip in the chosen style, or the app icon when nothing is pinned.
-    private func renderButtonImage() -> NSImage {
-        let content = MenuBarContentBuilder.build(
-            groups: container.layout.pinnedGroups,
-            data: { container.dataStore.data(for: $0) }
-        )
-        return MenuBarStripRenderer.image(for: content, style: container.layout.menuBarStyle)
-            ?? MenuBarIcon.image
-            ?? MenuBarStripRenderer.fallbackIcon
-    }
-
     // MARK: - Transparency
 
     /// True once the launch application has run, so subsequent style changes animate (the first one
@@ -263,7 +224,8 @@ final class StatusItemController: NSObject {
     private var hasAppliedTransparency = false
 
     /// Applies the resolved transparency style to the panel and re-arms on the next change. Mirrors
-    /// `updateButtonImage`'s `withObservationTracking` re-arm (its `onChange` is one-shot). Reads the
+    /// `StatusItemImageUpdater.update()`'s `withObservationTracking` re-arm (its `onChange` is
+    /// one-shot). Reads the
     /// store's `effectiveStyle`, which folds in the persisted toggle, the egg state, and the system
     /// accessibility flags — so this fires whenever any of them changes. Backdrop already exists (it's a
     /// stored property), so the first call from `init` safely sets the initial look.
@@ -367,21 +329,18 @@ final class StatusItemController: NSObject {
             AppLog.error(.statusItem, "Cannot show panel: status item has no button")
             return
         }
+        let buttonRectOnScreen = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        // Record the display before changing the visibility signal. That signal makes SwiftUI
+        // immediately clamp the measured height; without the display anchor the clamp falls back to
+        // the fixed opening guess, making large and small displays open at the same height.
+        heightController.prepareForOpening(below: buttonRectOnScreen)
         // Mark the popover on-screen before laying out, so the egg's animation loops mount their
         // `TimelineView` clocks in time for the first displayed frame. Read by the SwiftUI egg via
         // `\.popoverIsVisible`; a closed popover keeps the loops unmounted, so a left-on egg costs no CPU.
         container.transparency.setPopoverShown(true)
 
-        // Drop any morph heights still queued from a previous session so a quick reopen during an old
-        // spring can't apply a stale height to this fresh open.
-        PanelHeightBridge.invalidate()
         // Lay the content out first so the panel opens at the right size (no first-frame flash).
         hostingController.view.layoutSubtreeIfNeeded()
-
-        let buttonRectOnScreen = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
-        anchorScreen = NSScreen.screens.first { $0.frame.intersects(buttonRectOnScreen) } ?? NSScreen.main
-        anchorTopLeft = clampedTopLeft(below: buttonRectOnScreen, width: Self.panelWidth)
-        applyPanelSize()
 
         // `canBecomeKey` + `.nonactivatingPanel` makes this key without activating the app — no
         // activation race, so the dashboard receives keys on the first try.
@@ -392,7 +351,7 @@ final class StatusItemController: NSObject {
         // monitor, not first responder), and Tab from here focuses the first control as expected.
         clearStrayFocus()
         button.highlight(true)
-        startOutsideClickMonitors()
+        outsideClickMonitor.start()
     }
 
     private func hidePanel() {
@@ -400,35 +359,22 @@ final class StatusItemController: NSObject {
         // no hover-exit and would orphan on screen — clear it here, the one chokepoint every close hits.
         // The Usage Trend hover popover is on the same survives-orderOut footing, so dismiss it too.
         HoverTooltips.dismissAll()
-        TrendHoverState.dismissAll()
-        ModelHoverState.dismissAll()
+        HoverPopoverState.dismissAll()
         // Same survival problem for keyboard focus: a clicked plain-styled control (a row's Used/Left
         // or reset toggle) stays first responder, so its focus ring would reopen with the popover as a
         // stray blue outline. Drop it on close so every reopen starts unfocused.
         clearStrayFocus()
-        // Persist the closing screen's height NOW, while `container.layout.screen` is still the screen
-        // being shown (the visibility reset that flips it back to dashboard runs later, off the occlusion
-        // notification). `scheduleMorphSettle` only persists after 120ms of quiet and bails once the panel
-        // is hidden, so without this a close right after a resize/screen-switch would never save the new
-        // height and the next open of that screen would use a stale flash-free guess.
-        if panel.isVisible {
-            PanelHeightStore.save(panel.frame.height, for: container.layout.screen)
-        }
+        // Save while the closing screen is still current; the authoritative SwiftUI close reset runs
+        // afterward.
+        heightController.saveBeforeClosing()
         // Closing: drop the on-screen flag so the egg's animation loops unmount their `TimelineView`
         // clocks and stop ticking — the whole point of the gate (no CPU while the egg is left on but the
         // popover is hidden). This is the authoritative hide signal, flipped synchronously with `orderOut`.
         container.transparency.setPopoverShown(false)
         panel.orderOut(nil)
-        stopOutsideClickMonitors()
+        outsideClickMonitor.stop()
         statusItem.button?.highlight(false)
-        anchorTopLeft = nil
-        anchorScreen = nil
-        // Settle any in-flight morph so a reopen doesn't inherit a stale flag, and invalidate heights
-        // already queued through PanelHeightBridge so a spring morph caught mid-flight by the close
-        // can't resize the panel after orderOut (or after a quick reopen).
-        morphSettleTask?.cancel()
-        isMorphing = false
-        PanelHeightBridge.invalidate()
+        heightController.finishClosing()
     }
 
     /// Drops keyboard focus inside the panel so a clicked plain-styled control (a metric row's
@@ -442,6 +388,7 @@ final class StatusItemController: NSObject {
         panel.makeFirstResponder(nil)
     }
 
+<<<<<<< HEAD
     /// Sizes the panel on show to a **flash-free opening guess** — the last settled height for the
     /// screen being opened (or a default) — clamped to fit the current screen, top-left pinned under
     /// the status item. Width is fixed (single-column list).
@@ -648,4 +595,6 @@ private enum PanelHeightStore {
     static func save(_ height: CGFloat, for screen: PopoverScreen) {
         UserDefaults.standard.set(Double(height), forKey: key(for: screen))
     }
+=======
+>>>>>>> upstream/main
 }

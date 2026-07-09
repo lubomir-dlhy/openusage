@@ -33,9 +33,9 @@ final class CursorProvider: ProviderRuntime {
     /// time by ~12h+ in June 2026, so spend tracking was disabled for a stretch (issue #758). It is back
     /// on: the spend tiles (Today / Yesterday / Last 30 Days) and the token trend are imputed from the CSV
     /// via `CursorUsageCSV`, the shared `ModelPricingStore`, and `CursorUsageMapper.appendSpendLines`,
-    /// and the `cursor.today/yesterday/last30/trend` descriptors surface in the layout again. Spend that
-    /// uses a model no pricing source knows prices to $0, so each affected period's tile carries the
-    /// unknown model names for the warning triangle (see `appendSpendLines`).
+    /// and the `cursor.today/yesterday/last30/trend` descriptors surface in the layout again. Usage from
+    /// a model no pricing source knows is left out, and the affected period carries the model name for
+    /// the warning triangle (see `appendSpendLines`).
     static let spendTrackingEnabled = true
 
     var widgetDescriptors: [WidgetDescriptor] {
@@ -149,10 +149,8 @@ final class CursorProvider: ProviderRuntime {
 
     /// Strictly additive: fetch the usage CSV and append the three per-day spend tiles. Any failure
     /// (no session, non-2xx, or undecodable body) appends nothing, so the live Cursor mapping is never
-    /// affected and the spend tiles fall back to "No data".
-    ///
-    /// Currently dormant: only called when `spendTrackingEnabled` is true. Kept intact so re-enabling
-    /// Cursor spend tracking is a one-line flag flip (see `spendTrackingEnabled`).
+    /// affected and the spend tiles fall back to "No data". Gated on `spendTrackingEnabled` (see there
+    /// for the on/off history).
     private func appendSpendLines(to lines: inout [MetricLine], accessToken: String) async {
         let calendar = Calendar.current
         let end = now()
@@ -266,13 +264,7 @@ final class CursorProvider: ProviderRuntime {
     }
 
     private func shouldTryGenericRequestFallback(usage: [String: Any]) -> Bool {
-        guard usage["enabled"] as? Bool != false,
-              let planUsage = usage["planUsage"] as? [String: Any]
-        else {
-            return false
-        }
-        return ProviderParse.number(planUsage["limit"]) == nil
-            && ProviderParse.number(planUsage["totalPercentUsed"]) == nil
+        CursorPlanUsageFacts(usage: usage).shouldTryGenericRequestFallback
     }
 
     private func snapshot(_ mapped: CursorMappedUsage) -> ProviderSnapshot {

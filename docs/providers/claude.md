@@ -16,11 +16,13 @@ Tracks your Claude subscription limits using the login you already have from Cla
 
 ## Where credentials come from
 
-Sign in once with Claude Code; OpenUsage reads the same credentials. It checks every place Claude Code can store them, in priority order — the keychain is Claude Code's source of truth on macOS, so it wins over a leftover credentials file:
+Sign in once with Claude Code; OpenUsage reads the same credentials. It checks every place Claude Code can store them, preferring the login that can actually read your subscription usage:
 
-1. `CLAUDE_CODE_OAUTH_TOKEN` environment variable
-2. The macOS keychain entry Claude Code maintains
-3. `~/.claude/.credentials.json` (or `$CLAUDE_CONFIG_DIR/.credentials.json`)
+1. The macOS keychain entry Claude Code maintains (its source of truth on macOS)
+2. `~/.claude/.credentials.json` (or `$CLAUDE_CONFIG_DIR/.credentials.json`)
+3. `CLAUDE_CODE_OAUTH_TOKEN` environment variable
+
+A `CLAUDE_CODE_OAUTH_TOKEN` — usually a long-lived `claude setup-token` — can run the model but can't read your Session and Weekly limits, and it often lingers in your shell environment. So when a real keychain or file login is present, OpenUsage uses that login for the live meters and keeps the environment token only as a fallback; the Session/Weekly meters no longer go blank just because that token is set. If the environment token is your *only* credential (a headless setup), it's used on its own and the spend tiles still load from local logs.
 
 If one source holds an expired or "locked out" token, OpenUsage falls back to the others — so signing in again with `claude` outside the app is picked up on the next refresh, without restarting OpenUsage. Tokens are refreshed automatically; rotated tokens are written back where they came from.
 
