@@ -85,16 +85,15 @@ final class CodexAuthStoreTests: XCTestCase {
             keychain: FakeKeychain()
         )
 
-        let (candidates, missing) = store.loadAuthCandidates()
+        let candidates = store.loadAuthCandidates()
 
         XCTAssertEqual(candidates.count, 1)
-        XCTAssertTrue(missing.isEmpty)
         XCTAssertEqual(candidates.first?.auth.tokens?.accessToken, "token")
     }
 }
 
 final class CodexUsageMapperTests: XCTestCase {
-    func testFreshSessionWindowNormalizesOnePercentToUnused() throws {
+    func testFreshSessionWindowPreservesReportedOnePercent() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let body = Data("""
         {
@@ -110,30 +109,7 @@ final class CodexUsageMapperTests: XCTestCase {
         """.utf8)
         let response = HTTPResponse(statusCode: 200, headers: [:], body: body)
         let mapped = try CodexUsageMapper.mapUsageResponse(response, now: now)
-        XCTAssertEqual(progress(mapped.lines, "Session")?.used, 0)
-    }
-
-    func testFreshSessionWindowSurvivesFetchLatency() throws {
-        // Real-world shape: Codex stamps `reset_at` server-side at request time, so by the time the
-        // mapper runs (network latency + the reset-credits round trip) the reset is already a few
-        // seconds short of a full period. The old 1-second tolerance failed here, letting the floored
-        // `used_percent: 1` through — the row then read "99% left" forever on an untouched account.
-        let now = Date(timeIntervalSince1970: 1_800_000_000)
-        let body = Data("""
-        {
-          "rate_limit": {
-            "primary_window": {
-              "used_percent": 1,
-              "limit_window_seconds": 18000,
-              "reset_after_seconds": 18000,
-              "reset_at": \(Int(now.timeIntervalSince1970) + 18000 - 5)
-            }
-          }
-        }
-        """.utf8)
-        let response = HTTPResponse(statusCode: 200, headers: [:], body: body)
-        let mapped = try CodexUsageMapper.mapUsageResponse(response, now: now)
-        XCTAssertEqual(progress(mapped.lines, "Session")?.used, 0)
+        XCTAssertEqual(progress(mapped.lines, "Session")?.used, 1)
     }
 
     func testFreshSessionWindowUsesDefaultPeriodWhenLimitWindowIsMissing() throws {
@@ -154,7 +130,7 @@ final class CodexUsageMapperTests: XCTestCase {
 
         let mapped = try CodexUsageMapper.mapUsageResponse(response, now: now)
 
-        XCTAssertEqual(progress(mapped.lines, "Session")?.used, 0)
+        XCTAssertEqual(progress(mapped.lines, "Session")?.used, 1)
         XCTAssertEqual(progress(mapped.lines, "Session")?.periodDurationMs, CodexUsageMapper.sessionPeriodMs)
     }
 

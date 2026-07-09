@@ -112,6 +112,7 @@ struct CodexAuthStore: Sendable {
         self.now = now
     }
 
+<<<<<<< HEAD
     /// True when this account explicitly pins a config dir. The provider uses this to skip the shared
     /// "Codex Auth" keychain fallback for non-default accounts (mirrors the Tauri fix), so a work account
     /// pointed at an empty `<dir>/auth.json` never silently reads the default login from the keychain.
@@ -132,6 +133,10 @@ struct CodexAuthStore: Sendable {
         }
 
         return (candidates, missing)
+=======
+    func loadAuthCandidates() -> [CodexAuthState] {
+        authPaths().compactMap { loadAuth(at: $0) }
+>>>>>>> upstream/main
     }
 
     /// Reads the credential from a single on-disk auth file — the targeted counterpart to

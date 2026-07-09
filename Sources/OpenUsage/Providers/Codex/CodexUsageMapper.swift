@@ -32,48 +32,25 @@ enum CodexUsageMapper {
         let primaryWindow = rateLimit?["primary_window"] as? [String: Any]
         let secondaryWindow = rateLimit?["secondary_window"] as? [String: Any]
 
-        if let used = ProviderParse.number(primaryWindow?["used_percent"]) {
-            let periodDurationMs = readPeriodMs(primaryWindow) ?? sessionPeriodMs
-            lines.append(progress(
-                label: "Session",
-                used: normalizedUsedPercent(used, resetWindow: primaryWindow, now: now, periodDurationMs: periodDurationMs),
-                resetWindow: primaryWindow,
-                now: now,
-                periodDurationMs: periodDurationMs
-            ))
+        if let line = windowLine(label: "Session", usedPercent: ProviderParse.number(primaryWindow?["used_percent"]),
+                                 window: primaryWindow, defaultPeriodMs: sessionPeriodMs, now: now) {
+            lines.append(line)
         }
-        if let used = ProviderParse.number(secondaryWindow?["used_percent"]) {
-            let periodDurationMs = readPeriodMs(secondaryWindow) ?? weeklyPeriodMs
-            lines.append(progress(
-                label: "Weekly",
-                used: normalizedUsedPercent(used, resetWindow: secondaryWindow, now: now, periodDurationMs: periodDurationMs),
-                resetWindow: secondaryWindow,
-                now: now,
-                periodDurationMs: periodDurationMs
-            ))
+        if let line = windowLine(label: "Weekly", usedPercent: ProviderParse.number(secondaryWindow?["used_percent"]),
+                                 window: secondaryWindow, defaultPeriodMs: weeklyPeriodMs, now: now) {
+            lines.append(line)
         }
 
+        // Header fallback when the body carried no window (only fills a Session/Weekly not already present).
         if !lines.contains(where: { $0.label == "Session" }),
-           let used = ProviderParse.number(response.header("x-codex-primary-used-percent")) {
-            let periodDurationMs = readPeriodMs(primaryWindow) ?? sessionPeriodMs
-            lines.append(progress(
-                label: "Session",
-                used: normalizedUsedPercent(used, resetWindow: primaryWindow, now: now, periodDurationMs: periodDurationMs),
-                resetWindow: primaryWindow,
-                now: now,
-                periodDurationMs: periodDurationMs
-            ))
+           let line = windowLine(label: "Session", usedPercent: ProviderParse.number(response.header("x-codex-primary-used-percent")),
+                                 window: primaryWindow, defaultPeriodMs: sessionPeriodMs, now: now) {
+            lines.append(line)
         }
         if !lines.contains(where: { $0.label == "Weekly" }),
-           let used = ProviderParse.number(response.header("x-codex-secondary-used-percent")) {
-            let periodDurationMs = readPeriodMs(secondaryWindow) ?? weeklyPeriodMs
-            lines.append(progress(
-                label: "Weekly",
-                used: normalizedUsedPercent(used, resetWindow: secondaryWindow, now: now, periodDurationMs: periodDurationMs),
-                resetWindow: secondaryWindow,
-                now: now,
-                periodDurationMs: periodDurationMs
-            ))
+           let line = windowLine(label: "Weekly", usedPercent: ProviderParse.number(response.header("x-codex-secondary-used-percent")),
+                                 window: secondaryWindow, defaultPeriodMs: weeklyPeriodMs, now: now) {
+            lines.append(line)
         }
 
         // Model-specific limits (e.g. GPT-5.3-Codex-Spark) ride in a separate `additional_rate_limits`
@@ -119,10 +96,31 @@ enum CodexUsageMapper {
         )
     }
 
+    /// One rate-limit window → a percent-used meter, or `nil` when `usedPercent` is absent. Resolves the
+    /// window's own period (falling back to `defaultPeriodMs`) while preserving the percentage reported
+    /// by Codex, so all Session/Weekly/Spark paths share one construction.
+    private static func windowLine(
+        label: String,
+        usedPercent: Double?,
+        window: [String: Any]?,
+        defaultPeriodMs: Int,
+        now: Date
+    ) -> MetricLine? {
+        guard let usedPercent else { return nil }
+        let periodDurationMs = readPeriodMs(window) ?? defaultPeriodMs
+        return progress(
+            label: label,
+            used: usedPercent,
+            resetWindow: window,
+            now: now,
+            periodDurationMs: periodDurationMs
+        )
+    }
+
     /// Spark (and any future model-specific) limits from `additional_rate_limits`. Each array entry is a
     /// named limit whose `rate_limit` reuses the primary (5-hour) / secondary (weekly) window shape, so
-    /// the parsing mirrors the core Session/Weekly path exactly — including the fresh-window 1%→0
-    /// normalization. We surface the entry whose `limit_name`/`metered_feature` names Spark as the
+    /// the parsing mirrors the core Session/Weekly path exactly. We surface the entry whose
+    /// `limit_name`/`metered_feature` names Spark as the
     /// `Spark` and `Spark Weekly` meters; a non-dictionary or null array element is skipped rather than
     /// discarding its valid siblings. Returns an empty list when the field is absent or carries no Spark
     /// entry (the common case for accounts without the limit), so those rows simply read "No data".
@@ -139,25 +137,13 @@ enum CodexUsageMapper {
         let primaryWindow = rateLimit["primary_window"] as? [String: Any]
         let secondaryWindow = rateLimit["secondary_window"] as? [String: Any]
 
-        if let used = ProviderParse.number(primaryWindow?["used_percent"]) {
-            let periodDurationMs = readPeriodMs(primaryWindow) ?? sessionPeriodMs
-            lines.append(progress(
-                label: "Spark",
-                used: normalizedUsedPercent(used, resetWindow: primaryWindow, now: now, periodDurationMs: periodDurationMs),
-                resetWindow: primaryWindow,
-                now: now,
-                periodDurationMs: periodDurationMs
-            ))
+        if let line = windowLine(label: "Spark", usedPercent: ProviderParse.number(primaryWindow?["used_percent"]),
+                                 window: primaryWindow, defaultPeriodMs: sessionPeriodMs, now: now) {
+            lines.append(line)
         }
-        if let used = ProviderParse.number(secondaryWindow?["used_percent"]) {
-            let periodDurationMs = readPeriodMs(secondaryWindow) ?? weeklyPeriodMs
-            lines.append(progress(
-                label: "Spark Weekly",
-                used: normalizedUsedPercent(used, resetWindow: secondaryWindow, now: now, periodDurationMs: periodDurationMs),
-                resetWindow: secondaryWindow,
-                now: now,
-                periodDurationMs: periodDurationMs
-            ))
+        if let line = windowLine(label: "Spark Weekly", usedPercent: ProviderParse.number(secondaryWindow?["used_percent"]),
+                                 window: secondaryWindow, defaultPeriodMs: weeklyPeriodMs, now: now) {
+            lines.append(line)
         }
         return lines
     }
@@ -186,29 +172,6 @@ enum CodexUsageMapper {
         guard let window else { return nil }
         guard let seconds = ProviderParse.number(window["limit_window_seconds"]) else { return nil }
         return Int(seconds * 1000)
-    }
-
-    /// A rolling window whose reset is still a full period away has not meaningfully started — Codex
-    /// often still reports `used_percent: 1` (whole-percent floor) in that state.
-    private static func isFreshRateLimitWindow(_ window: [String: Any]?, now: Date, periodDurationMs: Int) -> Bool {
-        guard periodDurationMs > 0,
-              let resetsAt = resetDate(window, now: now)
-        else { return false }
-        let period = Double(periodDurationMs) / 1000
-        return Pace.isFreshUsageWindow(resetsAt: resetsAt, periodDuration: period, now: now)
-    }
-
-    /// At a fresh window, treat a 1% whole-percent reading as unused so the row matches a full counter.
-    private static func normalizedUsedPercent(
-        _ used: Double,
-        resetWindow: [String: Any]?,
-        now: Date,
-        periodDurationMs: Int
-    ) -> Double {
-        guard isFreshRateLimitWindow(resetWindow, now: now, periodDurationMs: periodDurationMs), used <= 1 else {
-            return used
-        }
-        return 0
     }
 
     /// Codex flex credits as raw values: the floored credit count and its dollar value (count × 4¢),
