@@ -54,19 +54,11 @@ final class ClaudeProvider: ProviderRuntime {
     // ids stay "claude.*" exactly as before (no migration).
     var widgetDescriptors: [WidgetDescriptor] {
         [
-<<<<<<< HEAD
-            .percent(id: "\(provider.id).session", provider: provider, title: "Session"),
+            .percent(id: "\(provider.id).session", provider: provider, title: "Session", isSessionWindow: true),
             .percent(id: "\(provider.id).weekly", provider: provider, title: "Weekly"),
             .percent(id: "\(provider.id).sonnet", provider: provider, title: "Sonnet"),
             .percent(id: "\(provider.id).fable", provider: provider, title: "Fable"),
             .boundedDollars(id: "\(provider.id).extra", provider: provider, title: "Extra Usage", metricLabel: "Extra usage spent", limit: 100, valueWord: "spent"),
-=======
-            .percent(id: "claude.session", provider: provider, title: "Session", isSessionWindow: true),
-            .percent(id: "claude.weekly", provider: provider, title: "Weekly"),
-            .percent(id: "claude.sonnet", provider: provider, title: "Sonnet"),
-            .percent(id: "claude.fable", provider: provider, title: "Fable"),
-            .boundedDollars(id: "claude.extra", provider: provider, title: "Extra Usage", metricLabel: "Extra usage spent", limit: 100, valueWord: "spent"),
->>>>>>> upstream/main
             .usageTrend(provider: provider)
         ] + WidgetDescriptor.spendTiles(provider: provider)
     }

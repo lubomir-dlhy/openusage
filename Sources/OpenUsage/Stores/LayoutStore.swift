@@ -100,22 +100,9 @@ final class LayoutStore {
         didSet { persistence.saveMenuBarStyle(menuBarStyle) }
     }
 
-<<<<<<< HEAD
+    // `var`: `syncAccounts(_:)` swaps in a rebuilt registry when the account set changes at runtime.
     private var registry: WidgetRegistry
-    private let defaults: UserDefaults
-    private let storageKey: String
-    private let providerOrderKey: String
-    private let metricOrderKey: String
-    private let seededDefaultsKey: String
-    private let pinsKey: String
-    private let expandedMetricsKey: String
-    private let expandOnEnableKey: String
-    private let expandedProvidersKey: String
-    private let menuBarStyleKey: String
-=======
-    private let registry: WidgetRegistry
     private let persistence: LayoutPersistence
->>>>>>> upstream/main
     private let defaultMetricIDs: [String]
     private let defaultPinnedMetricIDs: [String]
     private let defaultExpandedMetricIDs: [String]

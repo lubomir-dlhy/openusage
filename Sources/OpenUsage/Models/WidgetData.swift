@@ -574,7 +574,6 @@ extension WidgetData {
         return boundedSubtitle // period cadence / dollar limit / count suffix — nothing to flip
     }
 
-<<<<<<< HEAD
     /// Trailing text for the Compact one-line meter: the relative reset **without** the "Resets in"
     /// prefix ("2d 15h"), so it reads as quiet context beside the value instead of a full sentence.
     /// Absolute (wall-clock) mode and the non-countdown cases (No data / Not started / cadence) are
@@ -592,10 +591,7 @@ extension WidgetData {
         return boundedSubtitle
     }
 
-    /// Codex, Claude, and Antigravity session meters only: a "Not started" state for the current window
-=======
     /// Claude and Antigravity session meters only: a "Not started" state for the current window
->>>>>>> upstream/main
     /// when nothing has been spent in it yet. Driven by frozen usage (`used == 0`), not a window-timing
     /// read — the `resetsAt - now ≈ full period` test is only valid the instant the snapshot is captured,
     /// then drifts every second until the next refresh, which split the headline from the label (headline

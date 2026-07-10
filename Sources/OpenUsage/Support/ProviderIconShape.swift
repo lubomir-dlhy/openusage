@@ -3,14 +3,10 @@ import SwiftUI
 /// Where a tile/gallery icon comes from: a copied provider vector mark, or an SF Symbol.
 enum IconSource: Hashable {
     case providerMark(String)   // provider id, e.g. "claude"
-<<<<<<< HEAD
-    case symbol(String)         // SF Symbol name
-    case customFile(String)     // per-account custom icon file name in AccountIconStore
-=======
     /// SF Symbol name. Reserved for an SF-symbol-iconed metric; currently only constructed by tests as a
     /// lightweight icon fixture. The render branches below stay so the case is drawable if a metric adopts it.
     case symbol(String)
->>>>>>> upstream/main
+    case customFile(String)     // per-account custom icon file name in AccountIconStore
 }
 
 /// Renders an `IconSource` in monochrome (`Theme.iconGray`): on the glass popover, icon color
