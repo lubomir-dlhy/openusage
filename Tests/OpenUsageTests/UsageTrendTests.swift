@@ -110,6 +110,29 @@ final class UsageTrendTests: XCTestCase {
         XCTAssertEqual(points.last?.value, 1500, "the day's tokens are summed, not split across bars")
     }
 
+    func testTrendMergesCloudExtraTokensIntoBarsAndReadouts() throws {
+        // Codex passes cloud-imputed tokens per day: the bar carries local + cloud, the readout splits
+        // both halves and marks the total ≈; days without a cloud share keep the plain measured label.
+        var lines: [MetricLine] = []
+        SpendTileMapper.appendUsageTrend(
+            DailyUsageSeries(daily: [
+                DailyUsageEntry(date: "2026-06-20", totalTokens: 1_500_000, costUSD: nil),
+                DailyUsageEntry(date: "2026-06-21", totalTokens: 412_000_000, costUSD: nil)
+            ]),
+            cloudExtraTokensByDay: ["2026-06-21": 73_000_000, "2026-06-19": 5_000_000],
+            to: &lines, now: date(2026, 6, 21), note: "n"
+        )
+
+        guard case .chart(_, let points, _) = lines.first else { return XCTFail("expected a chart line") }
+        XCTAssertEqual(points[30].value, 485_000_000, "bar = local + cloud estimate")
+        XCTAssertEqual(points[30].valueLabel, "≈485M tokens · 412M local + ~73M cloud (est.)")
+        XCTAssertEqual(points[29].value, 1_500_000, "a day with no cloud share is untouched")
+        XCTAssertEqual(points[29].valueLabel, "1.5M tokens")
+        // A locally-idle day with cloud activity still gets a bar — that's the coverage the merge adds.
+        XCTAssertEqual(points[28].value, 5_000_000)
+        XCTAssertEqual(points[28].valueLabel, "≈5M tokens · 0 local + ~5M cloud (est.)")
+    }
+
     func testAppendUsageTrendSkippedWhenWindowHasNoUsage() {
         // No rows at all, and rows that are all zero, both leave "No data" rather than a flat zero chart.
         var empty: [MetricLine] = []

@@ -81,11 +81,21 @@ enum SpendTileMapper {
     private static let trendWindowDays = 30
 
     /// Append the Usage Trend chart line: one bar per calendar day over the window, value = tokens used
-    /// that day. Tokens are always measured (no estimate flag), so the chart needs only the per-day
-    /// counts plus a source note. Appends nothing when the whole window is idle, so a source with no
-    /// usage leaves "No data" rather than a flat row of zero bars.
-    static func appendUsageTrend(_ usage: DailyUsageSeries, to lines: inout [MetricLine], now: Date = Date(), note: String) {
-        let points = trendPoints(usage, now: now)
+    /// that day. Appends nothing when the whole window is idle, so a source with no usage leaves
+    /// "No data" rather than a flat row of zero bars.
+    ///
+    /// `cloudExtraTokensByDay` (day key → estimated tokens) merges a second, non-local source into the
+    /// same bars — Codex passes tokens imputed from ChatGPT's cloud analytics (see `CodexCloudUsage`).
+    /// A day carrying an extra reads out both halves ("≈485M tokens · 412M local + ~73M cloud (est.)")
+    /// so the measured and estimated parts stay distinguishable.
+    static func appendUsageTrend(
+        _ usage: DailyUsageSeries,
+        cloudExtraTokensByDay: [String: Double] = [:],
+        to lines: inout [MetricLine],
+        now: Date = Date(),
+        note: String
+    ) {
+        let points = trendPoints(usage, cloudExtraTokensByDay: cloudExtraTokensByDay, now: now)
         guard !points.isEmpty else { return }
         lines.append(.chart(label: "Usage Trend", points: points, note: note))
     }
@@ -97,7 +107,11 @@ enum SpendTileMapper {
     /// place instead of collapsing two non-adjacent days into neighbors, and the cap is calendar days,
     /// not active ones. Returns empty when nothing was used in the window — there's no trend to draw.
     /// Each point carries a "Jun 21" axis label and a pre-formatted "222M tokens" readout.
-    private static func trendPoints(_ usage: DailyUsageSeries, now: Date) -> [MetricChartPoint] {
+    private static func trendPoints(
+        _ usage: DailyUsageSeries,
+        cloudExtraTokensByDay: [String: Double],
+        now: Date
+    ) -> [MetricChartPoint] {
         var tokensByDay: [String: Double] = [:]
         for day in usage.daily {
             let tokens = Double(day.totalTokens)
@@ -111,14 +125,25 @@ enum SpendTileMapper {
         return (0...trendWindowDays).reversed().compactMap { offset -> MetricChartPoint? in
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
             let key = dayKey(from: day)
-            let tokens = tokensByDay[key] ?? 0
+            let local = tokensByDay[key] ?? 0
+            let extra = cloudExtraTokensByDay[key] ?? 0
             return MetricChartPoint(
-                value: tokens,
+                value: local + extra,
                 // The app's localized "Jun 21" month/day, not a hardcoded "6/21".
                 label: Formatters.monthDayLabel(day),
-                valueLabel: MetricFormatter.number(tokens, kind: .count, style: .row) + " tokens"
+                valueLabel: trendReadout(local: local, cloudExtra: extra)
             )
         }
+    }
+
+    /// The hover readout for one trend day. Measured-only days keep the plain count; days with an
+    /// imputed cloud share lead with the combined total (marked ≈) and split out both halves.
+    private static func trendReadout(local: Double, cloudExtra: Double) -> String {
+        func count(_ value: Double) -> String {
+            MetricFormatter.number(value, kind: .count, style: .row)
+        }
+        guard cloudExtra > 0 else { return count(local) + " tokens" }
+        return "≈\(count(local + cloudExtra)) tokens · \(count(local)) local + ~\(count(cloudExtra)) cloud (est.)"
     }
 
     private static func dayKey(from date: Date) -> String {

@@ -11,6 +11,7 @@ struct CodexUsageClient: Sendable {
     static let refreshURL = URL(string: "https://auth.openai.com/oauth/token")!
     static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
     static let resetCreditsURL = URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")!
+    static let dailyUsageBreakdownURL = URL(string: "https://chatgpt.com/backend-api/wham/usage/daily-token-usage-breakdown")!
 
     var http: any HTTPClient
 
@@ -112,6 +113,39 @@ struct CodexUsageClient: Sendable {
         return try await http.send(HTTPRequest(
             method: "GET",
             url: Self.resetCreditsURL,
+            headers: headers,
+            timeout: 10
+        ))
+    }
+
+    /// The account's daily credit consumption per product surface (CLI, desktop, web, cloud `exec`) —
+    /// the cloud half of the merged Usage Trend. Best-effort like `fetchResetCredits`: the provider
+    /// tolerates a failure here and the trend stays local-only.
+    func fetchDailyUsageBreakdown(
+        accessToken: String,
+        accountID: String?,
+        startDate: String,
+        endDate: String
+    ) async throws -> HTTPResponse {
+        var headers = [
+            "Authorization": "Bearer \(accessToken)",
+            "Accept": "application/json",
+            "User-Agent": "OpenUsage"
+        ]
+        if let accountID, !accountID.isEmpty {
+            headers["ChatGPT-Account-Id"] = accountID
+        }
+
+        var components = URLComponents(url: Self.dailyUsageBreakdownURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            URLQueryItem(name: "start_date", value: startDate),
+            URLQueryItem(name: "end_date", value: endDate),
+            URLQueryItem(name: "group_by", value: "day"),
+        ]
+
+        return try await http.send(HTTPRequest(
+            method: "GET",
+            url: components.url!,
             headers: headers,
             timeout: 10
         ))
