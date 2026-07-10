@@ -1,6 +1,6 @@
 {
   "$comment": "OpenUsage pricing supplement. Prices Cursor-native models that no public catalog carries, supplies fast-variant multipliers the catalogs omit, and maps provider log/CSV model slugs to canonical pricing keys (LiteLLM keys, models.dev ids, or entries in this file). Published to gh-pages by .github/workflows/pricing-supplement.yml on every change, so installed apps pick edits up within a day - no release needed. Rates are USD per million tokens. Sources: https://cursor.com/docs/models-and-pricing.md for Cursor-native entries.",
-  "updated_at": "2026-07-08",
+  "updated_at": "2026-07-10",
   "pricing": {
     "auto": {
       "input_per_million": 1.25,
@@ -92,7 +92,7 @@
       "output_per_million": 22.5
     },
     "gpt-5.6-sol": {
-      "$comment": "OpenAI's GPT-5.6 preview pricing. Its public catalogs have not added these models yet.",
+      "$comment": "OpenAI's GPT-5.6 official pricing. LiteLLM/models.dev now carry matching entries (post-GA, 2026-07-09); kept as an override so a catalog regression can't misprice the family.",
       "input_per_million": 5.0,
       "cache_write_per_million": 6.25,
       "cache_read_per_million": 0.5,
@@ -120,9 +120,9 @@
     "gpt-5.3-codex": 2.0,
     "gpt-5.4": 2.0,
     "gpt-5.5": 2.5,
-    "gpt-5.6-sol": 2.5,
-    "gpt-5.6-terra": 2.5,
-    "gpt-5.6-luna": 2.5
+    "gpt-5.6-sol": 2.0,
+    "gpt-5.6-terra": 2.0,
+    "gpt-5.6-luna": 2.0
   },
   "alias_rules": [
     { "pattern": "^agent_review$", "canonical": "gpt-5.4" },
@@ -198,6 +198,7 @@
     { "pattern": "^gpt-5\\.6-terra(?:-(?:none|low|medium|high|xhigh|max))?$", "canonical": "gpt-5.6-terra" },
     { "pattern": "^gpt-5\\.6-luna(?:-(?:none|low|medium|high|xhigh|max))?-fast$", "canonical": "gpt-5.6-luna-fast" },
     { "pattern": "^gpt-5\\.6-luna(?:-(?:none|low|medium|high|xhigh|max))?$", "canonical": "gpt-5.6-luna" },
+    { "pattern": "^gpt-5\\.6(?:-(?:none|low|medium|high|xhigh|max))?$", "canonical": "gpt-5.6" },
     { "pattern": "^kimi-k2\\.5$", "canonical": "moonshot/kimi-k2.5" },
     { "pattern": "^kimi-k2p5$", "canonical": "moonshot/kimi-k2.5" },
     { "pattern": "^glm-5\\.2(?:-(?:high|max))?$", "canonical": "glm-5.2" },
