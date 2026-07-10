@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.7.8
+
+### New Features
+- **GPT-5.6 family pricing (Sol / Terra / Luna):** spend tiles now price OpenAI's new GPT-5.6 models — refreshed catalog snapshots, supplement entries, effort-suffix aliases (incl. Sol's Ultra mode), and Cursor fast mode at the published 2x rate by @lubomir-dlhy (upstream groundwork by @robinebers)
+- **Total Spend card:** cross-provider spend ring with brand colors, morphing sectors, a Cost / Tokens / Cost-per-MTok menu, and a settings toggle by @robinebers
+- Codex "Rate Limit Resets" hover popover with per-credit expiries (replaces the tooltip) by @robinebers
+
+### Bug Fixes
+- Repair main after the upstream sync: resolve conflict markers committed by the sync merge, keeping fork multi-account features on top of upstream's panel/layout refactors by @lubomir-dlhy
+- Show Codex usage percentages exactly as reported; keep near-empty pacing calm by @robinebers
+- Claude: prefer profile-scoped login over an inference-only env token for live usage by @joshuavial
+- Single-instance detection no longer trusts the stale LaunchServices snapshot (#874) by @xuing
+- Remove the legacy Tauri autostart LaunchAgent on launch by @robinebers
+- Request-wide long-context pricing fix; Cursor spend marked as estimated by @robinebers
+- Claude Sonnet 5 spend follows Anthropic's introductory rate ($2/$10 per MTok through Aug 31) by @lubomir-dlhy
+
+### Refactor
+- Popover/panel internals split into focused components (height controller, outside-click monitor, footer/top bar, layout persistence) by @robinebers
+
+### Chores
+- Unwedge the 6-hourly upstream-sync workflow by @lubomir-dlhy
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.7...v0.7.8](https://github.com/lubomir-dlhy/openusage/compare/v0.7.7...v0.7.8)
+
 ## v0.7.7
 
 ### New Features
