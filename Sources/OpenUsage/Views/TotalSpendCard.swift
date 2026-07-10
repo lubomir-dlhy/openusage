@@ -353,14 +353,20 @@ struct TotalSpendRingContent: View {
     }
 
     private func legendRow(_ slice: TotalSpendProjectedSlice) -> some View {
-        HStack(spacing: 7) {
+        // Baseline-aligned so a wrapped name keeps the dot and the amount on its first line.
+        HStack(alignment: .firstTextBaseline, spacing: 7) {
             Circle()
                 .fill(TotalSpendPalette.color(for: slice.provider.id))
                 .frame(width: 8, height: 8)
+                // A shape has no text baseline, so pin the dot's optical center to the first line.
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 3 }
+            // Multi-account labels ("Claude · CulturePulse") are wider than the legend column, so
+            // wrap to a second line instead of truncating — single-account names stay one line.
             Text(slice.provider.displayName)
                 .font(.system(size: density.supportingPointSize))
                 .foregroundStyle(.primary)
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             // Tokens always abbreviate in the legend (12.4M), matching spend rows elsewhere —
             // `.full` would spill every digit. Cost modes keep cents via `.row` / `.full`.
