@@ -42,11 +42,11 @@ final class PricingBundledResourceTests: XCTestCase {
         XCTAssertEqual(pricing.resolve(model: "claude-4.6-opus-max-thinking-fast")?.inputPerMillion, 30)
         XCTAssertEqual(pricing.resolve(model: "gpt-5.5-xhigh-fast")?.inputPerMillion, 12.5)
         XCTAssertEqual(pricing.resolve(model: "gpt-5.6-sol-ultra")?.inputPerMillion, 5)
-        XCTAssertEqual(pricing.resolve(model: "gpt-5.6-sol-ultra-fast")?.inputPerMillion, 12.5)
+        XCTAssertEqual(pricing.resolve(model: "gpt-5.6-sol-ultra-fast")?.inputPerMillion, 10)
         XCTAssertEqual(pricing.resolve(model: "gpt-5.6-terra-high")?.inputPerMillion, 2.5)
-        XCTAssertEqual(pricing.resolve(model: "gpt-5.6-terra-high-fast")?.inputPerMillion, 6.25)
+        XCTAssertEqual(pricing.resolve(model: "gpt-5.6-terra-high-fast")?.inputPerMillion, 5)
         XCTAssertEqual(pricing.resolve(model: "gpt-5.6-luna")?.inputPerMillion, 1)
-        XCTAssertEqual(pricing.resolve(model: "gpt-5.6-luna-fast")?.inputPerMillion, 2.5)
+        XCTAssertEqual(pricing.resolve(model: "gpt-5.6-luna-fast")?.inputPerMillion, 2)
         XCTAssertEqual(pricing.resolve(model: "grok-4-20-thinking")?.inputPerMillion, 2)
         XCTAssertEqual(pricing.resolve(model: "grok-4.5")?.inputPerMillion, 2)
         XCTAssertEqual(pricing.resolve(model: "grok-4.5-fast-high")?.inputPerMillion, 4)
@@ -85,55 +85,18 @@ final class PricingBundledResourceTests: XCTestCase {
         XCTAssertEqual(fable.outputPerMillion, opus48.outputPerMillion * 2)
     }
 
-    /// Claude Sonnet 5: same API pool rates as Claude 4.6 Sonnet; thinking/effort slugs resolve to
-    /// one canonical entry.
+    /// Claude Sonnet 5: billed at Anthropic's introductory rate ($2/$10 per 1M, through 2026-08-31;
+    /// list price $3/$15) — the catalogs carry the intro rate, so spend imputation should too.
+    /// Thinking/effort slugs resolve to one canonical entry.
     func testClaudeSonnet5PricingAndAliases() throws {
         let pricing = Self.pricing
         let sonnet5 = try XCTUnwrap(pricing.resolve(model: "claude-sonnet-5-thinking-high"))
-        XCTAssertEqual(sonnet5.inputPerMillion, 3.0)
-        XCTAssertEqual(sonnet5.outputPerMillion, 15.0)
-        XCTAssertEqual(sonnet5.cacheWritePerMillion, 3.75)
-        XCTAssertEqual(sonnet5.cacheReadPerMillion, 0.3)
+        XCTAssertEqual(sonnet5.inputPerMillion, 2.0)
+        XCTAssertEqual(sonnet5.outputPerMillion, 10.0)
+        XCTAssertEqual(sonnet5.cacheWritePerMillion, 2.5)
+        XCTAssertEqual(sonnet5.cacheReadPerMillion, 0.2, accuracy: 1e-9)
 
-        let sonnet46 = try XCTUnwrap(pricing.resolve(model: "claude-4.6-sonnet"))
-        XCTAssertEqual(sonnet5.inputPerMillion, sonnet46.inputPerMillion)
-        XCTAssertEqual(sonnet5.outputPerMillion, sonnet46.outputPerMillion)
-    }
-
-    func testGPT56PricingAndAliases() throws {
-        let pricing = Self.pricing
-        let sol = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-sol-ultra"))
-        XCTAssertEqual(sol.inputPerMillion, 5.0)
-        XCTAssertEqual(sol.cacheWritePerMillion, 6.25)
-        XCTAssertEqual(sol.cacheReadPerMillion, 0.5)
-        XCTAssertEqual(sol.outputPerMillion, 30.0)
-        let solFast = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-sol-ultra-fast"))
-        XCTAssertEqual(solFast.inputPerMillion, 12.5)
-        XCTAssertEqual(solFast.cacheWritePerMillion, 15.625)
-        XCTAssertEqual(solFast.cacheReadPerMillion, 1.25)
-        XCTAssertEqual(solFast.outputPerMillion, 75.0)
-
-        let terra = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-terra-high"))
-        XCTAssertEqual(terra.inputPerMillion, 2.5)
-        XCTAssertEqual(terra.cacheWritePerMillion, 3.125)
-        XCTAssertEqual(terra.cacheReadPerMillion, 0.25)
-        XCTAssertEqual(terra.outputPerMillion, 15.0)
-        let terraFast = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-terra-high-fast"))
-        XCTAssertEqual(terraFast.inputPerMillion, 6.25)
-        XCTAssertEqual(terraFast.cacheWritePerMillion, 7.8125)
-        XCTAssertEqual(terraFast.cacheReadPerMillion, 0.625)
-        XCTAssertEqual(terraFast.outputPerMillion, 37.5)
-
-        let luna = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-luna"))
-        XCTAssertEqual(luna.inputPerMillion, 1.0)
-        XCTAssertEqual(luna.cacheWritePerMillion, 1.25)
-        XCTAssertEqual(luna.cacheReadPerMillion, 0.1)
-        XCTAssertEqual(luna.outputPerMillion, 6.0)
-        let lunaFast = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-luna-fast"))
-        XCTAssertEqual(lunaFast.inputPerMillion, 2.5)
-        XCTAssertEqual(lunaFast.cacheWritePerMillion, 3.125)
-        XCTAssertEqual(lunaFast.cacheReadPerMillion, 0.25)
-        XCTAssertEqual(lunaFast.outputPerMillion, 15.0)
+        XCTAssertEqual(pricing.resolve(model: "claude-sonnet-5"), sonnet5)
     }
 
     /// Opus 4.7/4.8 fast modes: Cursor's published rates (supplement overrides) win over the
@@ -165,6 +128,39 @@ final class PricingBundledResourceTests: XCTestCase {
         let outputOnly = TokenBreakdown(output: 1_000_000)
         XCTAssertEqual(pricing.estimatedCostDollars(model: "glm-5.2-high", tokens: outputOnly)!, 4.4, accuracy: 1e-9)
         XCTAssertNil(pricing.estimatedCostDollars(model: "glm-5.2-bogus", tokens: outputOnly))
+    }
+
+    /// GPT-5.6 (Sol/Terra/Luna, July 2026): effort-suffixed slugs resolve through the alias rules
+    /// to the supplement/catalog entries, Sol's Ultra mode rides on the Sol rates, and Cursor's
+    /// fast mode bills all three tiers at 2x (per cursor.com/docs/models-and-pricing.md).
+    func testGPT56PricingAndAliases() throws {
+        let pricing = Self.pricing
+        let sol = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-sol-xhigh"))
+        XCTAssertEqual(sol.inputPerMillion, 5.0)
+        XCTAssertEqual(sol.cacheWritePerMillion, 6.25)
+        XCTAssertEqual(sol.cacheReadPerMillion, 0.5)
+        XCTAssertEqual(sol.outputPerMillion, 30.0)
+        XCTAssertEqual(pricing.resolve(model: "gpt-5.6-sol-ultra"), sol)
+        let solFast = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-sol-ultra-fast"))
+        XCTAssertEqual(solFast.inputPerMillion, 10.0)
+        XCTAssertEqual(solFast.cacheWritePerMillion, 12.5)
+        XCTAssertEqual(solFast.cacheReadPerMillion, 1.0)
+        XCTAssertEqual(solFast.outputPerMillion, 60.0)
+
+        let terra = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-terra-high"))
+        XCTAssertEqual(terra.inputPerMillion, 2.5)
+        XCTAssertEqual(terra.outputPerMillion, 15.0)
+        XCTAssertEqual(pricing.resolve(model: "gpt-5.6-terra-high-fast")?.inputPerMillion, 5.0)
+
+        let luna = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-luna"))
+        XCTAssertEqual(luna.inputPerMillion, 1.0)
+        XCTAssertEqual(luna.outputPerMillion, 6.0)
+        let lunaFast = try XCTUnwrap(pricing.resolve(model: "gpt-5.6-luna-fast"))
+        XCTAssertEqual(lunaFast.inputPerMillion, 2.0)
+        XCTAssertEqual(lunaFast.outputPerMillion, 12.0)
+
+        // Bare gpt-5.6 is OpenAI's alias for the flagship (priced like Sol).
+        XCTAssertEqual(pricing.resolve(model: "gpt-5.6")?.inputPerMillion, 5.0)
     }
 
     /// Grok CLI model ids route through the alias rules to their catalog entries.
