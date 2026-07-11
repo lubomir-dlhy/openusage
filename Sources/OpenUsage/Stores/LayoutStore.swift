@@ -6,6 +6,8 @@ import Observation
 @MainActor
 @Observable
 final class LayoutStore {
+    // Swift's private access is file-scoped. Members shared with `LayoutStore+Customization.swift`
+    // stay module-internal below; implementation details used only here remain private.
     var placed: [PlacedWidget]
 
     /// In-popover navigation (screen, Customize master/detail, screen-switch slide). Its own store so
@@ -51,7 +53,7 @@ final class LayoutStore {
     /// them behind a caret until the user taps it, and Customize lists them under the divider.
     /// Membership only — the sequence within each section follows the provider's metric order, like
     /// pins. A metric keeps its membership while disabled, so re-enabling restores its section.
-    private(set) var expandedMetricIDs: Set<String>
+    var expandedMetricIDs: Set<String>
 
     /// Provider IDs whose dashboard cards are currently opened with their expanded metrics visible.
     /// Unlike hover and drag state, this is a user preference: if someone likes Codex open, it should
@@ -100,14 +102,18 @@ final class LayoutStore {
         didSet { persistence.saveMenuBarStyle(menuBarStyle) }
     }
 
+<<<<<<< HEAD
     // `var`: `syncAccounts(_:)` swaps in a rebuilt registry when the account set changes at runtime.
     private var registry: WidgetRegistry
+=======
+    let registry: WidgetRegistry
+>>>>>>> upstream/main
     private let persistence: LayoutPersistence
     private let defaultMetricIDs: [String]
     private let defaultPinnedMetricIDs: [String]
     private let defaultExpandedMetricIDs: [String]
-    private var defaultExpandedOnEnableIDs: Set<String>
-    private let isProviderEnabled: @MainActor (String) -> Bool
+    var defaultExpandedOnEnableIDs: Set<String>
+    let isProviderEnabled: @MainActor (String) -> Bool
 
     init(
         registry: WidgetRegistry,
@@ -162,6 +168,7 @@ final class LayoutStore {
         syncPlacedOrder(persistChanges: initial.shouldPersistPlaced)
     }
 
+<<<<<<< HEAD
     func provider(id: String) -> Provider? { registry.provider(id: id) }
 
     /// Apply a rebuilt registry after the account set changed at runtime (account added/removed, or an
@@ -356,6 +363,8 @@ final class LayoutStore {
             + ordered.filter { expandedMetricIDs.contains($0) }
     }
 
+=======
+>>>>>>> upstream/main
     func isProviderExpanded(_ providerID: String) -> Bool {
         expandedProviderIDs.contains(providerID)
     }
@@ -415,7 +424,7 @@ final class LayoutStore {
     /// action (toggling an already-on metric, dropping a row back where it started) doesn't pollute the
     /// stack with empty steps. Re-entrant calls (a mutation built from smaller ones) and undo replay
     /// itself coalesce into the single outer step via `isApplyingUndo`.
-    private func recordingUndoStep<T>(_ body: () -> T) -> T {
+    func recordingUndoStep<T>(_ body: () -> T) -> T {
         // Already inside an undoable scope (or replaying an undo): just run — the outer scope owns the
         // single recorded step, and undo must never record itself.
         guard !isApplyingUndo else { return body() }
@@ -460,195 +469,6 @@ final class LayoutStore {
         persistExpandOnEnable()
     }
 
-    /// Reorder whole providers when `dragged`'s header is dropped onto `target`'s. Works on the currently
-    /// shown (enabled) provider order; disabled providers keep their relative tail position.
-    /// Returns whether the order actually changed — the drag gestures key haptics off it.
-    @discardableResult
-    func reorderProvider(dragged: String, target: String) -> Bool {
-        recordingUndoStep {
-            let shown = customizeGroups.map(\.provider.id)
-            guard let next = Self.reordered(shown, dragged: dragged, target: target) else { return false }
-            let rest = orderedProviderIDs().filter { !next.contains($0) }
-            providerOrder = next + rest
-            persistProviderOrder()
-            syncPlacedOrder()
-            return true
-        }
-    }
-
-    /// Reorder metrics within one provider when `dragged` is dropped onto `target` (both descriptor ids of
-    /// that provider). Operates on the provider's full metric order so disabled metrics keep their place too.
-    ///
-    /// Dropping onto a row in the *other* section moves `dragged` across the "Shown on expand" divider:
-    /// its expanded membership follows the target's, so dragging a metric under an expanded one tucks it
-    /// away too (and vice versa). The stored order is rebuilt as always-shown rows then expanded rows, so
-    /// it always matches the partitioned layout the UI draws. Returns whether anything actually changed —
-    /// the drag gestures key haptics off it.
-    @discardableResult
-    func reorderMetric(dragged: String, target: String, in providerID: String) -> Bool {
-        recordingUndoStep { reorderMetricImpl(dragged: dragged, target: target, in: providerID) }
-    }
-
-    private func reorderMetricImpl(dragged: String, target: String, in providerID: String) -> Bool {
-        guard dragged != target else { return false }
-        let ordered = metricOrder(for: providerID)
-        guard ordered.contains(dragged), ordered.contains(target) else { return false }
-
-        var expanded = expandedMetricIDs
-        let membershipChanged = expanded.contains(dragged) != expanded.contains(target)
-        if expanded.contains(target) {
-            expanded.insert(dragged)
-        } else {
-            expanded.remove(dragged)
-        }
-
-        // Landing a metric in the always-shown section is an explicit placement, so it consumes its
-        // expand-on-enable default — otherwise enabling it later would tuck it back below the caret,
-        // overriding this drag.
-        let consumedExpandOnEnable = !expanded.contains(dragged)
-            && defaultExpandedOnEnableIDs.remove(dragged) != nil
-
-        // Lay the provider out the way it renders — always-shown rows, then expanded rows — keeping each
-        // section in its current order, then drop `dragged` next to `target` within that combined sequence.
-        let partitioned = ordered.filter { !expanded.contains($0) } + ordered.filter { expanded.contains($0) }
-        guard let next = Self.reordered(partitioned, dragged: dragged, target: target) else {
-            guard membershipChanged || consumedExpandOnEnable else { return false }
-            metricOrderByProvider[providerID] = partitioned
-            expandedMetricIDs = expanded
-            persistMetricOrder()
-            persistExpanded()
-            if consumedExpandOnEnable { persistExpandOnEnable() }
-            syncPlacedOrder()
-            return true
-        }
-        metricOrderByProvider[providerID] = next
-        expandedMetricIDs = expanded
-        persistMetricOrder()
-        if membershipChanged { persistExpanded() }
-        if consumedExpandOnEnable { persistExpandOnEnable() }
-        syncPlacedOrder()
-        return true
-    }
-
-    /// Apply a provider metric order that includes one visual divider sentinel. Metrics before the
-    /// sentinel become always-shown; metrics after it become shown-on-expand. This is the clean drag
-    /// model for Customize: the divider participates in target geometry like a row, but persistence
-    /// remains metric-only.
-    @discardableResult
-    func applyMetricDividerOrder(_ orderedIDsWithDivider: [String], dragged: String, dividerID: String, in providerID: String) -> Bool {
-        recordingUndoStep {
-            applyMetricDividerOrderImpl(orderedIDsWithDivider, dragged: dragged, dividerID: dividerID, in: providerID)
-        }
-    }
-
-    private func applyMetricDividerOrderImpl(_ orderedIDsWithDivider: [String], dragged: String, dividerID: String, in providerID: String) -> Bool {
-        let validIDs = metricOrder(for: providerID)
-        let validSet = Set(validIDs)
-        guard orderedIDsWithDivider.contains(dividerID) else { return false }
-
-        var seen = Set<String>()
-        var alwaysShown: [String] = []
-        var expanded: [String] = []
-        var isBelowDivider = false
-
-        for id in orderedIDsWithDivider {
-            if id == dividerID {
-                isBelowDivider = true
-                continue
-            }
-            guard validSet.contains(id), seen.insert(id).inserted else { continue }
-            if isBelowDivider {
-                expanded.append(id)
-            } else {
-                alwaysShown.append(id)
-            }
-        }
-
-        // Dashboard rows only render enabled metrics. Merge disabled rows back into their previous
-        // sections so a dashboard drag does not push hidden Customize rows to the end.
-        let desiredAlwaysShown = Set(alwaysShown)
-        let desiredExpanded = Set(expanded)
-        let previousAlwaysShown = validIDs.filter { !expandedMetricIDs.contains($0) && !desiredExpanded.contains($0) }
-        let previousExpanded = validIDs.filter { expandedMetricIDs.contains($0) && !desiredAlwaysShown.contains($0) }
-        alwaysShown = Self.mergingMissingMetrics(into: alwaysShown, previous: previousAlwaysShown)
-        expanded = Self.mergingMissingMetrics(into: expanded, previous: previousExpanded)
-
-        let nextOrder = alwaysShown + expanded
-        let providerExpanded = Set(expanded)
-        let providerIDs = Set(validIDs)
-        let nextExpanded = expandedMetricIDs.subtracting(providerIDs).union(providerExpanded)
-        // Only the dragged metric's expand-on-enable entry is consumed — an explicit placement.
-        // Clearing every metric in the list (the old `subtracting(seen)`) also cleared disabled
-        // optional metrics that `metricOrderWithDivider` includes by default but the user never moved,
-        // so they lost their below-caret default. Matches `reorderMetric`, which consumes only the
-        // dragged id.
-        var nextDefaultExpandedOnEnableIDs = defaultExpandedOnEnableIDs
-        let consumedExpandOnEnable = nextDefaultExpandedOnEnableIDs.remove(dragged) != nil
-        guard metricOrderByProvider[providerID] != nextOrder || expandedMetricIDs != nextExpanded || consumedExpandOnEnable else {
-            return false
-        }
-
-        metricOrderByProvider[providerID] = nextOrder
-        expandedMetricIDs = nextExpanded
-        defaultExpandedOnEnableIDs = nextDefaultExpandedOnEnableIDs
-        persistMetricOrder()
-        persistExpanded()
-        if consumedExpandOnEnable { persistExpandOnEnable() }
-        syncPlacedOrder()
-        return true
-    }
-
-    private static func mergingMissingMetrics(into ordered: [String], previous: [String]) -> [String] {
-        let orderedSet = Set(ordered)
-        var result: [String] = []
-        var emitted = Set<String>()
-        var orderedIndex = ordered.startIndex
-
-        func emitDesiredRows(through id: String) {
-            while orderedIndex < ordered.endIndex {
-                let next = ordered[orderedIndex]
-                orderedIndex = ordered.index(after: orderedIndex)
-                if emitted.insert(next).inserted {
-                    result.append(next)
-                }
-                if next == id { break }
-            }
-        }
-
-        for id in previous {
-            if orderedSet.contains(id) {
-                emitDesiredRows(through: id)
-            } else if emitted.insert(id).inserted {
-                result.append(id)
-            }
-        }
-
-        while orderedIndex < ordered.endIndex {
-            let next = ordered[orderedIndex]
-            orderedIndex = ordered.index(after: orderedIndex)
-            if emitted.insert(next).inserted {
-                result.append(next)
-            }
-        }
-
-        return result
-    }
-
-    /// Pure reorder: remove `dragged`, reinsert it adjacent to `target` (after it when moving down, before
-    /// it when moving up). Returns nil when either id is missing or they're identical. Mirrors the proven
-    /// macOS drag-reorder math from crafcat7/Peakmon (Apache-2.0).
-    static func reordered(_ ids: [String], dragged: String, target: String) -> [String]? {
-        guard dragged != target,
-              let from = ids.firstIndex(of: dragged),
-              let to = ids.firstIndex(of: target) else { return nil }
-        var next = ids
-        next.remove(at: from)
-        guard let adjusted = next.firstIndex(of: target) else { return nil }
-        let insert = from < to ? adjusted + 1 : adjusted
-        next.insert(dragged, at: min(insert, next.count))
-        return next
-    }
-
     // MARK: - Menu bar pins
 
     /// Per-provider cap is a rendering constraint — the Text strip stacks a provider's values two to a
@@ -656,8 +476,6 @@ final class LayoutStore {
     static let maxPinsPerProvider = 2
 
     func isPinned(_ descriptorID: String) -> Bool { pinnedMetricIDs.contains(descriptorID) }
-
-    var pinnedCount: Int { pinnedMetricIDs.count }
 
     func pinnedCount(forProvider providerID: String) -> Int {
         pinnedMetricIDs.count { registry.descriptor(id: $0)?.providerID == providerID }
@@ -736,31 +554,15 @@ final class LayoutStore {
         setPinned(!isPinned(descriptorID), for: descriptorID)
     }
 
-    /// Pinned metrics grouped by provider, in the user's Customize order (provider order, then each
-    /// provider's metric order). A temporarily disabled provider is excluded from the rendered groups
-    /// but keeps its pins. Drives the menu-bar strip.
-    var pinnedGroups: [ProviderMetrics] {
-        orderedProviders().compactMap { provider in
-            guard isProviderEnabled(provider.id) else { return nil }
-            // Keep the strip order matching Customize: always-shown pins first, then expanded ones.
-            let metrics = orderedSupportedMetrics(for: provider.id).filter { pinnedMetricIDs.contains($0.id) }
-            return metrics.isEmpty ? nil : ProviderMetrics(
-                provider: provider,
-                alwaysShownMetrics: metrics.filter { !expandedMetricIDs.contains($0.id) },
-                expandedMetrics: metrics.filter { expandedMetricIDs.contains($0.id) }
-            )
-        }
-    }
-
-    private func persistPins() {
+    func persistPins() {
         persistence.savePins(pinnedMetricIDs)
     }
 
-    private func persistExpanded() {
+    func persistExpanded() {
         persistence.saveExpandedMetrics(expandedMetricIDs)
     }
 
-    private func persistExpandOnEnable() {
+    func persistExpandOnEnable() {
         persistence.saveExpandOnEnable(defaultExpandedOnEnableIDs)
     }
 
@@ -861,15 +663,15 @@ final class LayoutStore {
         draggingID = nil
     }
 
-    private func persist() {
+    func persist() {
         persistence.savePlaced(placed)
     }
 
-    private func persistProviderOrder() {
+    func persistProviderOrder() {
         persistence.saveProviderOrder(providerOrder)
     }
 
-    private func persistMetricOrder() {
+    func persistMetricOrder() {
         persistence.saveMetricOrder(metricOrderByProvider)
     }
 
@@ -877,13 +679,13 @@ final class LayoutStore {
         persistence.saveSeededDefaults(ids)
     }
 
-    private func metricOrder(for providerID: String) -> [String] {
+    func metricOrder(for providerID: String) -> [String] {
         let valid = registry.descriptors(for: providerID).map(\.id)
         let saved = metricOrderByProvider[providerID] ?? []
         return LayoutOrdering.normalizedMetricIDs(saved, validIDs: valid)
     }
 
-    private func syncPlacedOrder(persistChanges: Bool = true) {
+    func syncPlacedOrder(persistChanges: Bool = true) {
         let byDescriptor = Dictionary(
             placed.map { ($0.descriptorID, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -898,67 +700,4 @@ final class LayoutStore {
         if persistChanges { persist() }
     }
 
-}
-
-/// A provider and its placed (visible) widgets, split into the always-shown rows and the ones tucked
-/// behind the dashboard's "show more" caret. Drives the grouped dashboard list.
-struct ProviderGroup: Identifiable {
-    let provider: Provider
-    let alwaysShownWidgets: [PlacedWidget]
-    let expandedWidgets: [PlacedWidget]
-    var id: String { provider.id }
-
-    /// Every visible widget in display order (always-shown first, then expanded). Used where the split
-    /// doesn't matter — reorder id lists and the lifted drag preview.
-    var widgets: [PlacedWidget] { alwaysShownWidgets + expandedWidgets }
-    var hasExpandedMetrics: Bool { !expandedWidgets.isEmpty }
-}
-
-/// A provider and every metric it supports, in the provider's custom order, split across the "Shown on
-/// expand" divider. Drives the Customize screen and the menu-bar pin grouping.
-struct ProviderMetrics: Identifiable {
-    let provider: Provider
-    let alwaysShownMetrics: [WidgetDescriptor]
-    let expandedMetrics: [WidgetDescriptor]
-    var id: String { provider.id }
-
-    init(provider: Provider, alwaysShownMetrics: [WidgetDescriptor], expandedMetrics: [WidgetDescriptor]) {
-        self.provider = provider
-        self.alwaysShownMetrics = alwaysShownMetrics
-        self.expandedMetrics = expandedMetrics
-    }
-
-    /// Convenience for callers that don't partition (e.g. tests): everything is always-shown.
-    init(provider: Provider, metrics: [WidgetDescriptor]) {
-        self.init(provider: provider, alwaysShownMetrics: metrics, expandedMetrics: [])
-    }
-
-    /// Every supported metric in custom order (always-shown first, then expanded).
-    var metrics: [WidgetDescriptor] { alwaysShownMetrics + expandedMetrics }
-    var hasExpandedMetrics: Bool { !expandedMetrics.isEmpty }
-}
-
-/// One row in the Customize provider list (L1): the provider plus the derived bits the row renders —
-/// whether it's enabled (the master toggle + Active/Inactive label), how many metrics it supports
-/// (the badge), and how many are pinned. Drives `CustomizeProviderListView`. Unlike `ProviderMetrics`,
-/// this includes disabled providers so they stay visible in the list.
-struct ProviderRow: Identifiable {
-    let provider: Provider
-    let isEnabled: Bool
-    let metricCount: Int
-    let pinnedCount: Int
-    var id: String { provider.id }
-}
-
-/// Tone for the transient in-Customize pill (`LayoutStore.customizationNotice`): green success or
-/// orange denial.
-enum CustomizationNoticeTone {
-    case positive
-    case notice
-}
-
-/// The message + tone carried by the Customize pill's `TransientNotice`, so its two fields clear together.
-struct CustomizationNoticeContent {
-    var message: String
-    var tone: CustomizationNoticeTone
 }

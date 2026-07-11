@@ -14,14 +14,14 @@ final class AppContainer {
     /// the default account). The Accounts settings UI drives this.
     let accounts: AccountsStore
     /// Single source of truth for which providers the user has turned off. Both stores consult it (via
-    /// injected closures) and the Providers settings tab drives it.
+    /// injected closures) and the Customize provider list drives it.
     let enablement: ProviderEnablementStore
-    /// Providers that need a user-supplied API key (OpenRouter today), conforming to `APIKeyManaging`.
-    /// Settings ▸ API Keys lists these and writes key changes through the capability. Empty when no
-    /// installed provider needs a user key, in which case the section hides itself.
+    /// Providers that need a user-supplied API key (currently OpenRouter and Z.ai), conforming to
+    /// `APIKeyManaging`. Each matching Customize provider detail shows an API Key section and writes
+    /// changes through the capability. Empty when no installed provider needs a user key.
     let apiKeyProviders: [any APIKeyManaging]
-    /// Quota pace notification preferences (master + three triggers). Drives the Settings section and is
-    /// read by `WidgetDataStore.evaluateNotifications`.
+    /// Quota pace notification preferences (three independent triggers). Drives the Settings section
+    /// and is read by `WidgetDataStore.evaluateNotifications`.
     let notificationSettings: NotificationSettingsStore
     /// Anonymous, opt-out usage telemetry (daily rollups). Exposed so Settings can toggle it and the
     /// app-termination hook can flush any queued events.
@@ -160,7 +160,7 @@ final class AppContainer {
         self.accountsObserver = Self.startAccountsObserver(accounts: accounts, layout: layout, dataStore: dataStore)
         // Become the notification-center delegate so banners show while frontmost — a menu-bar accessory
         // effectively always is. Notification authorization is requested the first time a trigger is
-        // turned on (from Settings), not at launch — triggers default off. No-op under tests.
+        // turned on in Settings, not at launch — triggers default off. No-op under tests.
         AppNotifications.shared.registerAsDelegate()
     }
 

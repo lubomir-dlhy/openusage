@@ -42,12 +42,21 @@ final class CodexProvider: ProviderRuntime {
             .percent(id: "\(provider.id).session", provider: provider, title: "Session"),
             .percent(id: "\(provider.id).weekly", provider: provider, title: "Weekly"),
             // Model-specific Spark limits (GPT-5.3-Codex-Spark), parsed from `additional_rate_limits`.
+<<<<<<< HEAD
             // Declared right after Weekly so they group with the core rate-limit meters; seeded as
             // secondary (below the caret) and unpinned in `DefaultLayout`.
             .percent(id: "\(provider.id).spark", provider: provider, title: "Spark"),
             .percent(id: "\(provider.id).sparkWeekly", provider: provider, title: "Spark Weekly"),
             .combined(id: "\(provider.id).credits", provider: provider, title: "Extra Usage", metricLabel: "Credits"),
             .values(id: "\(provider.id).rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets", traySuffix: "resets", showsResetExpiries: true),
+=======
+            // Declared right after Weekly so they group with the core rate-limit meters; seeded On
+            // Demand (below the caret) and unpinned in `DefaultLayout`.
+            .percent(id: "codex.spark", provider: provider, title: "Spark"),
+            .percent(id: "codex.sparkWeekly", provider: provider, title: "Spark Weekly"),
+            .combined(id: "codex.credits", provider: provider, title: "Extra Usage", metricLabel: "Credits"),
+            .values(id: "codex.rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets", traySuffix: "resets", showsResetExpiries: true),
+>>>>>>> upstream/main
             .usageTrend(provider: provider)
         ] + WidgetDescriptor.spendTiles(provider: provider)
     }

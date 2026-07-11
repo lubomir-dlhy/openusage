@@ -160,19 +160,11 @@ private struct MenuBarTextStrip: View {
 
     @ViewBuilder
     private func glyph(_ icon: IconSource) -> some View {
-        switch icon {
-        case .providerMark(let id):
-            if let mark = ProviderMarks.mark(for: id) {
-                ProviderIconShape(pathData: mark.path, inset: 0.04)
-                    .fill(Color.black)
-                    .frame(width: Self.glyphSide, height: Self.glyphSide)
-            } else {
-                Circle().fill(Color.black).frame(width: Self.glyphSide - 1, height: Self.glyphSide - 1)
-            }
-        case .symbol(let name):
-            Image(systemName: name)
-                .font(.system(size: 14, weight: .semibold))
+        if let mark = ProviderMarks.mark(for: icon.providerID) {
+            ProviderIconShape(pathData: mark.path, inset: 0.04)
+                .fill(Color.black)
                 .frame(width: Self.glyphSide, height: Self.glyphSide)
+<<<<<<< HEAD
         case .customFile(let fileName):
             // The strip is rendered into a template NSImage, so a custom account icon shows as its
             // monochrome silhouette beside its metrics (a transparent glyph reads best).
@@ -186,6 +178,10 @@ private struct MenuBarTextStrip: View {
             } else {
                 Circle().fill(Color.black).frame(width: Self.glyphSide - 1, height: Self.glyphSide - 1)
             }
+=======
+        } else {
+            Circle().fill(Color.black).frame(width: Self.glyphSide - 1, height: Self.glyphSide - 1)
+>>>>>>> upstream/main
         }
     }
 }
