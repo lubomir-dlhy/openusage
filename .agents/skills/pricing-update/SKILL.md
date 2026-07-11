@@ -5,7 +5,7 @@ description: Sync OpenUsage's pricing supplement with Cursor's published model p
 
 # Pricing Update
 
-`Sources/OpenUsage/Resources/pricing_supplement.json` prices the models no public catalog carries (Cursor-native models like `auto`, `composer-*`, `github_bugbot`), supplies fast-variant multipliers, and maps provider log/CSV slugs to canonical pricing keys. On merge to `main`, `.github/workflows/pricing-supplement.yml` validates it and publishes it to GitHub Pages; installed apps pick it up within ~a day — no release needed. Full background: `docs/pricing.md`.
+`Sources/OpenUsage/Resources/pricing_supplement.json` prices the models no public catalog carries (Cursor-native models like `auto`, `composer-*`, `github_bugbot`), supplies fast-variant multipliers, and maps provider log/CSV slugs to canonical pricing keys. On merge to `main`, `.github/workflows/pricing-supplement.yml` validates it and publishes it to GitHub Pages; installed apps pick it up within about an hour — no release needed. Full background: `docs/pricing.md`.
 
 Only the supplement needs manual care. Normal API models (new Claude/GPT/Gemini/Grok releases) are priced automatically by the daily LiteLLM and models.dev fetches — do not add them to the supplement unless they need an alias rule or the catalogs are wrong.
 
@@ -80,7 +80,7 @@ gh run list --workflow=pricing-supplement.yml --limit 1
 curl -s https://robinebers.github.io/openusage/pricing_supplement.json | python3 -c "import json,sys; print(json.load(sys.stdin)['updated_at'])"
 ```
 
-The `updated_at` served must match the merged file. Publishing is two hops: the supplement workflow pushes the file to the `gh-pages` branch, then the `Deploy Pages` workflow (defined on the `gh-pages` branch itself; the repo's Pages source is "GitHub Actions") deploys that branch to the live site. If the URL is stale after ~10 minutes, check `gh run list --workflow=deploy-pages.yml` and re-run it with `gh workflow run deploy-pages.yml --ref gh-pages`.
+The `updated_at` served must match the merged file. Publishing is two hops: the supplement workflow pushes the file to the `gh-pages` branch, then `.github/workflows/deploy-pages.yml` on `main` deploys that branch to the live site (Pages source is "GitHub Actions"). If the URL is stale after ~10 minutes, check `gh run list --workflow=deploy-pages.yml` and re-run **`gh workflow run deploy-pages.yml --ref main`** (not `--ref gh-pages`).
 
 ## Optional: refresh bundled snapshots
 

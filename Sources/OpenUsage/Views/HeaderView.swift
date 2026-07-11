@@ -11,16 +11,15 @@ import SwiftUI
 /// behind it — the system `.buttonStyle(.glass)` renders flat on a `Menu` (its own button chrome wins),
 /// so the treatment goes on the container. Increase Transparency adds an adaptive frosted base beneath
 /// the glass for contrast; macOS 15 uses that frosted capsule as its fallback. The menu renders in its
-/// own `NSMenu`-backed window, which
-/// `StatusItemController.shouldKeepPanelOpen` keeps the popover open for.
+/// own `NSMenu`-backed window, which the panel's outside-click policy keeps the popover open for.
 ///
 /// Only the dashboard shows this; the Customize and Settings screens carry their own top-leading back
-/// button (`DashboardView.navBar`) to return home — the macOS-native place for it — so the footer
-/// control simply drops away there.
+/// button (`PopoverTopBar`) to return home — the macOS-native place for it — so the footer control
+/// simply drops away there.
 ///
 /// Shortcuts survive: ⌘, (Settings), ⏎ (Customize) and Esc are handled by the always-on
 /// `PopoverKeyReader` monitor, so they fire from every screen (including Settings, whose footer shows
-/// only the identity line — no buttons). The menu items only carry their ⌘ key-equivalents as labels
+/// only the identity line — no actions). The menu items only carry their ⌘ key-equivalents as labels
 /// and fire while the menu is open, so the monitor and the items never double-fire. ⌘Q (Quit) is
 /// unowned elsewhere, so it rides its menu item directly.
 struct HeaderView: View {
@@ -54,7 +53,7 @@ struct HeaderView: View {
     }
 
     /// The Options pull-down: label plus its own chevron glyph. `.menuStyle(.button)` +
-    /// `.buttonStyle(.plain)` strip the menu chrome so the shared glass is the only surface;
+    /// `.buttonStyle(.plain)` strip the menu chrome so `interactiveGlass` owns the surface;
     /// `.menuIndicator(.hidden)` drops the built-in arrow in favor of our styled chevron.
     private var optionsButton: some View {
         Menu {
@@ -81,7 +80,7 @@ struct HeaderView: View {
     /// `autoenablesItems` has no SwiftUI equivalent, so the Check for Updates item disables itself when
     /// Sparkle can't currently check — e.g. dev builds with no feed, or while a check is already in
     /// flight. Customize and Settings carry their key equivalents so the menu shows the shortcuts: when
-    /// the menu is open the items handle them; when it's closed the `PopoverDismissReader` monitor
+    /// the menu is open the items handle them; when it's closed the `PopoverKeyReader` monitor
     /// handles (and consumes) them first, so the equivalents can't double-fire. Same split as the Quit
     /// ⌘Q item below.
     @ViewBuilder

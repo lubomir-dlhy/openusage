@@ -10,14 +10,14 @@ final class AppContainer {
     let layout: LayoutStore
     let dataStore: WidgetDataStore
     /// Single source of truth for which providers the user has turned off. Both stores consult it (via
-    /// injected closures) and the Providers settings tab drives it.
+    /// injected closures) and the Customize provider list drives it.
     let enablement: ProviderEnablementStore
-    /// Providers that need a user-supplied API key (OpenRouter today), conforming to `APIKeyManaging`.
-    /// Settings ▸ API Keys lists these and writes key changes through the capability. Empty when no
-    /// installed provider needs a user key, in which case the section hides itself.
+    /// Providers that need a user-supplied API key (currently OpenRouter and Z.ai), conforming to
+    /// `APIKeyManaging`. Each matching Customize provider detail shows an API Key section and writes
+    /// changes through the capability. Empty when no installed provider needs a user key.
     let apiKeyProviders: [any APIKeyManaging]
-    /// Quota pace notification preferences (master + three triggers). Drives the Settings section and is
-    /// read by `WidgetDataStore.evaluateNotifications`.
+    /// Quota pace notification preferences (three independent triggers). Drives the Settings section
+    /// and is read by `WidgetDataStore.evaluateNotifications`.
     let notificationSettings: NotificationSettingsStore
     /// Anonymous, opt-out usage telemetry (daily rollups). Exposed so Settings can toggle it and the
     /// app-termination hook can flush any queued events.
@@ -150,7 +150,7 @@ final class AppContainer {
         localAPI.start()
         // Become the notification-center delegate so banners show while frontmost — a menu-bar accessory
         // effectively always is. Notification authorization is requested the first time a trigger is
-        // turned on (from Settings), not at launch — triggers default off. No-op under tests.
+        // turned on in Settings, not at launch — triggers default off. No-op under tests.
         AppNotifications.shared.registerAsDelegate()
     }
 
@@ -172,8 +172,23 @@ final class AppContainer {
     /// cache, so it only hits the network once a snapshot has actually expired. `@Observable` propagates
     /// the resulting snapshot changes to the menu-bar label and any open widgets, so the UI refreshes on
     /// its own instead of only when the popover opens.
+    ///
+    /// Between passes the loop sleeps via `RefreshWakeSignal`, which wakes it early when the user
+    /// enables/disables a provider so a newly-enabled provider is fetched promptly instead of waiting out
+    /// the full interval. The signal subscribes BEFORE the first pass and buffers, so an enablement change
+    /// landing while a pass is still running (first-run credential detection, `NewProviderSeeder`, the
+    /// Customize "Reset All" reseed — all of which typically finish faster than the network fetches) is
+    /// never lost. Each pass still honors the cache (and the per-provider failure backoff), so an early
+    /// wake only hits the network for a provider whose snapshot has actually expired.
+    ///
+    /// The wake is deliberately scoped to `ProviderEnablementStore.didChangeNotification` — NOT the
+    /// firehose `UserDefaults.didChangeNotification`, which fires for the app's own snapshot-cache writes,
+    /// Sparkle's update bookkeeping, and unrelated global-domain changes from other processes. Waking on
+    /// that, with no minimum interval before re-refreshing, collapsed the fixed 5-minute cadence into a
+    /// refresh storm.
     private static func startPeriodicRefresh(dataStore: WidgetDataStore, telemetry: TelemetryRecorder) -> Task<Void, Never> {
         Task {
+            let wakeSignal = RefreshWakeSignal()
             while !Task.isCancelled {
                 await dataStore.refreshAll()
                 // Re-evaluate quota pace milestones every tick — after the refresh so it sees fresh data,
@@ -184,33 +199,8 @@ final class AppContainer {
                 // prior-day provider rollups. Runs on launch and every interval, so always-running
                 // instances still produce a daily-active signal.
                 telemetry.tick()
-                await waitForNextRefresh()
+                await wakeSignal.waitForWake(timeout: RefreshSetting.interval)
             }
-        }
-    }
-
-    /// Sleep for the refresh interval, but wake early when the user enables/disables a provider so a
-    /// newly-enabled provider is fetched promptly instead of waiting out the full interval. Each pass still
-    /// honors the cache (and the per-provider failure backoff), so an early wake only hits the network for
-    /// a provider whose snapshot has actually expired.
-    ///
-    /// Deliberately scoped to `ProviderEnablementStore.didChangeNotification` — NOT the firehose
-    /// `UserDefaults.didChangeNotification`, which fires for the app's own snapshot-cache writes, Sparkle's
-    /// update bookkeeping, and unrelated global-domain changes from other processes. Waking on that, with
-    /// no minimum interval before re-refreshing, collapsed the fixed 5-minute cadence into a refresh storm.
-    private static func waitForNextRefresh() async {
-        let interval = RefreshSetting.interval
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask {
-                try? await Task.sleep(for: .seconds(interval))
-            }
-            group.addTask {
-                for await _ in NotificationCenter.default.notifications(named: ProviderEnablementStore.didChangeNotification) {
-                    break
-                }
-            }
-            _ = await group.next()
-            group.cancelAll()
         }
     }
 }

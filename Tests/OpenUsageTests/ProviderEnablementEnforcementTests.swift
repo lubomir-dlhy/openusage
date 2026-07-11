@@ -2,7 +2,7 @@ import XCTest
 @testable import OpenUsage
 
 /// Covers that the enable/disable choice is actually *enforced* everywhere a provider is consulted:
-/// the refresh loop, the menu-bar value, and the dashboard layout (visible tiles + Add-Widget gallery).
+/// the refresh loop, the menu-bar value, and the dashboard / Customize layout.
 @MainActor
 final class ProviderEnablementEnforcementTests: XCTestCase {
     // MARK: - WidgetDataStore refresh
@@ -38,53 +38,12 @@ final class ProviderEnablementEnforcementTests: XCTestCase {
         XCTAssertNil(store.snapshots["codex"])
     }
 
-    // MARK: - Menu-bar value
-
-    func testMenuBarPrimaryFollowsLayoutOrderAndFallsBackWhenAllDisabled() async {
-        let enablement = ProviderEnablementStore(defaults: makeDefaults("menubar-enablement"))
-
-        let codex = makeRuntime("codex", used: 80)
-        let claude = makeRuntime("claude", used: 30)
-        // Registry order is claude-first; layout order is codex-first. Tray ownership must follow the
-        // layout, proving it is order-driven rather than registry/alphabetical.
-        let registry = WidgetRegistry(
-            providers: [claude.provider, codex.provider],
-            descriptors: [claude.descriptor, codex.descriptor]
-        )
-        let layout = LayoutStore(
-            registry: registry,
-            defaults: makeDefaults("menubar-layout"),
-            storageKey: "layout",
-            isProviderEnabled: { enablement.isEnabled($0) }
-        )
-        layout.placed = [
-            PlacedWidget(descriptorID: codex.descriptor.id),
-            PlacedWidget(descriptorID: claude.descriptor.id)
-        ]
-        let suite = makeDefaults("menubar-store")
-        let store = WidgetDataStore(
-            registry: registry,
-            providers: [codex.runtime, claude.runtime],
-            cache: ProviderSnapshotCache(userDefaults: suite, storageKey: "snapshots", ttl: 600, now: { Date() }),
-            defaults: suite,
-            isProviderEnabled: { enablement.isEnabled($0) },
-            orderedDescriptors: { layout.visiblePlaced.compactMap { layout.descriptor(for: $0) } }
-        )
-        store.meterStyle = .used // headline = used value, so assertions read directly
-        await store.refreshAll()
-
-        XCTAssertEqual(store.menuBarPrimaryText, "80%") // codex is first in layout order
-
-        enablement.setEnabled(false, for: "codex")
-        XCTAssertEqual(store.menuBarPrimaryText, "30%") // codex hidden -> claude is first visible
-
-        enablement.setEnabled(false, for: "claude")
-        XCTAssertEqual(store.menuBarPrimaryText, WidgetData.noDataHeadline) // nothing visible -> no-data marker
-    }
+    // Tray ownership by layout order + disabled-provider exclusion is exercised on the real tray path
+    // (LayoutStore.pinnedGroups + MenuBarContentBuilder) in MenuBarPinTests / MenuBarContentTests.
 
     // MARK: - Layout
 
-    func testVisiblePlacedAndAvailableToAddExcludeDisabledProviderThenRestore() {
+    func testVisiblePlacedAndCustomizeGroupsExcludeDisabledProviderThenRestore() {
         let enablement = ProviderEnablementStore(defaults: makeDefaults("layout-enablement"))
         let layout = LayoutStore(
             registry: .mock,
@@ -95,7 +54,7 @@ final class ProviderEnablementEnforcementTests: XCTestCase {
 
         // All enabled => visiblePlaced is byte-for-byte the full placed list.
         XCTAssertEqual(layout.visiblePlaced, layout.placed)
-        XCTAssertTrue(layout.availableToAdd.contains { $0.providerID == "cursor" })
+        XCTAssertTrue(layout.customizeGroups.contains { $0.provider.id == "cursor" })
 
         enablement.setEnabled(false, for: "cursor")
 
@@ -103,12 +62,14 @@ final class ProviderEnablementEnforcementTests: XCTestCase {
         XCTAssertTrue(layout.visiblePlaced.contains { $0.descriptorID.hasPrefix("claude.") })
         // Disabling hides but does not delete: the Cursor tiles are still parked in `placed`.
         XCTAssertTrue(layout.placed.contains { $0.descriptorID.hasPrefix("cursor.") })
-        XCTAssertFalse(layout.availableToAdd.contains { $0.providerID == "cursor" })
+        XCTAssertFalse(layout.customizeGroups.contains { $0.provider.id == "cursor" })
+        XCTAssertEqual(layout.customizeProviderRows.first { $0.id == "cursor" }?.isEnabled, false)
 
         enablement.setEnabled(true, for: "cursor")
 
         XCTAssertEqual(layout.visiblePlaced, layout.placed)
-        XCTAssertTrue(layout.availableToAdd.contains { $0.providerID == "cursor" })
+        XCTAssertTrue(layout.customizeGroups.contains { $0.provider.id == "cursor" })
+        XCTAssertEqual(layout.customizeProviderRows.first { $0.id == "cursor" }?.isEnabled, true)
     }
 
     // MARK: - Helpers
