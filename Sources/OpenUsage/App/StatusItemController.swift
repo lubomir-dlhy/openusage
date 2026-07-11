@@ -26,7 +26,6 @@ final class MenuBarPanel: NSPanel {
 @MainActor
 final class StatusItemController: NSObject {
     private let container: AppContainer
-    private let updater: UpdaterController
     private let statusItem: NSStatusItem
     /// Owns the menu-bar strip render loop. Its apply closure captures the `NSStatusItem` directly
     /// (which never retains the controller), so this can be a plain non-optional `let`.
@@ -61,7 +60,6 @@ final class StatusItemController: NSObject {
 
     init(container: AppContainer, updater: UpdaterController) {
         self.container = container
-        self.updater = updater
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.statusItem = statusItem
         // Captures the status item, not `self` — no retain cycle, and no optional property just to
@@ -121,8 +119,7 @@ final class StatusItemController: NSObject {
             self?.togglePopover()
         }
 
-        // Esc on the dashboard (and the footer's close affordances) dismiss through the same code
-        // path as a status-item click.
+        // Esc on the dashboard dismisses through the same code path as a status-item click.
         MenuBarPopover.dismissHandler = { [weak self] in
             self?.hidePanel()
         }
@@ -262,8 +259,8 @@ final class StatusItemController: NSObject {
         }
     }
 
-    /// Right-click / control-click on the status item: a native menu mirroring the popover footer's
-    /// "More" items for Settings and Quit (same titles, symbols, and ⌘ shortcuts). Assigning
+    /// Right-click / control-click on the status item: a native menu mirroring the Settings and Quit
+    /// items in the popover footer's Options menu (same titles, symbols, and ⌘ shortcuts). Assigning
     /// `statusItem.menu` for the span of one `performClick` shows the menu anchored under the item and
     /// highlights the button, then clearing it restores the left-click toggle behavior.
     private func showContextMenu() {

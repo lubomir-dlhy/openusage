@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Where a tile/gallery icon comes from: a copied provider vector mark, or an SF Symbol.
+/// Where a tile/gallery icon comes from: a copied provider vector mark, an SF Symbol, or a
+/// per-account custom icon file.
 enum IconSource: Hashable {
     case providerMark(String)   // provider id, e.g. "claude"
     /// SF Symbol name. Reserved for an SF-symbol-iconed metric; currently only constructed by tests as a
