@@ -9,12 +9,16 @@ struct Provider: Identifiable, Hashable {
     /// Declared inline by each provider; mirrors the legacy Tauri `PluginMeta.links`. Empty by default so
     /// providers without links and the existing `Provider(id:displayName:icon:)` call sites need no change.
     let links: [ProviderLink]
+    /// User-assigned chart tint ("RRGGBB") carried from the account's settings; `nil` = automatic.
+    /// Consumed by `TotalSpendPalette` for the Total Spend ring and legend.
+    let tintHex: String?
 
-    init(id: String, displayName: String, icon: IconSource, links: [ProviderLink] = []) {
+    init(id: String, displayName: String, icon: IconSource, links: [ProviderLink] = [], tintHex: String? = nil) {
         self.id = id
         self.displayName = displayName
         self.icon = icon
         self.links = links
+        self.tintHex = tintHex
     }
 
     /// Links safe to render: trimmed, non-empty label and URL, and an `http(s)` scheme only. Mirrors the

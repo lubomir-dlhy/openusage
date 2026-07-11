@@ -38,7 +38,8 @@ final class ClaudeProvider: ProviderRuntime {
             links: [
                 .init(label: "Status", url: "https://status.anthropic.com/"),
                 .init(label: "Dashboard", url: "https://claude.ai/settings/usage")
-            ]
+            ],
+            tintHex: account.colorHex
         )
         // When no auth store is injected (production), build one bound to this account's config dir so
         // each account reads its own credentials. Tests inject a stub directly.

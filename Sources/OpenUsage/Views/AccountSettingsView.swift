@@ -11,19 +11,25 @@ struct AccountSettingsView: View {
     /// nil = adding a new account; non-nil = editing an existing one.
     let existing: ProviderAccount?
     /// Reports the user's choices; the parent does the persistence.
-    let onSave: (_ label: String?, _ configDir: String?, _ pickedIconURL: URL?, _ clearIcon: Bool) -> Void
+    let onSave: (_ label: String?, _ configDir: String?, _ colorHex: String?, _ pickedIconURL: URL?, _ clearIcon: Bool) -> Void
     let onCancel: () -> Void
 
     @State private var label: String
     @State private var configDir: String
+    @State private var colorHex: String?
     @State private var pickedIconURL: URL?
     @State private var clearIcon: Bool
+
+    /// Preset chart tints offered as swatches (system accent hues); "Automatic" clears the override.
+    private static let colorPresets: [String] = [
+        "DE7356", "FF9F0A", "FFD60A", "34C759", "30B0C7", "0A84FF", "5856D6", "A855F7", "FF2D55", "A2845E"
+    ]
 
     init(
         providerID: String,
         providerDisplayName: String,
         existing: ProviderAccount?,
-        onSave: @escaping (_ label: String?, _ configDir: String?, _ pickedIconURL: URL?, _ clearIcon: Bool) -> Void,
+        onSave: @escaping (_ label: String?, _ configDir: String?, _ colorHex: String?, _ pickedIconURL: URL?, _ clearIcon: Bool) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.providerID = providerID
@@ -33,6 +39,7 @@ struct AccountSettingsView: View {
         self.onCancel = onCancel
         _label = State(initialValue: existing?.label ?? "")
         _configDir = State(initialValue: existing?.configDir ?? "")
+        _colorHex = State(initialValue: existing?.colorHex)
         _pickedIconURL = State(initialValue: nil)
         _clearIcon = State(initialValue: false)
     }
@@ -75,19 +82,58 @@ struct AccountSettingsView: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Chart Color").font(.caption).foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    // "Automatic": the provider's brand color / stable fallback hue.
+                    swatch(hex: nil)
+                    ForEach(Self.colorPresets, id: \.self) { preset in
+                        swatch(hex: preset)
+                    }
+                }
+                Text("Used for this account in the Total Spend chart.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+
             Spacer(minLength: 0)
 
             HStack {
                 Spacer()
                 Button("Cancel") { onCancel() }.keyboardShortcut(.cancelAction)
                 Button("Save") {
-                    onSave(trimmedOrNil(label), trimmedOrNil(configDir), pickedIconURL, clearIcon)
+                    onSave(trimmedOrNil(label), trimmedOrNil(configDir), colorHex, pickedIconURL, clearIcon)
                 }
                 .keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
-        .frame(width: 400, height: 320)
+        .frame(width: 400, height: 390)
+    }
+
+    /// One selectable color swatch; `nil` is the "Automatic" slot showing the account's current
+    /// automatic tint with a slash to read as "no override".
+    private func swatch(hex: String?) -> some View {
+        let isSelected = colorHex == hex
+        let fill = hex.flatMap(TotalSpendPalette.parseHex)
+            ?? TotalSpendPalette.color(for: existing?.id ?? providerID)
+        return Button {
+            colorHex = hex
+        } label: {
+            ZStack {
+                Circle().fill(fill).frame(width: 18, height: 18)
+                if hex == nil {
+                    // The "Automatic" slot: a diagonal slash over the automatic tint.
+                    Rectangle().fill(.background).frame(width: 2, height: 18).rotationEffect(.degrees(45))
+                }
+            }
+            .overlay(
+                Circle().strokeBorder(isSelected ? Color.primary : .clear, lineWidth: 2)
+                    .frame(width: 24, height: 24)
+            )
+            .frame(width: 26, height: 26)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(hex == nil ? "Automatic color" : "Color \(hex!)")
     }
 
     @ViewBuilder private var iconPreview: some View {

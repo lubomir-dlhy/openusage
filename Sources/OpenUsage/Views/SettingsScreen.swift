@@ -47,8 +47,8 @@ struct SettingsScreen: View {
                 providerID: target.providerID,
                 providerDisplayName: target.providerDisplayName,
                 existing: target.existing,
-                onSave: { label, configDir, pickedIconURL, clearIcon in
-                    saveAccount(target: target, label: label, configDir: configDir,
+                onSave: { label, configDir, colorHex, pickedIconURL, clearIcon in
+                    saveAccount(target: target, label: label, configDir: configDir, colorHex: colorHex,
                                 pickedIconURL: pickedIconURL, clearIcon: clearIcon)
                 },
                 onCancel: { accountEditor = nil }
@@ -522,12 +522,13 @@ struct SettingsScreen: View {
         container.accounts.removeAccount(id: account.id)
     }
 
-    private func saveAccount(target: AccountEditorTarget, label: String?, configDir: String?, pickedIconURL: URL?, clearIcon: Bool) {
+    private func saveAccount(target: AccountEditorTarget, label: String?, configDir: String?, colorHex: String?, pickedIconURL: URL?, clearIcon: Bool) {
         let accounts = container.accounts
         if let existing = target.existing {
             var updated = existing
             updated.label = label
             updated.configDir = configDir
+            updated.colorHex = colorHex
             if clearIcon, let fileName = updated.iconFileName {
                 AccountIconStore.delete(fileName: fileName)
                 updated.iconFileName = nil
@@ -537,12 +538,17 @@ struct SettingsScreen: View {
             }
             accounts.updateAccount(updated)
         } else {
-            let created = accounts.addAccount(providerID: target.providerID, label: label, configDir: configDir)
+            var created = accounts.addAccount(providerID: target.providerID, label: label, configDir: configDir)
+            var needsUpdate = false
             if let url = pickedIconURL, let fileName = try? AccountIconStore.save(imageAt: url, for: created.id) {
-                var withIcon = created
-                withIcon.iconFileName = fileName
-                accounts.updateAccount(withIcon)
+                created.iconFileName = fileName
+                needsUpdate = true
             }
+            if let colorHex {
+                created.colorHex = colorHex
+                needsUpdate = true
+            }
+            if needsUpdate { accounts.updateAccount(created) }
         }
         accountEditor = nil
     }

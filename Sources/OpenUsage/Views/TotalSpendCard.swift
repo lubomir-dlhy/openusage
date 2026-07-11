@@ -241,7 +241,7 @@ struct TotalSpendRingContent: View {
 
     @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
 
-    private static let ringDiameter: CGFloat = 104
+    private static let ringDiameter: CGFloat = 96
 
     var body: some View {
         HStack(spacing: 18) {
@@ -264,7 +264,7 @@ struct TotalSpendRingContent: View {
             // (the default transition) while the survivors re-flow around it.
             ForEach(arcs) { arc in
                 RingSectorShape(startFraction: arc.start, endFraction: arc.end)
-                    .fill(TotalSpendPalette.color(for: arc.providerID))
+                    .fill(arc.color)
             }
             centerLabel
         }
@@ -287,6 +287,7 @@ struct TotalSpendRingContent: View {
 
     private struct RingArc: Identifiable, Equatable {
         let providerID: String
+        let color: Color
         var start: Double
         var end: Double
 
@@ -306,7 +307,12 @@ struct TotalSpendRingContent: View {
         return zip(projection.slices, floored).map { slice, share in
             let width = share / sum
             defer { cursor += width }
-            return RingArc(providerID: slice.provider.id, start: cursor, end: cursor + width)
+            return RingArc(
+                providerID: slice.provider.id,
+                color: TotalSpendPalette.color(for: slice.provider),
+                start: cursor,
+                end: cursor + width
+            )
         }
     }
 
@@ -356,12 +362,14 @@ struct TotalSpendRingContent: View {
         // Baseline-aligned so a wrapped name keeps the dot and the amount on its first line.
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Circle()
-                .fill(TotalSpendPalette.color(for: slice.provider.id))
+                .fill(TotalSpendPalette.color(for: slice.provider))
                 .frame(width: 8, height: 8)
                 // A shape has no text baseline, so pin the dot's optical center to the first line.
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 3 }
             // Multi-account labels ("Claude · CulturePulse") are wider than the legend column, so
             // wrap to a second line instead of truncating — single-account names stay one line.
+            // The column is sized (panel width vs. ring diameter) so the account word fits a line
+            // at full size; the font is never scaled.
             Text(slice.provider.displayName)
                 .font(.system(size: density.supportingPointSize))
                 .foregroundStyle(.primary)
@@ -427,10 +435,26 @@ enum TotalSpendPalette {
         hex(0x34C759), hex(0x5856D6), hex(0xFF2D55), hex(0xA2845E)
     ]
 
+    /// The tint for a slice: a user-assigned account color wins, then the provider's brand color,
+    /// then the stable hash fallback (extra accounts without a brand entry land here, so two accounts
+    /// of one provider still get distinct hues).
+    static func color(for provider: Provider) -> Color {
+        if let custom = provider.tintHex.flatMap(parseHex) { return custom }
+        return color(for: provider.id)
+    }
+
     static func color(for providerID: String) -> Color {
         if let brand = byProviderID[providerID] { return brand }
         let stableHash = providerID.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF }
         return fallback[stableHash % fallback.count]
+    }
+
+    /// Parses a stored "RRGGBB" (optionally "#"-prefixed) account color. `nil` on anything malformed,
+    /// falling back to the automatic tint rather than rendering a wrong color.
+    static func parseHex(_ raw: String) -> Color? {
+        let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "#", with: "")
+        guard cleaned.count == 6, let value = UInt32(cleaned, radix: 16) else { return nil }
+        return hex(value)
     }
 
     private static func hex(_ value: UInt32) -> Color {

@@ -20,6 +20,9 @@ struct ProviderAccount: Identifiable, Codable, Hashable {
     /// File name of a custom icon stored in the app's `Application Support/AccountIcons` directory.
     /// `nil` = use the provider's bundled mark.
     var iconFileName: String?
+    /// Chart tint for this account ("RRGGBB"), shown in the Total Spend ring and legend.
+    /// `nil` = automatic (the provider's brand color, or a stable fallback hue for extra accounts).
+    var colorHex: String?
 
     /// True for the implicit default account (reads the provider's default credential location).
     var isDefault: Bool { id == providerID }
@@ -34,6 +37,6 @@ struct ProviderAccount: Identifiable, Codable, Hashable {
 
     /// The implicit default account for a provider.
     static func makeDefault(providerID: String) -> ProviderAccount {
-        ProviderAccount(id: providerID, providerID: providerID, label: nil, configDir: nil, iconFileName: nil)
+        ProviderAccount(id: providerID, providerID: providerID, label: nil, configDir: nil, iconFileName: nil, colorHex: nil)
     }
 }

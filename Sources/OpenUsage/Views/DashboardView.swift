@@ -57,7 +57,8 @@ struct DashboardView: View {
     private static let footerHorizontalPadding: CGFloat = outerPadding
     private static let reorderSpace = "popoverReorderSpace"
     /// One width across both densities — switching density shouldn't move the popover's left edge.
-    private static let popoverWidth: CGFloat = 320
+    /// Mirrors the panel window's width so the SwiftUI content and the AppKit frame can't drift.
+    private static let popoverWidth: CGFloat = PanelHeightController.panelWidth
     /// Fixed height of the Customize / Settings back nav bar — the bar pins itself to exactly this height.
     private static let topBarHeight: CGFloat = 44
 

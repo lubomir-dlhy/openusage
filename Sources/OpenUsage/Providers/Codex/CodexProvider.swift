@@ -27,7 +27,8 @@ final class CodexProvider: ProviderRuntime {
             links: [
                 .init(label: "Status", url: "https://status.openai.com/"),
                 .init(label: "Dashboard", url: "https://chatgpt.com/codex/settings/usage")
-            ]
+            ],
+            tintHex: account.colorHex
         )
         self.authStore = authStore ?? CodexAuthStore(configDir: account.configDir)
         self.usageClient = usageClient
