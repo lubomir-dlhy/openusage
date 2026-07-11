@@ -125,7 +125,6 @@ struct WidgetGroupedListView: View {
         // recomputed several times per row (twice per adjacent pair plus once in `row`).
         let providerID = group.provider.id
         let isExpanded = layout.isProviderExpanded(providerID)
-<<<<<<< HEAD
         let hideEmpty = density == .compact
         var alwaysRows = resolvedRows(group.alwaysShownWidgets, hideEmpty: hideEmpty)
         var expandedRows = resolvedRows(group.expandedWidgets, hideEmpty: hideEmpty)
@@ -137,12 +136,7 @@ struct WidgetGroupedListView: View {
                ?? resolvedRows(group.expandedWidgets, hideEmpty: false).first {
             alwaysRows = [fallback]
         }
-        // The caret is a boundary between primary and expanded rows, so text-row condensing should not
-=======
-        let alwaysRows = resolvedRows(group.alwaysShownWidgets)
-        let expandedRows = resolvedRows(group.expandedWidgets)
         // The caret separates Always Visible and On Demand rows, so text-row condensing should not
->>>>>>> upstream/main
         // bridge across it. Each side tightens only against rows on the same side of the separator.
         let condensedIDs = visibleCondensedTextRowIDs(alwaysRows: alwaysRows, expandedRows: isExpanded ? expandedRows : [])
         let cardRows = metricCardRows(

@@ -1,23 +1,13 @@
 import SwiftUI
 
-<<<<<<< HEAD
-/// Where a tile/gallery icon comes from: a copied provider vector mark, or an SF Symbol.
+/// Where a tile/gallery icon comes from: a copied provider vector mark, an SF Symbol, or a
+/// per-account custom icon file.
 enum IconSource: Hashable {
     case providerMark(String)   // provider id, e.g. "claude"
     /// SF Symbol name. Reserved for an SF-symbol-iconed metric; currently only constructed by tests as a
     /// lightweight icon fixture. The render branches below stay so the case is drawable if a metric adopts it.
     case symbol(String)
     case customFile(String)     // per-account custom icon file name in AccountIconStore
-=======
-/// A provider's copied vector mark, keyed by provider id.
-struct IconSource: Hashable {
-    let providerID: String
-
-    /// Named constructor retained at call sites so the stored string's meaning stays explicit.
-    static func providerMark(_ providerID: String) -> IconSource {
-        IconSource(providerID: providerID)
-    }
->>>>>>> upstream/main
 }
 
 /// Renders an `IconSource` in monochrome (`Theme.iconGray`): on the glass popover, icon color
@@ -31,11 +21,17 @@ struct ProviderIcon: View {
     var inset: CGFloat = 0.14
 
     var body: some View {
-        if let mark = ProviderMarks.mark(for: source.providerID) {
-            ProviderIconShape(pathData: mark.path, inset: inset)
-                .fill(Theme.iconGray)
-        } else {
-            Image(systemName: ProviderMarks.symbolFallback(for: source.providerID))
+        switch source {
+        case .providerMark(let id):
+            if let mark = ProviderMarks.mark(for: id) {
+                ProviderIconShape(pathData: mark.path, inset: inset)
+                    .fill(Theme.iconGray)
+            } else {
+                Image(systemName: ProviderMarks.symbolFallback(for: id))
+                    .foregroundStyle(Theme.iconGray)
+            }
+        case .symbol(let name):
+            Image(systemName: name)
                 .foregroundStyle(Theme.iconGray)
         case .customFile(let fileName):
             if let image = AccountIconStore.image(named: fileName) {
