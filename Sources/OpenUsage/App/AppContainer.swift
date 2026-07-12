@@ -68,7 +68,6 @@ final class AppContainer {
         // order is the default provider order (`LayoutStore.orderedProviderIDs` falls back to it, and
         // `resetToDefault` seeds it), so the dashboard, Customize sections, and the per-provider reset
         // menu all read this way.
-<<<<<<< HEAD
         // Claude and Codex support multiple accounts: one runtime per configured account (the default
         // account first, then user-added extras). Other providers are single-account. Order preserves the
         // AGENTS.md default (Claude, Codex, Cursor, then the rest alphabetically), with a provider's extra
@@ -76,20 +75,6 @@ final class AppContainer {
         // the previous single-instance-per-provider list.
         let accounts = AccountsStore()
         let providers = Self.buildProviders(accounts: accounts)
-=======
-        let providers: [ProviderRuntime] = [
-            ClaudeProvider(),
-            CodexProvider(),
-            CursorProvider(),
-            AntigravityProvider(),
-            CopilotProvider(),
-            DevinProvider(),
-            GrokProvider(),
-            OpenCodeProvider(),
-            OpenRouterProvider(),
-            ZAIProvider()
-        ]
->>>>>>> upstream/main
         let registry = WidgetRegistry.from(providers)
         let apiKeyProviders = providers.compactMap { $0 as? any APIKeyManaging }
         let enablement = ProviderEnablementStore()
@@ -245,6 +230,7 @@ final class AppContainer {
         providers.append(CopilotProvider())
         providers.append(DevinProvider())
         providers.append(GrokProvider())
+        providers.append(OpenCodeProvider())
         providers.append(OpenRouterProvider())
         providers.append(ZAIProvider())
         return providers
