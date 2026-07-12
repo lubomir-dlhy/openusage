@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.7.9
+
+### New Features
+- **Codex Usage Trend now covers all surfaces:** each day folds in an estimate of your desktop-app / web / cloud-task usage from ChatGPT's analytics, calibrated against your local CLI logs — hover a day to see the measured local and estimated cloud halves by @lubomir-dlhy
+- **Per-account chart colors:** assign a color to any account in Settings (ten swatches + Automatic); the Total Spend ring and legend follow it. Panel is slightly wider and the ring smaller so long account labels fit without truncating by @lubomir-dlhy
+- **OpenCode provider:** Zen / Go usage tracked from local logs by @robinebers
+- **Codex reset-credit claiming:** a "Use" button in the Rate Limit Resets popover claims a reset credit directly (animated, idempotent, hardened against double-spend) by @robinebers
+
+### Bug Fixes
+- Claude usage cache is isolated per login, credential files are written private (0600), and OAuth form values are correctly encoded by @robinebers
+- Malformed inputs are rejected at the boundaries: Z.ai quotas, Cursor usage exports, JSON booleans in numeric fields, BOM-prefixed credentials by @robinebers
+- Antigravity cache is purged when a logout is detected by @robinebers
+- Options menu glass reinforced in transparent mode by @validatedev
+- Long account labels wrap in the Total Spend legend by @lubomir-dlhy
+
+### Chores
+- Price lists refresh hourly instead of daily by @robinebers
+- Dependency bumps (PostHog 3.64.5, Pages actions) by @dependabot
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.8...v0.7.9](https://github.com/lubomir-dlhy/openusage/compare/v0.7.8...v0.7.9)
+
 ## v0.7.8
 
 ### New Features
