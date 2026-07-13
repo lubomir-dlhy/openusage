@@ -81,4 +81,83 @@ final class CodexCloudUsageTests: XCTestCase {
             localTokensByDay: [:]
         ).isEmpty, "no local data at all → nothing to calibrate against")
     }
+
+    func testEstimatedCloudUsagePricesTokensAtBlendedLocalRate() throws {
+        // Local window: 400M tokens costing $40 → $0.10 per 1M tokens. Calibration (as in the token
+        // test): 40 cli credits over 400M tokens. The imputed cloud tokens then price at that rate.
+        let cloud = [
+            CodexCloudUsageDay(date: "2026-06-20", totalCredits: 25, cliCredits: 25),
+            CodexCloudUsageDay(date: "2026-06-21", totalCredits: 22, cliCredits: 15),
+            CodexCloudUsageDay(date: "2026-06-22", totalCredits: 10, cliCredits: 0),
+        ]
+        let series = DailyUsageSeries(daily: [
+            DailyUsageEntry(date: "2026-06-20", totalTokens: 250_000_000, costUSD: 25),
+            DailyUsageEntry(date: "2026-06-21", totalTokens: 150_000_000, costUSD: 15),
+        ])
+
+        let estimated = CodexCloudUsage.estimatedCloudUsageByDay(cloudDays: cloud, localSeries: series)
+
+        XCTAssertNil(estimated["2026-06-20"], "an all-CLI day has no cloud share to impute")
+        XCTAssertEqual(try XCTUnwrap(estimated["2026-06-21"]).tokens, 70_000_000, accuracy: 1)
+        XCTAssertEqual(try XCTUnwrap(try XCTUnwrap(estimated["2026-06-21"]).costUSD), 7.0, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(try XCTUnwrap(estimated["2026-06-22"]).costUSD), 10.0, accuracy: 0.001)
+    }
+
+    func testEstimatedCloudUsageLeavesCostNilWithoutLocalCostData() throws {
+        let cloud = [CodexCloudUsageDay(date: "2026-06-21", totalCredits: 22, cliCredits: 15)]
+        let series = DailyUsageSeries(daily: [
+            DailyUsageEntry(date: "2026-06-21", totalTokens: 150_000_000, costUSD: nil)
+        ])
+
+        let estimated = CodexCloudUsage.estimatedCloudUsageByDay(cloudDays: cloud, localSeries: series)
+
+        XCTAssertEqual(try XCTUnwrap(estimated["2026-06-21"]).tokens, 70_000_000, accuracy: 1)
+        XCTAssertNil(try XCTUnwrap(estimated["2026-06-21"]).costUSD, "no priced local day → nothing to blend a rate from")
+    }
+
+    func testMergedTileSeriesAddsCloudToLocalDaysAndCreatesIdleDays() {
+        let series = DailyUsageSeries(daily: [
+            DailyUsageEntry(date: "2026-06-21", totalTokens: 150_000_000, costUSD: 15)
+        ])
+        let cloud = [
+            "2026-06-21": CodexCloudEstimate(tokens: 70_000_000, costUSD: 7),
+            "2026-06-22": CodexCloudEstimate(tokens: 100_000_000, costUSD: 10),
+        ]
+
+        let merged = CodexCloudUsage.mergedTileSeries(series, cloudByDay: cloud)
+
+        XCTAssertEqual(merged.daily.count, 2)
+        let overlap = merged.daily.first { $0.date == "2026-06-21" }
+        XCTAssertEqual(overlap?.totalTokens, 220_000_000)
+        XCTAssertEqual(overlap?.costUSD ?? 0, 22, accuracy: 0.001)
+        let cloudOnly = merged.daily.first { $0.date == "2026-06-22" }
+        XCTAssertEqual(cloudOnly?.totalTokens, 100_000_000)
+        XCTAssertEqual(cloudOnly?.costUSD ?? 0, 10, accuracy: 0.001, "a locally-idle day still gets a tile-visible entry")
+        XCTAssertEqual(CodexCloudUsage.mergedTileSeries(series, cloudByDay: [:]), series, "no estimates → series untouched")
+    }
+
+    func testMergedTileModelUsageAppendsCloudRow() throws {
+        let usage = ModelUsageSeries(daily: [
+            DailyModelUsageEntry(date: "2026-06-21", models: [
+                ModelUsageEntry(model: "gpt-5.5", totalTokens: 150_000_000, costUSD: 15)
+            ])
+        ])
+        let cloud = [
+            "2026-06-21": CodexCloudEstimate(tokens: 70_000_000, costUSD: 7),
+            "2026-06-22": CodexCloudEstimate(tokens: 100_000_000, costUSD: 10),
+        ]
+
+        let merged = try XCTUnwrap(CodexCloudUsage.mergedTileModelUsage(usage, cloudByDay: cloud))
+
+        let overlap = try XCTUnwrap(merged.daily.first { $0.date == "2026-06-21" })
+        XCTAssertEqual(overlap.models.map(\.model), ["gpt-5.5", CodexCloudUsage.cloudModelName])
+        XCTAssertEqual(overlap.models.last?.totalTokens, 70_000_000)
+        let cloudOnly = try XCTUnwrap(merged.daily.first { $0.date == "2026-06-22" })
+        XCTAssertEqual(cloudOnly.models.map(\.model), [CodexCloudUsage.cloudModelName])
+        XCTAssertNil(CodexCloudUsage.mergedTileModelUsage(nil, cloudByDay: [:]), "nothing to merge stays nil")
+        XCTAssertEqual(
+            CodexCloudUsage.mergedTileModelUsage(nil, cloudByDay: cloud)?.daily.count, 2,
+            "cloud estimates alone still produce a breakdown series"
+        )
+    }
 }

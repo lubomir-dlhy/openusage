@@ -137,26 +137,29 @@ final class CodexProvider: ProviderRuntime {
         // Local spend tiles, scanned natively from the Codex CLI's session rollouts and priced
         // through the shared pricing store. `scan` runs on the scanner actor, off the main actor.
         if let scan = await logUsageScanner.scan(now: now(), pricing: pricing()) {
-            SpendTileMapper.appendTokenUsage(
-                scan.series, to: &mapped.lines, now: now(),
-                unknownModelsByDay: scan.unknownModelsByDay,
-                modelUsage: scan.modelUsage,
-                modelSourceNote: "From your Codex logs (estimated)"
-            )
-            // Merge ChatGPT's cloud analytics into the trend: tokens for the surfaces local logs
-            // can't see (desktop, web, cloud exec), imputed by calibrating credits-per-token against
-            // the local logs. Empty when the fetch fails or calibration is impossible, leaving the
-            // trend exactly as before.
-            let cloudExtra = await fetchCloudTrendExtraBestEffort(
+            // ChatGPT's cloud analytics cover the surfaces local logs can't see (desktop, web,
+            // cloud exec); tokens and dollars are imputed by calibrating against the local logs
+            // (see `CodexCloudUsage`). Empty when the fetch fails or calibration is impossible,
+            // leaving tiles and trend exactly as local-only.
+            let cloudExtra = await fetchCloudUsageExtraBestEffort(
                 accessToken: currentToken,
                 accountID: authState.auth.tokens?.accountID,
                 series: scan.series
             )
+            let sourceNote = cloudExtra.isEmpty
+                ? "From your Codex logs (estimated)"
+                : "From your Codex logs + ChatGPT cloud analytics (estimated)"
+            SpendTileMapper.appendTokenUsage(
+                CodexCloudUsage.mergedTileSeries(scan.series, cloudByDay: cloudExtra),
+                to: &mapped.lines, now: now(),
+                unknownModelsByDay: scan.unknownModelsByDay,
+                modelUsage: CodexCloudUsage.mergedTileModelUsage(scan.modelUsage, cloudByDay: cloudExtra),
+                modelSourceNote: sourceNote
+            )
             SpendTileMapper.appendUsageTrend(
-                scan.series, cloudExtraTokensByDay: cloudExtra, to: &mapped.lines, now: now(),
-                note: cloudExtra.isEmpty
-                    ? "From your Codex logs (estimated)"
-                    : "From your Codex logs + ChatGPT cloud analytics (estimated)"
+                scan.series, cloudExtraTokensByDay: cloudExtra.mapValues(\.tokens),
+                to: &mapped.lines, now: now(),
+                note: sourceNote
             )
         }
 
@@ -164,15 +167,15 @@ final class CodexProvider: ProviderRuntime {
         return ProviderSnapshot.make(provider: provider, plan: mapped.plan, lines: mapped.lines, refreshedAt: now())
     }
 
-    /// Fetches the cloud analytics and imputes per-day tokens for the non-CLI surfaces (see
-    /// `CodexCloudUsage`). Best-effort like the reset-credit fetch: any failure — network, non-2xx,
-    /// unparseable body — logs a warning and returns empty, so the trend stays local-only rather than
-    /// failing the whole refresh.
-    private func fetchCloudTrendExtraBestEffort(
+    /// Fetches the cloud analytics and imputes per-day tokens and dollars for the non-CLI surfaces
+    /// (see `CodexCloudUsage`). Best-effort like the reset-credit fetch: any failure — network,
+    /// non-2xx, unparseable body — logs a warning and returns empty, so the tiles and trend stay
+    /// local-only rather than failing the whole refresh.
+    private func fetchCloudUsageExtraBestEffort(
         accessToken: String,
         accountID: String?,
         series: DailyUsageSeries
-    ) async -> [String: Double] {
+    ) async -> [String: CodexCloudEstimate] {
         let calendar = Calendar.current
         let end = now()
         guard let start = calendar.date(byAdding: .day, value: -30, to: end) else { return [:] }
@@ -184,19 +187,15 @@ final class CodexProvider: ProviderRuntime {
                 endDate: DailyUsageAccumulator.dayKey(from: end)
             )
             guard (200..<300).contains(response.statusCode), let body = ProviderParse.jsonObject(response.body) else {
-                AppLog.warn(LogTag.plugin("codex"), "cloud analytics fetch returned \(response.statusCode); trend stays local-only")
+                AppLog.warn(LogTag.plugin("codex"), "cloud analytics fetch returned \(response.statusCode); spend stays local-only")
                 return [:]
             }
-            var localTokensByDay: [String: Int] = [:]
-            for day in series.daily {
-                localTokensByDay[day.date, default: 0] += day.totalTokens
-            }
-            return CodexCloudUsage.estimatedCloudTokensByDay(
+            return CodexCloudUsage.estimatedCloudUsageByDay(
                 cloudDays: CodexCloudUsage.parseDays(body),
-                localTokensByDay: localTokensByDay
+                localSeries: series
             )
         } catch {
-            AppLog.warn(LogTag.plugin("codex"), "cloud analytics fetch failed; trend stays local-only: \(error.localizedDescription)")
+            AppLog.warn(LogTag.plugin("codex"), "cloud analytics fetch failed; spend stays local-only: \(error.localizedDescription)")
             return [:]
         }
     }
