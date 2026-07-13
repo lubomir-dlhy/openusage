@@ -24,3 +24,43 @@ Settings lists each valid device file with the time that Mac generated it. **Rem
 Mac's file, although that Mac can create it again on its next update while sync remains enabled there.
 Turning sync off deletes this Mac's file, stops reading peers, and immediately returns every surface to
 local-only spend. Malformed files are ignored and reported in Settings and the app log.
+
+## Development and release setup
+
+Apple requires the iCloud container assignment to be present in the provisioning profile embedded in
+the app. OpenUsage uses separate resources so development builds cannot write production history:
+
+- `com.robinebers.openusage.dev` uses `iCloud.com.robinebers.openusage.dev`.
+- `com.robinebers.openusage` uses `iCloud.com.robinebers.openusage`.
+
+Create a `MAC_APP_DEVELOPMENT` profile that includes every registered development Mac and a
+`MAC_APP_DIRECT` profile for releases. Install the development profile on each included Mac, then
+pass its path when building:
+
+```bash
+ICLOUD_PROVISIONING_PROFILE="$HOME/Library/MobileDevice/Provisioning Profiles/<uuid>.mobileprovision" \
+  ./script/build_and_run.sh
+```
+
+The release workflow reads the base64-encoded `MAC_APP_DIRECT` profile from the repository Actions
+secret `APPLE_DEVELOPER_ID_ICLOUD_PROFILE`. Keep the original provisioning profiles and signing `.p12`
+in a password manager, never in the repository. A provisioning profile contains certificates and
+entitlements rather than private keys, but treating it as a signing asset keeps rotation predictable.
+
+To inspect the actual history written by a running build, find the file first and only call `jq` when a
+file exists:
+
+```bash
+file=$(find "$HOME/Library/Mobile Documents" \
+  -type f -path '*openusage*/OpenUsage/History/v1/*.json' -print -quit)
+
+if [[ -n "$file" ]]; then
+  jq . "$file"
+else
+  echo "No OpenUsage iCloud history file found"
+fi
+```
+
+No file is expected when sync is off, the app is signed without the matching profile, or the first
+write has not completed. The Settings error and app log distinguish those cases; the spinner only
+appears while an iCloud read or write is actually in progress.

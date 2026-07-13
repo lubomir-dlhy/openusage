@@ -24,7 +24,7 @@ struct ICloudSyncSettingsSection: View {
             VStack(spacing: 0) {
                 HStack(spacing: 7) {
                     Text("Sync Across Macs")
-                    if sync.enabled, sync.isSyncing {
+                    if sync.enabled, sync.isSyncing, sync.serviceError == nil {
                         ProgressView()
                             .controlSize(.small)
                             .transition(.scale(scale: 0.8).combined(with: .opacity))
