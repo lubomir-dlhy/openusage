@@ -19,7 +19,8 @@ import Foundation
 ///   session logs) count once.
 /// - Cost per event: `(input - cached) x input rate + cached x cache-read rate + output x output
 ///   rate`, all x the model's fast multiplier (default 2) when the user's `config.toml` requests
-///   the fast/priority service tier. No 200k tiering — OpenAI doesn't price long context higher.
+///   the fast/priority service tier. Supported GPT-5.4/5.5/5.6 requests above 272k input tokens use
+///   OpenAI's higher rates for the whole request.
 ///
 /// An actor for the same reasons as `ClaudeLogUsageScanner`: scans run off the main actor, and a
 /// per-file parse cache keyed (path, size, mtime) makes the ~5-minute refresh re-parse only files
@@ -387,22 +388,92 @@ actor CodexLogUsageScanner {
                 }
                 continue
             }
-            let eventCost = cost(rates: rates, event: event, fastTier: fastTier)
+            let canonicalModel = pricing.supplement.canonicalName(for: model) ?? model
+            let eventCost = cost(
+                rates: rates,
+                event: event,
+                model: canonicalModel,
+                fastTier: fastTier,
+                fastMultiplier: codexPriorityMultiplier(for: canonicalModel, rates: rates)
+            )
             accumulator.add(day: day, tokens: event.total, cost: eventCost, model: model)
         }
 
         return accumulator.build()
     }
 
-    /// Codex cost math (ccusage's): non-cached input at the input rate, cached input at the
-    /// cache-read rate, output (reasoning included) at the output rate — no 200k tiers, no cache
-    /// writes. On the fast tier the model's fast multiplier applies, defaulting to 2 when the
-    /// pricing sources carry none.
-    static func cost(rates: ModelRates, event: Event, fastTier: Bool) -> Double {
-        let multiplier = fastTier ? (rates.fastMultiplier == 1 ? 2 : rates.fastMultiplier) : 1
+    /// Codex cost math (ccusage's): non-cached input at the input rate, cached input at the explicit
+    /// cache-read rate (or full input when the source publishes no discount), and output (reasoning
+    /// included) at the output rate. Supported OpenAI models switch the whole request above 272k.
+    static func cost(
+        rates: ModelRates,
+        event: Event,
+        model: String,
+        fastTier: Bool,
+        fastMultiplier: Double
+    ) -> Double {
+        var effectiveRates = rates
+        if let longContext = codexLongContextRates(for: model) {
+            effectiveRates.inputAbove200kPerMillion = longContext.input
+            effectiveRates.outputAbove200kPerMillion = longContext.output
+            effectiveRates.cacheReadAbove200kPerMillion = longContext.cacheRead
+            effectiveRates.longContextThresholdTokens = 272_000
+        }
+        if codexModelHasNoCacheDiscount(model) {
+            effectiveRates.cacheReadPerMillion = effectiveRates.inputPerMillion
+            effectiveRates.cacheReadAbove200kPerMillion = effectiveRates.inputAbove200kPerMillion
+        } else if !rates.cacheReadIsExplicit {
+            effectiveRates.cacheReadPerMillion = effectiveRates.inputPerMillion
+            effectiveRates.cacheReadAbove200kPerMillion = effectiveRates.inputAbove200kPerMillion
+        }
+        effectiveRates.fastMultiplier = fastMultiplier
+
         let nonCached = max(0, event.input - event.cached)
-        return (Double(nonCached) * rates.inputPerMillion
-            + Double(event.cached) * rates.cacheReadPerMillion
-            + Double(event.output) * rates.outputPerMillion) / 1_000_000 * multiplier
+        return effectiveRates.costDollars(for: TokenBreakdown(
+            input: nonCached,
+            cacheRead: event.cached,
+            output: event.output,
+            isFast: fastTier
+        ))
+    }
+
+    /// Codex priority service-tier multipliers are provider-specific and intentionally do not use
+    /// the supplement's Cursor `-fast` multipliers. Unknown models retain the catalog/fallback rule.
+    private static func codexPriorityMultiplier(for model: String, rates: ModelRates) -> Double {
+        let base = datedBaseModel(model)
+        switch base {
+        case "gpt-5.5", "gpt-5.5-pro": return 2.5
+        case "gpt-5.4", "gpt-5.4-pro",
+             "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna": return 2
+        default: return rates.fastMultiplier == 1 ? 2 : rates.fastMultiplier
+        }
+    }
+
+    /// OpenAI explicitly publishes no cached-input discount for these Pro models. Keep this
+    /// provider rule even while an older bundled catalog lacks cache-rate provenance.
+    private static func codexModelHasNoCacheDiscount(_ model: String) -> Bool {
+        switch datedBaseModel(model) {
+        case "gpt-5.4-pro", "gpt-5.5-pro": return true
+        default: return false
+        }
+    }
+
+    private static func codexLongContextRates(for model: String) -> (input: Double, output: Double, cacheRead: Double)? {
+        switch datedBaseModel(model) {
+        case "gpt-5.4": return (5, 22.5, 0.5)
+        case "gpt-5.4-pro": return (60, 270, 60)
+        case "gpt-5.5": return (10, 45, 1)
+        case "gpt-5.5-pro": return (60, 270, 60)
+        case "gpt-5.6-sol": return (10, 45, 1)
+        case "gpt-5.6-terra": return (5, 22.5, 0.5)
+        case "gpt-5.6-luna": return (2, 9, 0.2)
+        default: return nil
+        }
+    }
+
+    private static func datedBaseModel(_ model: String) -> String {
+        model
+            .replacingOccurrences(of: #"-\d{4}-\d{2}-\d{2}$"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"-\d{8}$"#, with: "", options: .regularExpression)
     }
 }
