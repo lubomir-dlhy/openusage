@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.7.10
+
+### New Features
+- **Codex spend tiles now cover all surfaces:** Today / Yesterday / Last 30 Days fold in your Codex desktop-app / web / cloud-task usage, estimated from ChatGPT's cloud analytics and priced at your local logs' blended rate — the hover breakdown shows the estimated share as its own "ChatGPT Cloud" row by @lubomir-dlhy
+
+### Bug Fixes
+- **Weekly-only plans show the right meter:** Codex rate-limit meters now match each reported window by its duration, so a plan with a single weekly limit reads "Weekly" instead of a mislabeled "Session" with a 6-day reset (same for Spark) by @lubomir-dlhy
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.9...v0.7.10](https://github.com/lubomir-dlhy/openusage/compare/v0.7.9...v0.7.10)
+
 ## v0.7.9
 
 ### New Features
