@@ -154,6 +154,66 @@ final class CodexUsageMapperTests: XCTestCase {
         XCTAssertEqual(progress(mapped.lines, "Session")?.periodDurationMs, 18_000_000)
     }
 
+    func testSingleWeeklyPrimaryWindowLabelsAsWeekly() throws {
+        // Some plans report one weekly window as `primary_window` with no secondary (the ChatGPT
+        // profile shows only a "Weekly usage limit"). The meter must follow the window's duration —
+        // labeling it positionally showed the weekly limit as "Session", and the primary-percent
+        // header must not resurrect a phantom Session meter alongside it.
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let body = Data("""
+        {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 2,
+              "limit_window_seconds": 604800,
+              "reset_after_seconds": 561192,
+              "reset_at": \(Int(now.timeIntervalSince1970) + 561_192)
+            },
+            "secondary_window": null
+          }
+        }
+        """.utf8)
+        let response = HTTPResponse(
+            statusCode: 200,
+            headers: ["x-codex-primary-used-percent": "2"],
+            body: body
+        )
+
+        let mapped = try CodexUsageMapper.mapUsageResponse(response, now: now)
+
+        XCTAssertNil(progress(mapped.lines, "Session"))
+        XCTAssertEqual(progress(mapped.lines, "Weekly")?.used, 2)
+        XCTAssertEqual(progress(mapped.lines, "Weekly")?.periodDurationMs, 604_800_000)
+    }
+
+    func testSingleWeeklySparkWindowLabelsAsSparkWeekly() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let body = Data("""
+        {
+          "rate_limit": {
+            "primary_window": { "used_percent": 2, "limit_window_seconds": 604800 },
+            "secondary_window": null
+          },
+          "additional_rate_limits": [
+            {
+              "limit_name": "GPT-5.3-Codex-Spark",
+              "rate_limit": {
+                "primary_window": { "used_percent": 0, "limit_window_seconds": 604800 },
+                "secondary_window": null
+              }
+            }
+          ]
+        }
+        """.utf8)
+        let response = HTTPResponse(statusCode: 200, headers: [:], body: body)
+
+        let mapped = try CodexUsageMapper.mapUsageResponse(response, now: now)
+
+        XCTAssertNil(progress(mapped.lines, "Spark"))
+        XCTAssertEqual(progress(mapped.lines, "Spark Weekly")?.used, 0)
+        XCTAssertEqual(progress(mapped.lines, "Spark Weekly")?.periodDurationMs, 604_800_000)
+    }
+
     func testMapsWindowsCreditsAndPlan() throws {
         let body = Data("""
         {
