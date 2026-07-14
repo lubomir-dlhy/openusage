@@ -18,9 +18,11 @@ import Foundation
 /// - Identical events (same timestamp + model + token counts) appearing in multiple files (copied
 ///   session logs) count once.
 /// - Cost per event: `(input - cached) x input rate + cached x cache-read rate + output x output
-///   rate`, all x the model's fast multiplier (default 2) when the user's `config.toml` requests
-///   the fast/priority service tier. Supported GPT-5.4/5.5/5.6 requests above 272k input tokens use
-///   OpenAI's higher rates for the whole request.
+///   rate`, all x the model's Codex priority multiplier when the session ran on the fast/priority
+///   service tier. The tier is tracked per session from `thread_settings_applied` lines — never from
+///   the current `config.toml`, which would retroactively reprice the whole history when toggled.
+///   Events with no recorded tier price at standard rates. Supported GPT-5.4/5.5/5.6 requests above
+///   272k input tokens use OpenAI's higher rates for the whole request.
 ///
 /// An actor for the same reasons as `ClaudeLogUsageScanner`: scans run off the main actor, and a
 /// per-file parse cache keyed (path, size, mtime) makes the ~5-minute refresh re-parse only files
@@ -38,6 +40,8 @@ actor CodexLogUsageScanner {
     }
 
     /// One turn's token usage, normalized from a `token_count` line (deltas already applied).
+    /// `isFast` records whether the session was on the fast/priority service tier when the turn
+    /// ran, tracked from the session's own log; absent tier metadata means standard.
     struct Event: Sendable, Equatable {
         var timestamp: Date
         var model: String
@@ -46,6 +50,7 @@ actor CodexLogUsageScanner {
         var output: Int
         var reasoning: Int
         var total: Int
+        var isFast: Bool = false
     }
 
     /// Off-main-actor incremental parse cache (keyed path + size + mtime), owned by the shared scanner.
@@ -60,9 +65,7 @@ actor CodexLogUsageScanner {
 
         let since = JSONLScanning.sinceDate(daysBack: daysBack, now: now)
         let events = await scanner.items(from: files, since: since, parse: Self.parseFile)
-        return Self.aggregate(
-            events: events, since: since, pricing: pricing, fastTier: usesFastServiceTier(homes: homes)
-        )
+        return Self.aggregate(events: events, since: since, pricing: pricing)
     }
 
     // MARK: - Discovery
@@ -112,46 +115,29 @@ actor CodexLogUsageScanner {
         return files
     }
 
-    /// The user runs Codex on the fast/priority service tier (billed at the fast multiplier) when
-    /// any home's `config.toml` sets `service_tier = "fast"` or `"priority"` — ccusage's detection.
-    private func usesFastServiceTier(homes: [URL]) -> Bool {
-        for home in homes {
-            guard let content = try? String(contentsOf: home.appendingPathComponent("config.toml"), encoding: .utf8)
-            else { continue }
-            for line in content.split(separator: "\n", omittingEmptySubsequences: false) {
-                let setting = line.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)
-                    .first ?? ""
-                guard let equals = setting.firstIndex(of: "=") else { continue }
-                let key = setting[..<equals].trimmingCharacters(in: .whitespaces)
-                guard key == "service_tier" else { continue }
-                let value = setting[setting.index(after: equals)...]
-                    .trimmingCharacters(in: .whitespaces)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-                if value == "fast" || value == "priority" { return true }
-            }
-        }
-        return false
-    }
-
     // MARK: - File parsing
 
-    /// Parse one rollout file: track the current model from `turn_context`, normalize each
-    /// `token_count` into a delta event, and skip a subagent's replayed parent counts.
+    /// Parse one rollout file: track the current model from `turn_context` and the current service
+    /// tier from `thread_settings_applied`, normalize each `token_count` into a delta event, and
+    /// skip a subagent's replayed parent counts. A session that never records a tier is standard.
     static func parseFile(_ data: Data) -> [Event] {
         let subagent = data.prefix(16 * 1024).range(of: Data("thread_spawn".utf8)) != nil
         let replaySecond = subagent ? detectSubagentReplaySecond(data) : nil
 
         let turnContextMarker = Data(#""type":"turn_context""#.utf8)
         let tokenCountMarker = Data(#""type":"token_count""#.utf8)
+        let threadSettingsMarker = Data(#""type":"thread_settings_applied""#.utf8)
 
         var events: [Event] = []
         var previousTotals: RawUsage?
         var currentModel: String?
+        var currentTierIsFast = false
         var skipReplay = replaySecond != nil
 
         for line in data.split(separator: UInt8(ascii: "\n")) {
             let isTurnContext = line.range(of: turnContextMarker) != nil
-            guard isTurnContext || line.range(of: tokenCountMarker) != nil else { continue }
+            let isThreadSettings = line.range(of: threadSettingsMarker) != nil
+            guard isTurnContext || isThreadSettings || line.range(of: tokenCountMarker) != nil else { continue }
             guard let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { continue }
 
             let type = object["type"] as? String
@@ -160,6 +146,13 @@ actor CodexLogUsageScanner {
             if type == "turn_context" {
                 if let model = payload.flatMap(modelName(in:)) {
                     currentModel = model
+                }
+                continue
+            }
+            if isThreadSettings, type == "event_msg",
+               payload?["type"] as? String == "thread_settings_applied" {
+                if let tier = serviceTier(in: payload) {
+                    currentTierIsFast = tier == "fast" || tier == "priority"
                 }
                 continue
             }
@@ -208,10 +201,24 @@ actor CodexLogUsageScanner {
                 cached: min(usage.cached, usage.input),
                 output: usage.output,
                 reasoning: usage.reasoning,
-                total: usage.total
+                total: usage.total,
+                isFast: currentTierIsFast
             ))
         }
         return events
+    }
+
+    /// The `service_tier` a `thread_settings_applied` payload carries in `thread_settings`
+    /// (tolerating a top-level spelling), e.g. `"default"`, `"fast"`, or `"priority"`.
+    private static func serviceTier(in payload: [String: Any]?) -> String? {
+        guard let payload else { return nil }
+        let settings = payload["thread_settings"] as? [String: Any]
+        for value in [settings?["service_tier"], payload["service_tier"]] {
+            if let text = (value as? String)?.trimmingCharacters(in: .whitespaces), !text.isEmpty {
+                return text
+            }
+        }
+        return nil
     }
 
     /// Token fields of a `token_count` usage object, tolerating the older field spellings ccusage
@@ -365,7 +372,7 @@ actor CodexLogUsageScanner {
     /// `unknownModelsByDay` (the tile's warning triangle), the only place unpriceable usage surfaces.
     /// A blank slug is unattributed, not unknown — there is no name to warn about.
     static func aggregate(
-        events: [Event], since: Date, pricing: ModelPricing, fastTier: Bool
+        events: [Event], since: Date, pricing: ModelPricing
     ) -> LogUsageScan {
         var seen: Set<EventKey> = []
         var accumulator = DailyUsageAccumulator()
@@ -401,7 +408,7 @@ actor CodexLogUsageScanner {
                 }
                 continue
             }
-            let appliesCodexFastTier = isFastAlias ? baseRates != nil : fastTier
+            let appliesCodexFastTier = isFastAlias ? baseRates != nil : event.isFast
             let eventCost = cost(
                 rates: rates,
                 event: event,
