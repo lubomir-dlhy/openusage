@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.7.11
+
+Syncs the fork with upstream OpenUsage v0.7.6 (plus newer upstream fixes), keeping all fork features — multi-account providers, per-account charts, and ChatGPT cloud analytics — intact.
+
+### New Features
+- **iCloud usage sync (opt-in):** sync your machine-local daily usage history privately between your Macs via iCloud Drive by @robinebers *(see Heads-up below)*
+- **One-shot CLI:** a bundled `openusage` command reads your limits as stable JSON through the same five-minute cache — the menu-bar app doesn't need to be running (`openusage --force` bypasses freshness) by @robinebers
+- **pi coding agent usage:** Codex and Claude usage that happened inside [pi](https://github.com/earendil-works/pi) is folded into the same spend tiles and Usage Trend by @jal-co
+- **Claude Desktop login:** the Claude card can read the Desktop app's login when no usable CLI login exists (default account only) by @robinebers
+- **Cursor Enterprise:** included and on-demand usage now shows for enterprise/team accounts by @iicdii
+- **Screen-share privacy:** optionally hide menu-bar usage numbers while your screen is shared or recorded by @robinebers
+- **Faster refreshes:** parsed local usage logs are cached across launches, so scans only parse changed files by @robinebers
+
+### Bug Fixes
+- **Codex spend inflation fixed:** subagent/forked session replay logs no longer multiply token counts (~20x on heavy subagent use) by @robinebers
+- **Sharper cost estimates:** long-context rates above 272k input tokens, published cache-read discounts, and per-session fast-tier pricing from rollout logs (instead of the current `config.toml`) by @robinebers
+- **Menu bar:** the icon closes the panel again on second click when the menu bar sits at the top of the screen; the Sparkle update window activates properly by @robinebers
+- **Symlinked log directories** are followed when scanning local usage by @robinebers
+- **Pricing:** `cursor-grok-4.5` usage slugs and the `xhigh` effort suffix on Grok 4.5 aliases are recognized by @robinebers
+
+### Heads-up
+- iCloud Sync appears in Settings but reports itself unavailable in this build: fork releases are signed without iCloud entitlements until an iCloud container + provisioning profile exist under the fork's Apple Developer team.
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.10...v0.7.11](https://github.com/lubomir-dlhy/openusage/compare/v0.7.10...v0.7.11)
+
 ## v0.7.10
 
 ### New Features
