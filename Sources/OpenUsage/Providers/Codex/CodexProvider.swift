@@ -40,16 +40,28 @@ final class CodexProvider: ProviderRuntime {
     // Descriptor ids scoped by account id (`provider.id`); default account id == "codex" keeps "codex.*".
     var widgetDescriptors: [WidgetDescriptor] {
         [
-            .percent(id: "\(provider.id).session", provider: provider, title: "Session"),
-            .percent(id: "\(provider.id).weekly", provider: provider, title: "Weekly"),
+            .percent(id: "\(provider.id).session", provider: provider, title: "Session")
+                .exportingLimit("session", unit: "percent"),
+            .percent(id: "\(provider.id).weekly", provider: provider, title: "Weekly")
+                .exportingLimit("weekly", unit: "percent"),
             // Model-specific Spark limits (GPT-5.3-Codex-Spark), parsed from `additional_rate_limits`.
             // Declared right after Weekly so they group with the core rate-limit meters; seeded On
             // Demand (below the caret) and unpinned in `DefaultLayout`.
-            .percent(id: "\(provider.id).spark", provider: provider, title: "Spark"),
-            .percent(id: "\(provider.id).sparkWeekly", provider: provider, title: "Spark Weekly"),
-            .combined(id: "\(provider.id).credits", provider: provider, title: "Extra Usage", metricLabel: "Credits"),
-            .values(id: "\(provider.id).rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets", traySuffix: "resets", showsResetExpiries: true),
+            .percent(id: "\(provider.id).spark", provider: provider, title: "Spark")
+                .exportingLimit("spark", unit: "percent"),
+            .percent(id: "\(provider.id).sparkWeekly", provider: provider, title: "Spark Weekly")
+                .exportingLimit("sparkWeekly", unit: "percent"),
+            .combined(id: "\(provider.id).credits", provider: provider, title: "Extra Usage", metricLabel: "Credits")
+                .exportingLimit("credits", kind: .balance, unit: "credits", source: .value(kind: .count, label: "credits"))
+                .exportingLimit("creditValue", kind: .balance, unit: "usd", source: .value(kind: .dollars)),
+            .values(id: "\(provider.id).rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets", traySuffix: "resets", showsResetExpiries: true)
+                .exportingLimit("rateLimitResets", kind: .balance, unit: "resets", source: .value(kind: .count, label: "available")),
             .usageTrend(provider: provider)
+                .exportingHistory(
+                    scope: .machineLocal,
+                    estimatedCost: true,
+                    sourceNote: "From your Codex logs (estimated)"
+                )
         ] + WidgetDescriptor.spendTiles(provider: provider)
     }
 
@@ -134,37 +146,58 @@ final class CodexProvider: ProviderRuntime {
         )
         var mapped = try CodexUsageMapper.mapUsageResponse(response, resetCredits: resetCredits, now: now())
 
-        // Local spend tiles, scanned natively from the Codex CLI's session rollouts and priced
-        // through the shared pricing store. `scan` runs on the scanner actor, off the main actor.
-        if let scan = await logUsageScanner.scan(now: now(), pricing: pricing()) {
+        // Local spend tiles, scanned natively from the Codex CLI's session rollouts and priced through
+        // the shared pricing store, merged with Codex usage that happened inside pi (attributed back
+        // here). Both scans run on their scanner actors, off the main actor.
+        let pricing = await pricing()
+        let nativeScan = await logUsageScanner.scan(now: now(), pricing: pricing)
+        let piScan = await PiUsageScanner.shared.scan(cardID: provider.id, now: now(), pricing: pricing)
+        var usageHistory: ProviderUsageHistory?
+        // Cancellation can land between the native and pi scans. Treat the pair as one unit so a
+        // partial result cannot replace the last-good combined history in WidgetDataStore.
+        if !Task.isCancelled, let scan = DailyUsageAccumulator.merged([nativeScan, piScan]) {
             // ChatGPT's cloud analytics cover the surfaces local logs can't see (desktop, web,
             // cloud exec); tokens and dollars are imputed by calibrating against the local logs
             // (see `CodexCloudUsage`). Empty when the fetch fails or calibration is impossible,
-            // leaving tiles and trend exactly as local-only.
+            // leaving tiles and trend exactly as local-only. Kept OUT of `usageHistory`: that record
+            // is machine-local by contract (iCloud sync adds machines together), and the cloud
+            // analytics are account-wide, so syncing them would double-count across machines.
             let cloudExtra = await fetchCloudUsageExtraBestEffort(
                 accessToken: currentToken,
                 accountID: authState.auth.tokens?.accountID,
                 series: scan.series
             )
-            let sourceNote = cloudExtra.isEmpty
-                ? "From your Codex logs (estimated)"
-                : "From your Codex logs + ChatGPT cloud analytics (estimated)"
+            var sources = "your Codex logs"
+            if piScan != nil { sources += " and pi" }
+            if !cloudExtra.isEmpty { sources += " + ChatGPT cloud analytics" }
+            let note = "From \(sources) (estimated)"
+            usageHistory = ProviderUsageHistory(
+                series: scan.series,
+                modelUsage: scan.modelUsage,
+                unknownModelsByDay: scan.unknownModelsByDay
+            )
             SpendTileMapper.appendTokenUsage(
                 CodexCloudUsage.mergedTileSeries(scan.series, cloudByDay: cloudExtra),
                 to: &mapped.lines, now: now(),
                 unknownModelsByDay: scan.unknownModelsByDay,
                 modelUsage: CodexCloudUsage.mergedTileModelUsage(scan.modelUsage, cloudByDay: cloudExtra),
-                modelSourceNote: sourceNote
+                modelSourceNote: note
             )
             SpendTileMapper.appendUsageTrend(
                 scan.series, cloudExtraTokensByDay: cloudExtra.mapValues(\.tokens),
                 to: &mapped.lines, now: now(),
-                note: sourceNote
+                note: note
             )
         }
 
         MetricLine.appendNoDataIfNeeded(&mapped.lines)
-        return ProviderSnapshot.make(provider: provider, plan: mapped.plan, lines: mapped.lines, refreshedAt: now())
+        return ProviderSnapshot.make(
+            provider: provider,
+            plan: mapped.plan,
+            lines: mapped.lines,
+            refreshedAt: now(),
+            usageHistory: usageHistory
+        )
     }
 
     /// Fetches the cloud analytics and imputes per-day tokens and dollars for the non-CLI surfaces
