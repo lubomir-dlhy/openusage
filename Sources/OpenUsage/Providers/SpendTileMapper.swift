@@ -76,10 +76,6 @@ enum SpendTileMapper {
         entry.totalTokens > 0 || (entry.costUSD ?? 0) > 0
     }
 
-    /// Number of days before `now` the trend window spans; with `now` itself that's 31 calendar bars,
-    /// matching the scanners' `daysBack: 30` query window the daily rows come from.
-    private static let trendWindowDays = 30
-
     /// Append the Usage Trend chart line: one bar per calendar day over the window, value = tokens used
     /// that day. Appends nothing when the whole window is idle, so a source with no usage leaves
     /// "No data" rather than a flat row of zero bars.
@@ -122,7 +118,7 @@ enum SpendTileMapper {
 
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: now)
-        return (0...trendWindowDays).reversed().compactMap { offset -> MetricChartPoint? in
+        return (0...UsageHistoryWindow.previousDays).reversed().compactMap { offset -> MetricChartPoint? in
             guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else { return nil }
             let key = dayKey(from: day)
             let local = tokensByDay[key] ?? 0
