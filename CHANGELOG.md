@@ -1,5 +1,6 @@
 # Changelog
 
+<<<<<<< HEAD
 ## v0.7.11
 
 Syncs the fork with upstream OpenUsage v0.7.6 (plus newer upstream fixes), keeping all fork features — multi-account providers, per-account charts, and ChatGPT cloud analytics — intact.
@@ -22,10 +23,19 @@ Syncs the fork with upstream OpenUsage v0.7.6 (plus newer upstream fixes), keepi
 
 ### Heads-up
 - iCloud Sync appears in Settings but reports itself unavailable in this build: fork releases are signed without iCloud entitlements until an iCloud container + provisioning profile exist under the fork's Apple Developer team.
+=======
+## v0.7.7-beta.1
+
+### Bug Fixes
+- Account-first Phase 1: account registry, default identity, cache stamp, plain-matching CLI/API ([#1027](https://github.com/robinebers/openusage/pull/1027)) by @robinebers
+- Account-first Phase 0: shell-environment snapshot + the plan ([#1026](https://github.com/robinebers/openusage/pull/1026)) by @robinebers
+- Cache parsed local usage logs across launches ([#1017](https://github.com/robinebers/openusage/pull/1017)) by @robinebers
+>>>>>>> upstream/main
 
 ---
 
 ### Changelog
+<<<<<<< HEAD
 **Full Changelog**: [v0.7.10...v0.7.11](https://github.com/lubomir-dlhy/openusage/compare/v0.7.10...v0.7.11)
 
 ## v0.7.10
@@ -101,6 +111,13 @@ Syncs the fork with upstream OpenUsage v0.7.6 (plus newer upstream fixes), keepi
 
 ### Changelog
 **Full Changelog**: [v0.7.6...v0.7.7](https://github.com/lubomir-dlhy/openusage/compare/v0.7.6...v0.7.7)
+=======
+**Full Changelog**: [v0.7.6...v0.7.7-beta.1](https://github.com/robinebers/openusage/compare/v0.7.6...v0.7.7-beta.1)
+
+- [7723025](https://github.com/robinebers/openusage/commit/7723025777716bcc3326cea22c890b3f706deb0a) Account-first Phase 1: account registry, default identity, cache stamp, plain-matching CLI/API (#1027) by @robinebers
+- [d785f7e](https://github.com/robinebers/openusage/commit/d785f7e8b85669e840ecb5363443dfbf1a107806) Account-first Phase 0: shell-environment snapshot + the plan (#1026) by @robinebers
+- [6a2d74d](https://github.com/robinebers/openusage/commit/6a2d74d2f277287714376d7549ab1a979a4fc3d1) Cache parsed local usage logs across launches (#1017) by @robinebers
+>>>>>>> upstream/main
 
 ## v0.7.6
 

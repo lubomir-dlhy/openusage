@@ -3,7 +3,25 @@ import Foundation
 
 @MainActor
 final class ClaudeProvider: ProviderRuntime {
+<<<<<<< HEAD
     let account: ProviderAccount
+=======
+    /// The default card's identity. Extra account cards inject their own `Provider` with an
+    /// `@`-suffixed id and an account-derived display name; everything else about the runtime is
+    /// identical.
+    static func makeProvider(id: String = "claude", displayName: String = "Claude") -> Provider {
+        Provider(
+            id: id,
+            displayName: displayName,
+            icon: .providerMark("claude"),
+            links: [
+                .init(label: "Status", url: "https://status.anthropic.com/"),
+                .init(label: "Dashboard", url: "https://claude.ai/settings/usage")
+            ]
+        )
+    }
+
+>>>>>>> upstream/main
     let provider: Provider
 
     let authStore: ClaudeAuthStore
@@ -23,13 +41,19 @@ final class ClaudeProvider: ProviderRuntime {
     private static let rateLimitCooldown: TimeInterval = 5 * 60
 
     init(
+<<<<<<< HEAD
         account: ProviderAccount = .makeDefault(providerID: "claude"),
         authStore: ClaudeAuthStore? = nil,
+=======
+        provider: Provider = ClaudeProvider.makeProvider(),
+        authStore: ClaudeAuthStore = ClaudeAuthStore(),
+>>>>>>> upstream/main
         usageClient: ClaudeUsageClient = ClaudeUsageClient(),
         logUsageScanner: ClaudeLogUsageScanner? = nil,
         now: @escaping @Sendable () -> Date = Date.init,
         pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() }
     ) {
+<<<<<<< HEAD
         self.account = account
         self.provider = Provider(
             id: account.id,
@@ -44,6 +68,10 @@ final class ClaudeProvider: ProviderRuntime {
         // When no auth store is injected (production), build one bound to this account's config dir so
         // each account reads its own credentials. Tests inject a stub directly.
         self.authStore = authStore ?? ClaudeAuthStore(configDir: account.configDir)
+=======
+        self.provider = provider
+        self.authStore = authStore
+>>>>>>> upstream/main
         self.usageClient = usageClient
         // Production: pin the log scanner to this account's config dir so its spend tiles read only
         // that profile's session logs. Tests inject a scanner directly.
@@ -77,6 +105,12 @@ final class ClaudeProvider: ProviderRuntime {
     }
 
     func hasLocalCredentials() async -> Bool {
+        // Scoped cards answer from footprints only (file existence / keychain attributes) so the
+        // every-launch seeding probe can never raise a keychain dialog for an account the user
+        // hasn't granted yet. The secret read happens on the first refresh.
+        if authStore.scope != .standard {
+            return await loadOffMainActor { [authStore] in authStore.hasCredentialFootprint() }
+        }
         // Never trigger another app's Keychain prompt during first-run detection. Encrypted Desktop
         // material still counts as a local login; the first manual refresh requests access if needed.
         let load = await loadOffMainActor { [authStore] in authStore.loadCredentialSet() }
