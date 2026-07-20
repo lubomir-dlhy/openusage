@@ -3,9 +3,7 @@ import Foundation
 
 @MainActor
 final class ClaudeProvider: ProviderRuntime {
-<<<<<<< HEAD
     let account: ProviderAccount
-=======
     /// The default card's identity. Extra account cards inject their own `Provider` with an
     /// `@`-suffixed id and an account-derived display name; everything else about the runtime is
     /// identical.
@@ -20,8 +18,6 @@ final class ClaudeProvider: ProviderRuntime {
             ]
         )
     }
-
->>>>>>> upstream/main
     let provider: Provider
 
     let authStore: ClaudeAuthStore
@@ -41,19 +37,13 @@ final class ClaudeProvider: ProviderRuntime {
     private static let rateLimitCooldown: TimeInterval = 5 * 60
 
     init(
-<<<<<<< HEAD
         account: ProviderAccount = .makeDefault(providerID: "claude"),
         authStore: ClaudeAuthStore? = nil,
-=======
-        provider: Provider = ClaudeProvider.makeProvider(),
-        authStore: ClaudeAuthStore = ClaudeAuthStore(),
->>>>>>> upstream/main
         usageClient: ClaudeUsageClient = ClaudeUsageClient(),
         logUsageScanner: ClaudeLogUsageScanner? = nil,
         now: @escaping @Sendable () -> Date = Date.init,
         pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() }
     ) {
-<<<<<<< HEAD
         self.account = account
         self.provider = Provider(
             id: account.id,
@@ -68,14 +58,36 @@ final class ClaudeProvider: ProviderRuntime {
         // When no auth store is injected (production), build one bound to this account's config dir so
         // each account reads its own credentials. Tests inject a stub directly.
         self.authStore = authStore ?? ClaudeAuthStore(configDir: account.configDir)
-=======
-        self.provider = provider
-        self.authStore = authStore
->>>>>>> upstream/main
         self.usageClient = usageClient
         // Production: pin the log scanner to this account's config dir so its spend tiles read only
         // that profile's session logs. Tests inject a scanner directly.
         self.logUsageScanner = logUsageScanner ?? ClaudeLogUsageScanner(configDir: account.configDir)
+        self.now = now
+        self.pricing = pricing
+    }
+
+    /// Builds an identity-discovered account card whose provider metadata, credential scope, and log
+    /// roots were already resolved by `ProviderAccountAssembly` / `ProviderCatalog`.
+    init(
+        provider: Provider,
+        authStore: ClaudeAuthStore,
+        usageClient: ClaudeUsageClient = ClaudeUsageClient(),
+        logUsageScanner: ClaudeLogUsageScanner,
+        now: @escaping @Sendable () -> Date = Date.init,
+        pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() }
+    ) {
+        self.account = ProviderAccount(
+            id: provider.id,
+            providerID: "claude",
+            label: nil,
+            configDir: nil,
+            iconFileName: nil,
+            colorHex: provider.tintHex
+        )
+        self.provider = provider
+        self.authStore = authStore
+        self.usageClient = usageClient
+        self.logUsageScanner = logUsageScanner
         self.now = now
         self.pricing = pricing
     }

@@ -180,19 +180,16 @@ struct ClaudeAuthStore: Sendable {
     var keychain: KeychainAccessing
     var desktop: ClaudeDesktopAuthStore
     var now: @Sendable () -> Date
-<<<<<<< HEAD
     /// Per-account credential-source override — the `CLAUDE_CONFIG_DIR` value for THIS account. When set it
     /// takes precedence over the process env so multiple accounts can read different config dirs within one
     /// process. `nil` = fall back to the `CLAUDE_CONFIG_DIR` env var, then the default `~/.claude`.
     var configDirOverride: String?
-=======
     let scope: ClaudeCredentialScope
     /// Whether the `.standard` store may fall back to Claude Desktop's credentials. On by default
     /// (the historical behavior); the catalog turns it OFF once extra Claude account cards exist,
     /// because the Desktop login could belong to any of them — borrowing it unpinned could fetch one
     /// account's usage onto another account's card. Desktop-backed cards return properly in Phase 3.
     let allowsDesktopFallback: Bool
->>>>>>> upstream/main
 
     init(
         environment: EnvironmentReading = ProcessEnvironmentReader(),
@@ -229,7 +226,7 @@ struct ClaudeAuthStore: Sendable {
         // is a fallback for people who only use the native app (or whose stored CLI login lacks profile
         // scope), never a competing account source. A `.configDir` card never consults Desktop at all —
         // that login belongs to another card.
-        let desktopAllowed = scope == .standard && allowsDesktopFallback
+        let desktopAllowed = scope == .standard && configDirOverride == nil && allowsDesktopFallback
         if forceDesktopFallback, !desktopAllowed {
             // Tell the provider there is no safe Desktop candidate so it preserves the original CLI
             // auth error instead of converting it to a generic "not logged in" result.
@@ -238,13 +235,7 @@ struct ClaudeAuthStore: Sendable {
         let hasUsableCLILogin = stored.contains {
             $0.hasUsableAccessToken && liveUsageAvailability($0) == .available
         }
-<<<<<<< HEAD
-        // A named extra account is pinned to its own config dir; the Desktop app's login belongs to
-        // the default profile, so falling back to it here would show another account's usage.
-        if configDirOverride == nil, forceDesktopFallback || !hasUsableCLILogin {
-=======
         if desktopAllowed, forceDesktopFallback || !hasUsableCLILogin {
->>>>>>> upstream/main
             let result = desktop.load(allowInteraction: allowDesktopInteraction)
             desktopStatus = result.status
             if let oauth = result.oauth {
@@ -284,7 +275,7 @@ struct ClaudeAuthStore: Sendable {
     private func applyingEnvironmentToken(to stored: [ClaudeCredentialState]) -> [ClaudeCredentialState] {
         // An ambient env token describes the DEFAULT login's environment; a scoped card must never
         // inherit it (that would leak one account's token into another account's card).
-        guard case .standard = scope else { return stored }
+        guard case .standard = scope, configDirOverride == nil else { return stored }
         guard let envAccessToken = envText("CLAUDE_CODE_OAUTH_TOKEN") else {
             return stored
         }
@@ -560,14 +551,10 @@ struct ClaudeAuthStore: Sendable {
     }
 
     private func credentialsPath() -> String {
-<<<<<<< HEAD
-        "\(claudeHomeOverride() ?? Self.defaultClaudeHome)/\(Self.credentialFileName)"
-=======
         if case .configDir(let path, _) = scope {
             return "\(path)/\(Self.credentialFileName)"
         }
-        return "\(envText("CLAUDE_CONFIG_DIR") ?? Self.defaultClaudeHome)/\(Self.credentialFileName)"
->>>>>>> upstream/main
+        return "\(claudeHomeOverride() ?? Self.defaultClaudeHome)/\(Self.credentialFileName)"
     }
 
     private func envText(_ name: String) -> String? {

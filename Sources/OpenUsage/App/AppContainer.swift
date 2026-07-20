@@ -12,7 +12,7 @@ final class AppContainer {
     /// Accounts configured per provider. A multi-account provider (Claude, Codex) gets one runtime per
     /// account; everything downstream keys by the runtime's id (the account id, which == providerID for
     /// the default account). The Accounts settings UI drives this.
-    let accounts: AccountsStore
+    let configuredAccounts: AccountsStore
     /// Opt-in private iCloud document sync for additive machine-local daily history.
     let iCloudSync: ICloudUsageSyncStore
     /// Single source of truth for which providers the user has turned off. Both stores consult it (via
@@ -84,19 +84,15 @@ final class AppContainer {
         let accountAssembly = ProviderAccountAssembly.make(accountsStore: accounts, waitsForLoginShell: true)
         self.accounts = accounts
 
-<<<<<<< HEAD
         // Provider construction and order live in `ProviderCatalog` (shared with the one-shot CLI so
-        // the runtimes can't drift). Claude and Codex support multiple accounts: one runtime per
-        // configured account (the default account first, then user-added extras); the catalog keeps the
-        // AGENTS.md order with a provider's extra accounts grouped right after its default.
-        let accounts = AccountsStore()
-        let providers = ProviderCatalog.make(accounts: accounts)
-=======
+        // the runtimes can't drift). Preserve the fork's manually configured Claude/Codex accounts,
+        // then add the account-first Claude cards discovered from local config dirs.
+        let configuredAccounts = AccountsStore()
         let providers = ProviderCatalog.make(
+            accounts: configuredAccounts,
             claudeCards: accountAssembly.claudeCards,
             defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots
         )
->>>>>>> upstream/main
         let registry = WidgetRegistry.from(providers)
         let apiKeyProviders = providers.compactMap { $0 as? any APIKeyManaging }
         let enablement = ProviderEnablementStore()
@@ -146,7 +142,7 @@ final class AppContainer {
         self.notificationSettings = notificationSettings
         self.layout = layout
         self.dataStore = dataStore
-        self.accounts = accounts
+        self.configuredAccounts = configuredAccounts
         self.iCloudSync = iCloudSync
 
         // The resets popover's claim service, sharing the Codex provider's credential loading and HTTP
@@ -240,7 +236,13 @@ final class AppContainer {
         // Apply account changes (add/remove, or edit icon/label/config dir) live: rebuild the per-account
         // runtimes and swap the registry into the stores in place, so the dashboard cards and the
         // menu-bar strip reflect the change without a relaunch.
-        self.accountsObserver = Self.startAccountsObserver(accounts: accounts, layout: layout, dataStore: dataStore)
+        self.accountsObserver = Self.startAccountsObserver(
+            accounts: configuredAccounts,
+            claudeCards: accountAssembly.claudeCards,
+            defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots,
+            layout: layout,
+            dataStore: dataStore
+        )
         // Become the notification-center delegate so banners show while frontmost — a menu-bar accessory
         // effectively always is. Notification authorization is requested the first time a trigger is
         // turned on in Settings, not at launch — triggers default off. No-op under tests.
@@ -275,12 +277,18 @@ final class AppContainer {
     /// API / telemetry stay valid), then fetch. Captures the stores (not `self`), mirroring `refreshTask`.
     private static func startAccountsObserver(
         accounts: AccountsStore,
+        claudeCards: [ClaudeAccountCard],
+        defaultClaudeExtraLogRoots: [URL],
         layout: LayoutStore,
         dataStore: WidgetDataStore
     ) -> Task<Void, Never> {
         Task { @MainActor in
             for await _ in NotificationCenter.default.notifications(named: AccountsStore.didChangeNotification) {
-                let providers = ProviderCatalog.make(accounts: accounts)
+                let providers = ProviderCatalog.make(
+                    accounts: accounts,
+                    claudeCards: claudeCards,
+                    defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots
+                )
                 let registry = WidgetRegistry.from(providers)
                 AppLog.info(.lifecycle, "accounts changed — rebuilding \(providers.count) runtimes live")
                 layout.syncAccounts(registry)

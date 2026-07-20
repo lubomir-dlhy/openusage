@@ -75,13 +75,10 @@ actor ClaudeLogUsageScanner {
         additionalRoots: [URL] = []
     ) {
         precondition(cacheIdentityOverride?.isEmpty != true)
-<<<<<<< HEAD
         self.configDirOverride = configDir
-=======
         // A scoped root set must carry its own parse-source identity, or its cache records would
         // collide with the default card's under the standard identity.
         precondition(rootsOverride == nil || cacheIdentityOverride != nil)
->>>>>>> upstream/main
         self.environment = environment
         self.homeDirectory = homeDirectory
         self.scanner = incrementalScanner ?? Self.sharedScanner
@@ -183,7 +180,13 @@ actor ClaudeLogUsageScanner {
             roots.append(url)
         }
 
-<<<<<<< HEAD
+        if let rootsOverride {
+            // An account-first scoped card scans exactly its attributed config dirs — no env
+            // resolution or Cowork walk, because those may belong to another account.
+            for root in rootsOverride { addIfValid(root) }
+            return roots
+        }
+
         // A named account pins the scan to its own config dir, so its spend tiles reflect that
         // profile's logs alone — not the default `~/.claude`, the `CLAUDE_CONFIG_DIR` env var, or the
         // Cowork sandboxes (all of which belong to the default profile).
@@ -197,12 +200,6 @@ actor ClaudeLogUsageScanner {
             if roots.isEmpty {
                 AppLog.warn(LogTag.plugin("claude"), "account config dir has no projects/ directory to scan")
             }
-=======
-        // A scoped card scans exactly its own config dir(s) — no env resolution, no Cowork walk
-        // (sandboxes belong to the default login until Phase 3 attributes them per account).
-        if let rootsOverride {
-            for root in rootsOverride { addIfValid(root) }
->>>>>>> upstream/main
             return roots
         }
 

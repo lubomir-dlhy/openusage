@@ -356,17 +356,13 @@ struct TotalSpendRingContent: View {
             Circle()
                 .fill(TotalSpendPalette.color(for: slice.provider))
                 .frame(width: 8, height: 8)
-<<<<<<< HEAD
                 // A shape has no text baseline, so pin the dot's optical center to the first line.
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 3 }
-            // Multi-account labels ("Claude · CulturePulse") are wider than the legend column, so
+            // Multi-account labels are wider than the legend column, so
             // wrap to a second line instead of truncating — single-account names stay one line.
             // The column is sized (panel width vs. ring diameter) so the account word fits a line
             // at full size; the font is never scaled.
-            Text(slice.provider.displayName)
-=======
             Text(slice.title)
->>>>>>> upstream/main
                 .font(.system(size: density.supportingPointSize))
                 .foregroundStyle(.primary)
                 .lineLimit(2)

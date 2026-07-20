@@ -96,4 +96,26 @@ struct ProviderAccountIsolationTests {
         #expect(registry.descriptors(for: "claude#1").allSatisfy { $0.providerID == "claude#1" })
         #expect(!registry.descriptors(for: "claude#1").isEmpty)
     }
+
+    @Test func catalogKeepsConfiguredAndDiscoveredAccountsTogether() {
+        let defaults = UserDefaults(suiteName: "ProviderCatalogAccountMerge-\(UUID().uuidString)")!
+        let accounts = AccountsStore(defaults: defaults)
+        accounts.addAccount(providerID: "claude", label: "Configured", configDir: "/configured")
+        accounts.addAccount(providerID: "codex", label: "Work", configDir: "/codex-work")
+
+        let runtimes = ProviderCatalog.make(
+            accounts: accounts,
+            defaults: defaults,
+            claudeCards: [ClaudeAccountCard(
+                id: "claude@abcd1234",
+                displayName: "Claude abcd1234",
+                configDirPath: "/discovered",
+                keychainLiteral: "/discovered"
+            )]
+        )
+
+        #expect(Array(runtimes.map(\.provider.id).prefix(6)) == [
+            "claude", "claude#1", "claude@abcd1234", "codex", "codex#1", "cursor",
+        ])
+    }
 }

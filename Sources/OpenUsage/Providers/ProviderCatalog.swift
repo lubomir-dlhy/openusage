@@ -4,36 +4,30 @@ import Foundation
 /// their runtimes here so credentials, refresh behavior, pricing, and normalization can never drift.
 @MainActor
 enum ProviderCatalog {
-<<<<<<< HEAD
-    static func make(defaults: UserDefaults = .standard) -> [ProviderRuntime] {
-        make(accounts: AccountsStore(defaults: defaults), defaults: defaults)
-    }
-
-    /// Default provider order (see AGENTS.md "## Providers"): the three established providers first,
-    /// then every other provider alphabetically by display name. Claude and Codex support multiple
-    /// accounts — one runtime per configured account (the default account first, then user-added
-    /// extras), grouped right after the provider's default slot. With no extra accounts configured
-    /// this is identical to the single-instance-per-provider list.
-    static func make(accounts: AccountsStore, defaults: UserDefaults = .standard) -> [ProviderRuntime] {
-        var providers: [ProviderRuntime] = []
-        providers += accounts.accounts(for: "claude").map { ClaudeProvider(account: $0) }
-        providers += accounts.accounts(for: "codex").map { CodexProvider(account: $0) }
-        providers.append(CursorProvider())
-        providers.append(AntigravityProvider())
-        providers.append(CopilotProvider(defaults: defaults))
-        providers.append(DevinProvider())
-        providers.append(GrokProvider())
-        providers.append(OpenCodeProvider())
-        providers.append(OpenRouterProvider())
-        providers.append(ZAIProvider())
-        return providers
-=======
     /// `claudeCards` carries the extra Claude account cards found by the launch account pass
     /// (`ProviderAccountAssembly`). Each becomes an ordinary runtime inserted right after the default
     /// Claude card, with credentials and usage logs pinned to exactly its own config dir. The empty
     /// default keeps the historical single-card set for focused tests and callers that intentionally
     /// skip the account pass.
     static func make(
+        defaults: UserDefaults = .standard,
+        claudeCards: [ClaudeAccountCard] = [],
+        defaultClaudeExtraLogRoots: [URL] = []
+    ) -> [ProviderRuntime] {
+        make(
+            accounts: AccountsStore(defaults: defaults),
+            defaults: defaults,
+            claudeCards: claudeCards,
+            defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots
+        )
+    }
+
+    /// Default provider order (see AGENTS.md "## Providers"): the three established providers first,
+    /// then every other provider alphabetically by display name. The fork's user-configured Claude and
+    /// Codex accounts remain grouped after their default card; identity-discovered Claude cards follow
+    /// the manually configured Claude cards.
+    static func make(
+        accounts: AccountsStore,
         defaults: UserDefaults = .standard,
         claudeCards: [ClaudeAccountCard] = [],
         defaultClaudeExtraLogRoots: [URL] = []
@@ -45,19 +39,21 @@ enum ProviderCatalog {
         // Every baked `Provider.displayName` here is the DERIVED default — renames live only in the
         // account registry and are resolved at render time (`ProviderAccountRecord.resolvedDisplayName`),
         // so a baked name can never be a stale copy of one.
-        var runtimes: [ProviderRuntime] = []
-        runtimes.append(ClaudeProvider(
+        let configuredClaude = accounts.accounts(for: "claude")
+        var runtimes: [ProviderRuntime] = [ClaudeProvider(
+            account: configuredClaude[0],
             // Once extra Claude cards exist, an unpinned Desktop fallback could borrow a login that
             // belongs to one of them — fetching that account's usage onto the default card. Desktop
             // returns as its own properly-pinned source kind in Phase 3.
             authStore: ClaudeAuthStore(allowsDesktopFallback: claudeCards.isEmpty),
             logUsageScanner: ClaudeLogUsageScanner(additionalRoots: defaultClaudeExtraLogRoots)
-        ))
+        )]
+        runtimes += configuredClaude.dropFirst().map { ClaudeProvider(account: $0) }
         for card in claudeCards {
             runtimes.append(claudeAccountRuntime(card: card))
         }
+        runtimes += accounts.accounts(for: "codex").map { CodexProvider(account: $0) }
         runtimes += [
-            CodexProvider(),
             CursorProvider(),
             AntigravityProvider(),
             CopilotProvider(defaults: defaults),
@@ -84,6 +80,5 @@ enum ProviderCatalog {
                 rootsOverride: [URL(fileURLWithPath: card.configDirPath)] + card.extraLogRoots
             )
         )
->>>>>>> upstream/main
     }
 }
