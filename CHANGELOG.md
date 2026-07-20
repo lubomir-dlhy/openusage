@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+- **Claude account discovery:** automatically discovers distinct Claude logins in custom config directories, gives each account a stable card, and keeps per-account credentials, logs, layout, cache, iCloud history, and names isolated by @robinebers
+
+### Refactor
+- **Account-first identity model:** adds a persistent account registry and account-stamped snapshots so swapping a login cannot display the previous account's cached usage by @robinebers
+- **Consistent account names:** resolves renamed cards through one live name source across the dashboard, menu bar, notifications, sharing, CLI, and local HTTP API by @robinebers
+
+---
+
 ## v0.7.11
 
 Syncs the fork with upstream OpenUsage v0.7.6 (plus newer upstream fixes), keeping all fork features — multi-account providers, per-account charts, and ChatGPT cloud analytics — intact.

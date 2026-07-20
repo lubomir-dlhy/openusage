@@ -511,7 +511,7 @@ struct SettingsScreen: View {
     /// A multi-account provider: each configured account as a row (default first, then extras with
     /// edit/delete), followed by an "Add account" button.
     private func accountGroup(_ base: Provider) -> some View {
-        let accounts = container.accounts.accounts(for: base.id)
+        let accounts = container.configuredAccounts.accounts(for: base.id)
         return VStack(spacing: 0) {
             ForEach(accounts) { account in
                 accountRow(base: base, account: account)
@@ -563,11 +563,11 @@ struct SettingsScreen: View {
 
     private func deleteAccount(_ account: ProviderAccount) {
         if let fileName = account.iconFileName { AccountIconStore.delete(fileName: fileName) }
-        container.accounts.removeAccount(id: account.id)
+        container.configuredAccounts.removeAccount(id: account.id)
     }
 
     private func saveAccount(target: AccountEditorTarget, label: String?, configDir: String?, colorHex: String?, pickedIconURL: URL?, clearIcon: Bool) {
-        let accounts = container.accounts
+        let accounts = container.configuredAccounts
         if let existing = target.existing {
             var updated = existing
             updated.label = label

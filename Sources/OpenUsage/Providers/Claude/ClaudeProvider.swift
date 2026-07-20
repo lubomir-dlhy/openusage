@@ -4,6 +4,20 @@ import Foundation
 @MainActor
 final class ClaudeProvider: ProviderRuntime {
     let account: ProviderAccount
+    /// The default card's identity. Extra account cards inject their own `Provider` with an
+    /// `@`-suffixed id and an account-derived display name; everything else about the runtime is
+    /// identical.
+    static func makeProvider(id: String = "claude", displayName: String = "Claude") -> Provider {
+        Provider(
+            id: id,
+            displayName: displayName,
+            icon: .providerMark("claude"),
+            links: [
+                .init(label: "Status", url: "https://status.anthropic.com/"),
+                .init(label: "Dashboard", url: "https://claude.ai/settings/usage")
+            ]
+        )
+    }
     let provider: Provider
 
     let authStore: ClaudeAuthStore
@@ -52,6 +66,32 @@ final class ClaudeProvider: ProviderRuntime {
         self.pricing = pricing
     }
 
+    /// Builds an identity-discovered account card whose provider metadata, credential scope, and log
+    /// roots were already resolved by `ProviderAccountAssembly` / `ProviderCatalog`.
+    init(
+        provider: Provider,
+        authStore: ClaudeAuthStore,
+        usageClient: ClaudeUsageClient = ClaudeUsageClient(),
+        logUsageScanner: ClaudeLogUsageScanner,
+        now: @escaping @Sendable () -> Date = Date.init,
+        pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() }
+    ) {
+        self.account = ProviderAccount(
+            id: provider.id,
+            providerID: "claude",
+            label: nil,
+            configDir: nil,
+            iconFileName: nil,
+            colorHex: provider.tintHex
+        )
+        self.provider = provider
+        self.authStore = authStore
+        self.usageClient = usageClient
+        self.logUsageScanner = logUsageScanner
+        self.now = now
+        self.pricing = pricing
+    }
+
     // Descriptor ids are scoped by the account id (`provider.id`), so two accounts of the same provider
     // never collide in the layout/data stores. The default account's id == "claude", so its descriptor
     // ids stay "claude.*" exactly as before (no migration).
@@ -77,6 +117,12 @@ final class ClaudeProvider: ProviderRuntime {
     }
 
     func hasLocalCredentials() async -> Bool {
+        // Scoped cards answer from footprints only (file existence / keychain attributes) so the
+        // every-launch seeding probe can never raise a keychain dialog for an account the user
+        // hasn't granted yet. The secret read happens on the first refresh.
+        if authStore.scope != .standard {
+            return await loadOffMainActor { [authStore] in authStore.hasCredentialFootprint() }
+        }
         // Never trigger another app's Keychain prompt during first-run detection. Encrypted Desktop
         // material still counts as a local login; the first manual refresh requests access if needed.
         let load = await loadOffMainActor { [authStore] in authStore.loadCredentialSet() }

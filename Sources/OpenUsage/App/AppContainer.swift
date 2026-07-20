@@ -12,7 +12,7 @@ final class AppContainer {
     /// Accounts configured per provider. A multi-account provider (Claude, Codex) gets one runtime per
     /// account; everything downstream keys by the runtime's id (the account id, which == providerID for
     /// the default account). The Accounts settings UI drives this.
-    let accounts: AccountsStore
+    let configuredAccounts: AccountsStore
     /// Opt-in private iCloud document sync for additive machine-local daily history.
     let iCloudSync: ICloudUsageSyncStore
     /// Single source of truth for which providers the user has turned off. Both stores consult it (via
@@ -44,6 +44,9 @@ final class AppContainer {
     /// provider were ever removed from the registry. Injected into the view tree via
     /// `\.codexResetClaim`.
     let codexResetClaim: CodexResetClaimService?
+    /// The account registry the launch pass reconciled. The UI observes it live: a rename
+    /// (`customLabel`) re-titles the card everywhere without a relaunch.
+    let accounts: ProviderAccountsStore
     /// The provider runtimes, kept so on-demand credential detection (the Customize "Reset All" reseed)
     /// can re-probe `hasLocalCredentials()` the same way first-run seeding does.
     private let providers: [ProviderRuntime]
@@ -60,6 +63,9 @@ final class AppContainer {
     /// The new-provider credential-detection pass (see `NewProviderSeeder`); `nil` unless this launch is
     /// the first with a provider the install has never seen.
     private let newProviderTask: Task<Void, Never>?
+    /// Persists a fresh `ShellEnvironmentSnapshot` once the login-shell capture completes, so the next
+    /// launch can read shell-exported facts (provider home overrides) even when its own capture is slow.
+    private let shellEnvironmentSnapshotTask: Task<Void, Never>
 
     /// `isFreshInstall` must be captured by the caller BEFORE `SettingsMigrator.migrate()` runs (the
     /// migrator's schema stamp makes the defaults domain non-empty). See `AppDelegate`.
@@ -68,13 +74,25 @@ final class AppContainer {
         // profile (e.g. OPENROUTER_API_KEY) resolve in a Finder/Dock-launched build, not only when
         // run from a terminal. Warmed here so the first refresh finds the cache ready.
         LoginShellEnvironment.shared.prewarm()
+        // Once the capture lands, persist its identity-relevant facts so the NEXT launch has them
+        // even if that launch's own capture is slow (see `ShellEnvironmentSnapshot`).
+        self.shellEnvironmentSnapshotTask = ShellEnvironmentSnapshotStore(defaults: .standard).startRefreshTask()
+        // The launch account pass: which account is signed in at each family's default home, plus
+        // the config-dir scan for extra Claude logins. Feeds the snapshot cache's account stamp,
+        // reconciles the account registry, and hands the catalog its extra-card build plan.
+        let accounts = ProviderAccountsStore()
+        let accountAssembly = ProviderAccountAssembly.make(accountsStore: accounts, waitsForLoginShell: true)
+        self.accounts = accounts
 
         // Provider construction and order live in `ProviderCatalog` (shared with the one-shot CLI so
-        // the runtimes can't drift). Claude and Codex support multiple accounts: one runtime per
-        // configured account (the default account first, then user-added extras); the catalog keeps the
-        // AGENTS.md order with a provider's extra accounts grouped right after its default.
-        let accounts = AccountsStore()
-        let providers = ProviderCatalog.make(accounts: accounts)
+        // the runtimes can't drift). Preserve the fork's manually configured Claude/Codex accounts,
+        // then add the account-first Claude cards discovered from local config dirs.
+        let configuredAccounts = AccountsStore()
+        let providers = ProviderCatalog.make(
+            accounts: configuredAccounts,
+            claudeCards: accountAssembly.claudeCards,
+            defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots
+        )
         let registry = WidgetRegistry.from(providers)
         let apiKeyProviders = providers.compactMap { $0 as? any APIKeyManaging }
         let enablement = ProviderEnablementStore()
@@ -88,7 +106,9 @@ final class AppContainer {
             providers: providers,
             isProviderEnabled: { [enablement] in enablement.isEnabled($0) },
             orderedDescriptors: { [layout] in layout.visiblePlaced.compactMap { layout.descriptor(for: $0) } },
-            notificationSettings: { notificationSettings }
+            notificationSettings: { notificationSettings },
+            providerIdentityKeys: accountAssembly.identityKeysByCard,
+            resolveDisplayName: { [accounts] in accounts.resolvedDisplayName(cardID: $0) }
         )
         let iCloudSync = ICloudUsageSyncStore(dataStore: dataStore)
         // Re-enabling a provider should fetch it promptly, so clear any leftover failure backoff before
@@ -122,7 +142,7 @@ final class AppContainer {
         self.notificationSettings = notificationSettings
         self.layout = layout
         self.dataStore = dataStore
-        self.accounts = accounts
+        self.configuredAccounts = configuredAccounts
         self.iCloudSync = iCloudSync
 
         // The resets popover's claim service, sharing the Codex provider's credential loading and HTTP
@@ -198,7 +218,7 @@ final class AppContainer {
         self.telemetry = telemetry
         self.transparency = PopoverTransparencyStore()
         self.privacy = MenuBarPrivacyStore()
-        self.localAPI = LocalUsageServer(state: { [layout, enablement, dataStore] in
+        self.localAPI = LocalUsageServer(state: { [layout, enablement, dataStore, accounts] in
             LocalUsageAPI.State(
                 enabledOrderedIDs: layout.orderedProviderIDs().filter { enablement.isEnabled($0) },
                 knownIDs: Set(registry.providers.map(\.id)),
@@ -206,6 +226,9 @@ final class AppContainer {
                 limitDescriptors: registry.limitDescriptorsByProvider,
                 errors: dataStore.providerErrors
             )
+            // API output is human-read too: resolve card titles at respond time so renames show,
+            // exactly like every UI surface.
+            .resolvingDisplayNames(accounts.resolvedDisplayNamesByCardID)
         })
         self.refreshTask = Self.startPeriodicRefresh(dataStore: dataStore, telemetry: telemetry)
         localAPI.start()
@@ -213,7 +236,13 @@ final class AppContainer {
         // Apply account changes (add/remove, or edit icon/label/config dir) live: rebuild the per-account
         // runtimes and swap the registry into the stores in place, so the dashboard cards and the
         // menu-bar strip reflect the change without a relaunch.
-        self.accountsObserver = Self.startAccountsObserver(accounts: accounts, layout: layout, dataStore: dataStore)
+        self.accountsObserver = Self.startAccountsObserver(
+            accounts: configuredAccounts,
+            claudeCards: accountAssembly.claudeCards,
+            defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots,
+            layout: layout,
+            dataStore: dataStore
+        )
         // Become the notification-center delegate so banners show while frontmost — a menu-bar accessory
         // effectively always is. Notification authorization is requested the first time a trigger is
         // turned on in Settings, not at launch — triggers default off. No-op under tests.
@@ -225,6 +254,22 @@ final class AppContainer {
         accountsObserver.cancel()
         seedTask?.cancel()
         newProviderTask?.cancel()
+        shellEnvironmentSnapshotTask.cancel()
+    }
+
+    /// The name a card renders under right now — the app-side face of the one resolver
+    /// (`ProviderAccountRecord.resolvedDisplayName`). Live: a rename in the account registry
+    /// re-titles the card everywhere without a relaunch. Non-account providers (no record) keep
+    /// their static display name; `Provider.displayName` itself only ever carries the derived
+    /// default, so the fallback can never be a stale rename.
+    func displayName(for provider: Provider) -> String {
+        accounts.resolvedDisplayName(cardID: provider.id) ?? provider.displayName
+    }
+
+    /// Whether the card has an account record a rename can attach to (accounts-model families only,
+    /// and only once the account's identity has been observed at least once).
+    func canRename(_ providerID: String) -> Bool {
+        accounts.records.contains { $0.id == providerID }
     }
 
     /// Watch `AccountsStore` and, on each change, rebuild the runtimes + registry from the current
@@ -232,12 +277,18 @@ final class AppContainer {
     /// API / telemetry stay valid), then fetch. Captures the stores (not `self`), mirroring `refreshTask`.
     private static func startAccountsObserver(
         accounts: AccountsStore,
+        claudeCards: [ClaudeAccountCard],
+        defaultClaudeExtraLogRoots: [URL],
         layout: LayoutStore,
         dataStore: WidgetDataStore
     ) -> Task<Void, Never> {
         Task { @MainActor in
             for await _ in NotificationCenter.default.notifications(named: AccountsStore.didChangeNotification) {
-                let providers = ProviderCatalog.make(accounts: accounts)
+                let providers = ProviderCatalog.make(
+                    accounts: accounts,
+                    claudeCards: claudeCards,
+                    defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots
+                )
                 let registry = WidgetRegistry.from(providers)
                 AppLog.info(.lifecycle, "accounts changed — rebuilding \(providers.count) runtimes live")
                 layout.syncAccounts(registry)

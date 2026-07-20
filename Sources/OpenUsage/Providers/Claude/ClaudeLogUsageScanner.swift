@@ -31,6 +31,13 @@ actor ClaudeLogUsageScanner {
     /// Scoped provider instances pass their stable parse-source identity here. Account or time filters
     /// over the same physical roots deliberately pass the same value and share whole-file records.
     private let cacheIdentityOverride: String?
+    /// Extra account cards pin the scan to exactly their config dir(s), replacing the standard
+    /// resolution (env override, XDG, `~/.claude`, Cowork sandboxes) entirely — another account's
+    /// logs must never bleed into a scoped card. `nil` keeps the standard walk byte-identical.
+    private let rootsOverride: [URL]?
+    /// Same-account custom config dirs appended to the DEFAULT card's standard roots, so spend the
+    /// user's own login produced in a side home still counts on its card.
+    private let additionalRoots: [URL]
 
     /// One parsed usage line. Token buckets are pre-normalized into `TokenBreakdown`; dedup fields
     /// ride along so the global dedup pass can run over cached entries.
@@ -63,14 +70,21 @@ actor ClaudeLogUsageScanner {
         environment: EnvironmentReading = ProcessEnvironmentReader(),
         homeDirectory: @escaping @Sendable () -> URL = { FileManager.default.homeDirectoryForCurrentUser },
         incrementalScanner: IncrementalJSONLScanner<Entry>? = nil,
-        cacheIdentityOverride: String? = nil
+        cacheIdentityOverride: String? = nil,
+        rootsOverride: [URL]? = nil,
+        additionalRoots: [URL] = []
     ) {
         precondition(cacheIdentityOverride?.isEmpty != true)
         self.configDirOverride = configDir
+        // A scoped root set must carry its own parse-source identity, or its cache records would
+        // collide with the default card's under the standard identity.
+        precondition(rootsOverride == nil || cacheIdentityOverride != nil)
         self.environment = environment
         self.homeDirectory = homeDirectory
         self.scanner = incrementalScanner ?? Self.sharedScanner
         self.cacheIdentityOverride = cacheIdentityOverride
+        self.rootsOverride = rootsOverride
+        self.additionalRoots = additionalRoots
     }
 
     /// Scan the last `daysBack` days of Claude logs. Returns `nil` when no Claude data directory or
@@ -166,6 +180,13 @@ actor ClaudeLogUsageScanner {
             roots.append(url)
         }
 
+        if let rootsOverride {
+            // An account-first scoped card scans exactly its attributed config dirs — no env
+            // resolution or Cowork walk, because those may belong to another account.
+            for root in rootsOverride { addIfValid(root) }
+            return roots
+        }
+
         // A named account pins the scan to its own config dir, so its spend tiles reflect that
         // profile's logs alone — not the default `~/.claude`, the `CLAUDE_CONFIG_DIR` env var, or the
         // Cowork sandboxes (all of which belong to the default profile).
@@ -205,6 +226,10 @@ actor ClaudeLogUsageScanner {
 
         for sandbox in Self.coworkClaudeDirs(home: homeDirectory()) {
             addIfValid(sandbox)
+        }
+        // Same-account custom config dirs (default card only): the user's own spend in a side home.
+        for root in additionalRoots {
+            addIfValid(root)
         }
         return roots
     }
