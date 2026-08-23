@@ -1,15 +1,76 @@
 # Changelog
 
-## Unreleased
+## v0.7.12
 
 ### New Features
-- **Claude account discovery:** automatically discovers distinct Claude logins in custom config directories, gives each account a stable card, and keeps per-account credentials, logs, layout, cache, iCloud history, and names isolated by @robinebers
+- Add account-first identity, account discovery, and isolated multi-account support for Claude ([#1026](https://github.com/robinebers/openusage/pull/1026), [#1027](https://github.com/robinebers/openusage/pull/1027), [#1030](https://github.com/robinebers/openusage/pull/1030), [#1031](https://github.com/robinebers/openusage/pull/1031)) by @robinebers
+- Add Reset All Settings with confirmation ([#1033](https://github.com/robinebers/openusage/pull/1033)) by @ricardoakrug
+- Add Reduce Animations support ([#1019](https://github.com/robinebers/openusage/pull/1019)) by @davidarny
+- Switch OpenCode Go meters to the official usage API ([#1097](https://github.com/robinebers/openusage/pull/1097)) by @robinebers
+- Add and update pricing for Codex auto-review, Claude Opus 5, Cursor Router, Kimi K3, Grok 4.6, Gemini 3.7 Flash, GPT-5.6, and Daybreak Blue ([#1085](https://github.com/robinebers/openusage/pull/1085), [#1050](https://github.com/robinebers/openusage/pull/1050), [#1087](https://github.com/robinebers/openusage/pull/1087), [#1101](https://github.com/robinebers/openusage/pull/1101), [#1093](https://github.com/robinebers/openusage/pull/1093), [#1112](https://github.com/robinebers/openusage/pull/1112), [#1125](https://github.com/robinebers/openusage/pull/1125)) by @validatedev and @robinebers
 
-### Refactor
-- **Account-first identity model:** adds a persistent account registry and account-stamped snapshots so swapping a login cannot display the previous account's cached usage by @robinebers
-- **Consistent account names:** resolves renamed cards through one live name source across the dashboard, menu bar, notifications, sharing, CLI, and local HTTP API by @robinebers
+### Bug Fixes
+- Read Claude's current subscription tier from its profile instead of stale Keychain metadata, caching the result for one hour per login by @lubomir-dlhy
+- Remove estimated Codex web, desktop, and cloud-exec token usage; spend and trends now use exact local log data only by @lubomir-dlhy
+- Add a 30-second provider refresh timeout to prevent an infinite spinner ([#1059](https://github.com/robinebers/openusage/pull/1059)) by @manelpb
+- Support Z.ai credit quota limits ([#1105](https://github.com/robinebers/openusage/pull/1105)) by @davidarny
+- Show Copilot personal credits on organization-managed seats ([#1108](https://github.com/robinebers/openusage/pull/1108)) by @robinebers
+- Use current-window spend for OpenRouter Key Limit ([#1109](https://github.com/robinebers/openusage/pull/1109)) by @robinebers
+- Avoid unnecessary status-item updates and reduce scrolling overhead ([#1110](https://github.com/robinebers/openusage/pull/1110), [#1111](https://github.com/robinebers/openusage/pull/1111)) by @robinebers and @davidarny
+- Keep the daily active ping enabled when optional analytics are disabled ([#1116](https://github.com/robinebers/openusage/pull/1116)) by @robinebers
+- Preserve fork-specific multi-account and visualization features while synchronizing current upstream changes by @lubomir-dlhy
+
+### Chores
+- Update Sparkle to 2.9.6 and PostHog to 3.69.6 ([#1128](https://github.com/robinebers/openusage/pull/1128), [#1127](https://github.com/robinebers/openusage/pull/1127)) by @dependabot[bot]
+- Update the stale-action workflow from version 10 to 11 ([#1069](https://github.com/robinebers/openusage/pull/1069)) by @dependabot[bot]
 
 ---
+
+### Changelog
+**Full Changelog**: [v0.7.11...v0.7.12](https://github.com/lubomir-dlhy/openusage/compare/v0.7.11...v0.7.12)
+
+- [d785f7e](https://github.com/robinebers/openusage/commit/d785f7e8b85669e840ecb5363443dfbf1a107806) Account-first Phase 0: shell-environment snapshot + the plan (#1026) by @robinebers
+- [7723025](https://github.com/robinebers/openusage/commit/7723025777716bcc3326cea22c890b3f706deb0a) Account-first Phase 1: account registry, default identity, cache stamp, plain-matching CLI/API (#1027) by @robinebers
+- [29253f4](https://github.com/robinebers/openusage/commit/29253f4f3e0b714a85c206bf5b95e1164e7de299) docs: changelog for v0.7.7-beta.1 by @robinebers
+- [842feae](https://github.com/robinebers/openusage/commit/842feae4e48337749e94946a6c6d714b6cfb97ba) Account-first Phase 2: Claude multi-account from custom config dirs (#1030) by @robinebers
+- [9d2bf09](https://github.com/robinebers/openusage/commit/9d2bf09f10e21f769494a525a9d65c84d7aeb1df) Account-first Phase 2b: one name resolver for card titles (#1031) by @robinebers
+- [b99c13c](https://github.com/lubomir-dlhy/openusage/commit/b99c13ca4aeb7ebb3842c31718271d1f20428ae8) merge upstream/main (conflicts resolved in follow-up) by @github-actions[bot]
+- [2e56654](https://github.com/lubomir-dlhy/openusage/commit/2e56654f5b9acca65e3baed9ab12f9bd13ffa827) fix(sync): resolve upstream account conflicts by @lubomir-dlhy
+- [444cdb0](https://github.com/lubomir-dlhy/openusage/commit/444cdb01096e5ada75e18d7aace1d7ea56998788) Merge pull request #7 from chore/upstream-sync by @github-actions[bot]
+- [b5d6b47](https://github.com/robinebers/openusage/commit/b5d6b47c566f51446a6dfb36921df6cee802f14f) chore(deps): bump actions/stale from 10 to 11 (#1069) by @dependabot[bot]
+- [366c89a](https://github.com/robinebers/openusage/commit/366c89a6b99d3e4b8770e4e8054ed51220136045) Track Codex auto-review separately from pricing model (#1085) by @validatedev
+- [a20d4b8](https://github.com/robinebers/openusage/commit/a20d4b8da0e6fd2ab935e8e49760f6b76a371654) Price Claude Opus 5 in the pricing supplement (#1050) by @validatedev
+- [8a4dc73](https://github.com/robinebers/openusage/commit/8a4dc73f8b2634138972a73ec30ad1c8eb3a1461) chore(deps): bump Sparkle from 2.9.4 to 2.9.5 (#1082) by @dependabot[bot]
+- [72ba5da](https://github.com/robinebers/openusage/commit/72ba5dad15dbca5a42e8db56a8bff70b28c0b343) chore(deps): bump PostHog from 3.64.5 to 3.69.0 (#1083) by @dependabot[bot]
+- [bd2f1d6](https://github.com/robinebers/openusage/commit/bd2f1d6b5be14efd1072a34364444a7bbabcd95f) feat(settings): add Reset All Settings with confirmation (#1033) by @ricardoakrug
+- [0cc04e0](https://github.com/robinebers/openusage/commit/0cc04e018c92a81e2c6dea05477f6b74026fe41b) Add Reduce Animations support (#1019) by @davidarny
+- [404a97c](https://github.com/robinebers/openusage/commit/404a97c8ac9b7297068b2b57c693f11453be9414) Price Kimi K3 and Cursor Router rows (#1087) by @robinebers
+- [ccfcc85](https://github.com/robinebers/openusage/commit/ccfcc8501aa2cdb4649355fc20f216dfb91a2f3d) Use the newer cached or bundled pricing supplement (#1089) by @robinebers
+- [cd3dec0](https://github.com/robinebers/openusage/commit/cd3dec05042bdff7587ff20353488628530f8711) Revert upstream Account-first Phase 2 and 2b ahead of release (#1090) by @robinebers
+- [487cc8f](https://github.com/robinebers/openusage/commit/487cc8f19a9a28676f6924aafa48dee79ad7a7f6) docs: changelog for v0.7.8 by @robinebers
+- [e9e8a77](https://github.com/robinebers/openusage/commit/e9e8a77c6d663f2cce53b9d2aacc685f33dd9eb8) feat(pricing): price Cursor Grok 4.6 and correct Grok 4.5 Fast output (#1101) by @robinebers
+- [064819b](https://github.com/robinebers/openusage/commit/064819bf582a444d163d878e57967d4620d3b0d5) feat(opencode): switch Go meters to the official usage API (#1097) by @robinebers
+- [e171fd7](https://github.com/robinebers/openusage/commit/e171fd75af15d1b945dfc6ba9df8918905b9cd66) Add Daybreak Blue model pricing (#1093) by @validatedev
+- [0d66c03](https://github.com/robinebers/openusage/commit/0d66c03306f2bd333c5062c01d66545bfb468fe9) docs: changelog for v0.7.9 by @robinebers
+- [b2af5eb](https://github.com/robinebers/openusage/commit/b2af5ebdbe9362b34a03ab86d22a0361f484389e) fix(pricing): accept dashed grok-4-6 CSV slugs (#1103) by @robinebers
+- [d989c4a](https://github.com/robinebers/openusage/commit/d989c4a4c48678d9ea83013e588599a99ad168db) fix: support Z.ai credit quota limits (#1105) by @davidarny
+- [57053e2](https://github.com/robinebers/openusage/commit/57053e265f7c68b9b26c8e97e35a89e09148d368) fix: improve translucent card scroll performance (#1106) by @davidarny
+- [dc2d3cb](https://github.com/robinebers/openusage/commit/dc2d3cb5812f432902d7e1b79caf2c64f8d0a66a) fix(openrouter): use current-window spend for Key Limit (#1109) by @robinebers
+- [86b5af4](https://github.com/robinebers/openusage/commit/86b5af40ec9d54b3e793b526f576104e61692d5a) fix: skip status-item apply when the strip image is unchanged (#1110) by @robinebers
+- [41d1bd1](https://github.com/robinebers/openusage/commit/41d1bd1754d3d972e62b4d931179afd7bf620beb) fix(copilot): show personal credits on org-managed seats (#1108) by @robinebers
+- [af99b68](https://github.com/robinebers/openusage/commit/af99b6812f2eb34845a95ef538ce1ee9c996a16f) fix: add 30s provider-refresh timeout (#1059) by @manelpb
+- [feb1de9](https://github.com/robinebers/openusage/commit/feb1de926c63f89740f9c69145a2cc2807c77420) fix(pricing): price Gemini 3.7 Flash slugs and refresh GPT-5.6 rates (#1112) by @robinebers
+- [e89d2e8](https://github.com/robinebers/openusage/commit/e89d2e8842bd0b9355647adb213bf5f1ade39dd6) docs: changelog for v0.7.10-beta.1 by @robinebers
+- [70acd4f](https://github.com/robinebers/openusage/commit/70acd4f4e9cc79951d83f416295e22ef43b9696b) fix(pricing): alias grok-proxy to Grok Build (#1123) by @robinebers
+- [99c2a6d](https://github.com/robinebers/openusage/commit/99c2a6d1652e2560d6eba03abbad1c0069a17d8f) fix(codex): price codex-auto-review as GPT-5.6 Luna (#1125) by @validatedev
+- [8887f96](https://github.com/robinebers/openusage/commit/8887f9619cee9e5702614c7af1a06adb5346dde5) chore(deps): bump PostHog from 3.69.0 to 3.69.6 (#1127) by @dependabot[bot]
+- [fa48600](https://github.com/robinebers/openusage/commit/fa4860091e82ce073b5a6d938c9297bae33fdb9a) chore(deps): bump Sparkle from 2.9.5 to 2.9.6 (#1128) by @dependabot[bot]
+- [35cc226](https://github.com/robinebers/openusage/commit/35cc2260a0cced44e087bf472dc4ad09e17be09e) Keep daily active ping on when extra analytics are off (#1116) by @robinebers
+- [2270d5f](https://github.com/robinebers/openusage/commit/2270d5fbfef1eddbff9a28500e60e0261d784088) perf: reduce scrolling update overhead (#1111) by @davidarny
+- [6bc451d](https://github.com/lubomir-dlhy/openusage/commit/6bc451d044dad14aa7e2896caf1c347fcaa49da3) Merge current upstream while preserving fork features by @lubomir-dlhy
+- [2c5ff1f](https://github.com/lubomir-dlhy/openusage/commit/2c5ff1f46f04f4fc16a2c475635a3eb980472535) Fix stale Claude subscription tier by @lubomir-dlhy
+- [c7fb243](https://github.com/lubomir-dlhy/openusage/commit/c7fb2430a93ab7b466102b109a8cb096c5a1aaea) Remove estimated Codex cloud usage by @lubomir-dlhy
+- [cbf853f](https://github.com/lubomir-dlhy/openusage/commit/cbf853ff1cdebb684a6e8b6a3b77ebe2b440a395) Cache Claude profile plan for one hour by @lubomir-dlhy
 
 ## v0.7.11
 
