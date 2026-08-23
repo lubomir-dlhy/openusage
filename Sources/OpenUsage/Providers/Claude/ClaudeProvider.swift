@@ -34,7 +34,10 @@ final class ClaudeProvider: ProviderRuntime {
     private var cachedCredentialFingerprint: Data?
     private var lastGoodUsage: ClaudeMappedUsage?
     private var rateLimitedUntil: Date?
+    private var cachedProfilePlan: String?
+    private var profileFetchAttemptedAt: Date?
     private static let rateLimitCooldown: TimeInterval = 5 * 60
+    private static let profileCacheDuration: TimeInterval = 60 * 60
 
     init(
         account: ProviderAccount = .makeDefault(providerID: "claude"),
@@ -421,17 +424,30 @@ final class ClaudeProvider: ProviderRuntime {
     }
 
     /// Plan metadata embedded in Claude Code's Keychain credential is only a login-time snapshot and can
-    /// stay stale across subscription upgrades or downgrades. Profile lookup is best-effort: usage bars
-    /// must keep working during a profile-only outage, while the failure remains visible in logs.
+    /// stay stale across subscription upgrades or downgrades. Profile lookup is best-effort and attempted
+    /// at most once per hour for this login, including failures, so normal/manual refreshes cannot hammer
+    /// an endpoint whose value changes rarely. Usage bars keep working during a profile-only outage.
     private func fetchCurrentPlan(credentials: ClaudeOAuth, fallback: String?) async -> String? {
         guard let accessToken = credentials.accessToken, !accessToken.isEmpty else { return fallback }
+        let timestamp = now()
+        if let attemptedAt = profileFetchAttemptedAt {
+            let age = timestamp.timeIntervalSince(attemptedAt)
+            if age >= 0, age < Self.profileCacheDuration {
+                return cachedProfilePlan ?? fallback
+            }
+        }
+        // Record the attempt before suspension so a concurrent refresh cannot start a duplicate request.
+        profileFetchAttemptedAt = timestamp
         do {
             let response = try await usageClient.fetchProfile(
                 accessToken: accessToken,
                 config: authStore.oauthConfig()
             )
-            return try ClaudeUsageMapper.mapProfileResponse(response, fallback: credentials)
+            let plan = try ClaudeUsageMapper.mapProfileResponse(response, fallback: credentials)
+            cachedProfilePlan = plan
+            return plan
         } catch {
+            cachedProfilePlan = nil
             AppLog.warn(LogTag.plugin("claude"), "profile fetch failed; using saved plan metadata: \(error.localizedDescription)")
             return fallback
         }
@@ -458,6 +474,8 @@ final class ClaudeProvider: ProviderRuntime {
         cachedCredentialFingerprint = fingerprint
         lastGoodUsage = nil
         rateLimitedUntil = nil
+        cachedProfilePlan = nil
+        profileFetchAttemptedAt = nil
     }
 
     private static func credentialFingerprint(_ credentials: ClaudeOAuth) -> Data {

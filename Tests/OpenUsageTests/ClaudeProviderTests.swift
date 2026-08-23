@@ -392,7 +392,7 @@ final class ClaudeUsageMapperTests: XCTestCase {
 @MainActor
 final class ClaudeProviderTests: XCTestCase {
     func testRefreshUsesLiveProfileInsteadOfStaleCredentialTier() async {
-        let now = OpenUsageISO8601.date(from: "2026-02-20T16:00:00.000Z")!
+        let clock = TestClock(OpenUsageISO8601.date(from: "2026-02-20T16:00:00.000Z")!)
         let httpClient = RoutingHTTPClient { request in
             if request.url.absoluteString.hasSuffix("/api/oauth/profile") {
                 return HTTPResponse(
@@ -414,19 +414,61 @@ final class ClaudeProviderTests: XCTestCase {
                     "/tmp/claude/.credentials.json": #"{"claudeAiOauth":{"accessToken":"token","subscriptionType":"max","rateLimitTier":"default_claude_max_20x","scopes":["user:profile"]}}"#
                 ]),
                 keychain: FakeKeychain(),
-                now: { now }
+                now: { clock.now }
             ),
             usageClient: ClaudeUsageClient(httpClient: httpClient),
             logUsageScanner: ClaudeLogFixture.scanner(home: nil),
-            now: { now },
+            now: { clock.now },
             pricing: { TestPricing.bundled }
         )
 
-        let snapshot = await provider.refresh()
+        let first = await provider.refresh()
+        clock.set(clock.now.addingTimeInterval(3_599))
+        let cached = await provider.refresh()
+        clock.set(clock.now.addingTimeInterval(1))
+        let expired = await provider.refresh()
 
-        XCTAssertEqual(snapshot.plan, "Max 5x")
-        XCTAssertTrue(httpClient.requests.contains { $0.url.absoluteString.hasSuffix("/api/oauth/usage") })
-        XCTAssertTrue(httpClient.requests.contains { $0.url.absoluteString.hasSuffix("/api/oauth/profile") })
+        XCTAssertEqual(first.plan, "Max 5x")
+        XCTAssertEqual(cached.plan, "Max 5x")
+        XCTAssertEqual(expired.plan, "Max 5x")
+        XCTAssertEqual(httpClient.requests.filter { $0.url.absoluteString.hasSuffix("/api/oauth/usage") }.count, 3)
+        XCTAssertEqual(httpClient.requests.filter { $0.url.absoluteString.hasSuffix("/api/oauth/profile") }.count, 2)
+    }
+
+    func testFailedProfileLookupIsAlsoThrottledForOneHour() async {
+        let clock = TestClock(OpenUsageISO8601.date(from: "2026-02-20T16:00:00.000Z")!)
+        let httpClient = RoutingHTTPClient { request in
+            if request.url.absoluteString.hasSuffix("/api/oauth/profile") {
+                return HTTPResponse(statusCode: 503, headers: [:], body: Data())
+            }
+            return HTTPResponse(
+                statusCode: 200,
+                headers: [:],
+                body: Data(#"{"five_hour":{"utilization":25,"resets_at":"2099-01-01T00:00:00.000Z"}}"#.utf8)
+            )
+        }
+        let provider = ClaudeProvider(
+            authStore: ClaudeAuthStore(
+                environment: FakeEnvironment(["CLAUDE_CONFIG_DIR": "/tmp/claude"]),
+                files: FakeFiles([
+                    "/tmp/claude/.credentials.json": #"{"claudeAiOauth":{"accessToken":"token","subscriptionType":"max","rateLimitTier":"default_claude_max_20x","scopes":["user:profile"]}}"#
+                ]),
+                keychain: FakeKeychain(),
+                now: { clock.now }
+            ),
+            usageClient: ClaudeUsageClient(httpClient: httpClient),
+            logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+            now: { clock.now },
+            pricing: { TestPricing.bundled }
+        )
+
+        let first = await provider.refresh()
+        clock.set(clock.now.addingTimeInterval(300))
+        let second = await provider.refresh()
+
+        XCTAssertEqual(first.plan, "Max 20x")
+        XCTAssertEqual(second.plan, "Max 20x")
+        XCTAssertEqual(httpClient.requests.filter { $0.url.absoluteString.hasSuffix("/api/oauth/profile") }.count, 1)
     }
 
     func testRefreshFetchesLiveUsageAndScansConfigDirLogs() async throws {

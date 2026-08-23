@@ -14,8 +14,10 @@ Tracks your Claude subscription limits using the login you already have from Cla
 | Today / Yesterday / Last 30 Days | Local spend, as cost, tokens, or both (see below) |
 
 When Claude reports your plan name, OpenUsage shows it beside the provider name. OpenUsage reads the
-current plan and tier from Claude's profile API on each refresh, so subscription upgrades and downgrades
-do not depend on Claude Code rewriting older plan metadata in its Keychain entry.
+current plan and tier from Claude's profile API, cached for one hour per login, so subscription upgrades
+and downgrades do not depend on Claude Code rewriting older plan metadata in its Keychain entry. Failed
+profile checks are also held for an hour to avoid repeatedly calling the endpoint; a new login invalidates
+the cache immediately.
 
 ## Where credentials come from
 
