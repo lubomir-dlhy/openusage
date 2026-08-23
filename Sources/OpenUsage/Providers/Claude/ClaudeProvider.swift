@@ -287,6 +287,7 @@ final class ClaudeProvider: ProviderRuntime {
                 state: &state,
                 credentialGeneration: &credentialGeneration
             )
+            mapped.plan = await fetchCurrentPlan(credentials: state.oauth, fallback: mapped.plan)
             // A rate-limited fetch rides its "Updates blocked by Anthropic" notice on the mapped usage so
             // it reaches the header triangle even when the badge/note lines aren't in the user's layout.
             warning = mapped.warning
@@ -417,6 +418,23 @@ final class ClaudeProvider: ProviderRuntime {
         lastGoodUsage = mapped
         rateLimitedUntil = nil
         return mapped
+    }
+
+    /// Plan metadata embedded in Claude Code's Keychain credential is only a login-time snapshot and can
+    /// stay stale across subscription upgrades or downgrades. Profile lookup is best-effort: usage bars
+    /// must keep working during a profile-only outage, while the failure remains visible in logs.
+    private func fetchCurrentPlan(credentials: ClaudeOAuth, fallback: String?) async -> String? {
+        guard let accessToken = credentials.accessToken, !accessToken.isEmpty else { return fallback }
+        do {
+            let response = try await usageClient.fetchProfile(
+                accessToken: accessToken,
+                config: authStore.oauthConfig()
+            )
+            return try ClaudeUsageMapper.mapProfileResponse(response, fallback: credentials)
+        } catch {
+            AppLog.warn(LogTag.plugin("claude"), "profile fetch failed; using saved plan metadata: \(error.localizedDescription)")
+            return fallback
+        }
     }
 
     /// Last-good usage with an appended staleness note when we have it; otherwise the plain rate-limited

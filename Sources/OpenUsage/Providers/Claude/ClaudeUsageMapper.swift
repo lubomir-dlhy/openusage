@@ -107,6 +107,41 @@ enum ClaudeUsageMapper {
         return "\(base) \(tier[match])"
     }
 
+    /// Claude Code stores plan metadata beside its OAuth tokens, but that metadata can remain stale after
+    /// a subscription change. The live profile endpoint is authoritative for the current plan and tier.
+    static func mapProfileResponse(_ response: HTTPResponse, fallback: ClaudeOAuth) throws -> String? {
+        try ProviderAuthRetry.requireSuccess(
+            response,
+            authExpired: ClaudeAuthError.tokenExpired,
+            requestFailed: { ClaudeUsageError.requestFailed($0) }
+        )
+
+        let profile = try JSONDecoder().decode(ClaudeProfileResponse.self, from: response.body)
+        guard let liveSubscriptionType = profileSubscriptionType(profile) else {
+            return formatPlan(
+                subscriptionType: fallback.subscriptionType,
+                rateLimitTier: fallback.rateLimitTier
+            )
+        }
+        return formatPlan(
+            subscriptionType: liveSubscriptionType,
+            rateLimitTier: profile.organization?.rateLimitTier
+        )
+    }
+
+    private static func profileSubscriptionType(_ profile: ClaudeProfileResponse) -> String? {
+        if profile.account?.hasClaudeMax == true { return "max" }
+        if profile.account?.hasClaudePro == true { return "pro" }
+
+        switch profile.organization?.organizationType?.lowercased() {
+        case "claude_max", "max": return "max"
+        case "claude_pro", "pro": return "pro"
+        case "claude_team", "team": return "team"
+        case "claude_enterprise", "enterprise": return "enterprise"
+        default: return nil
+        }
+    }
+
     private static func appendUsageWindow(_ value: Any?, label: String, periodDurationMs: Int, to lines: inout [MetricLine]) {
         guard let object = value as? [String: Any],
               let used = ProviderParse.number(object["utilization"])
@@ -201,4 +236,3 @@ private enum HTTPDateFormatter {
         return formatter.date(from: value)
     }
 }
-

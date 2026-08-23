@@ -13,7 +13,9 @@ Tracks your Claude subscription limits using the login you already have from Cla
 | Extra Usage | Extra-usage credits spent against your monthly cap |
 | Today / Yesterday / Last 30 Days | Local spend, as cost, tokens, or both (see below) |
 
-When Claude reports your plan name, OpenUsage shows it beside the provider name.
+When Claude reports your plan name, OpenUsage shows it beside the provider name. OpenUsage reads the
+current plan and tier from Claude's profile API on each refresh, so subscription upgrades and downgrades
+do not depend on Claude Code rewriting older plan metadata in its Keychain entry.
 
 ## Where credentials come from
 
@@ -69,6 +71,10 @@ In the [CLI](../cli.md) and [local API](../local-http-api.md), extra cards appea
 
 ## Under the hood
 
-`GET https://api.anthropic.com/api/oauth/usage` with the selected OAuth token. Claude Code tokens refresh via `platform.claude.com/v1/oauth/token`; Claude Desktop tokens are read-only and must be renewed by Desktop itself. If a token is expired or revoked, OpenUsage retries with the next credential source before reporting an error.
+`GET https://api.anthropic.com/api/oauth/usage` and `GET https://api.anthropic.com/api/oauth/profile`
+with the selected OAuth token. The usage response supplies the live meters; the profile response supplies
+the current plan and tier. Claude Code tokens refresh via `platform.claude.com/v1/oauth/token`; Claude
+Desktop tokens are read-only and must be renewed by Desktop itself. If a token is expired or revoked,
+OpenUsage retries with the next credential source before reporting an error.
 
 When the five-hour session window has no usage yet, the Session row shows **Not started** on the trailing label; hover explains that the session begins after your first message.

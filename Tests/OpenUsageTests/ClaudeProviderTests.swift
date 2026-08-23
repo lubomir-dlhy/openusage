@@ -238,6 +238,36 @@ final class ClaudeUsageMapperTests: XCTestCase {
         XCTAssertEqual(progress(mapped.lines, "Extra usage spent")?.limit, 10)
     }
 
+    func testLiveProfileOverridesStaleKeychainTier() throws {
+        let response = HTTPResponse(
+            statusCode: 200,
+            headers: [:],
+            body: Data(#"{"account":{"has_claude_max":true,"has_claude_pro":false},"organization":{"organization_type":"claude_max","rate_limit_tier":"default_claude_max_5x"}}"#.utf8)
+        )
+
+        let plan = try ClaudeUsageMapper.mapProfileResponse(
+            response,
+            fallback: ClaudeOAuth(subscriptionType: "max", rateLimitTier: "default_claude_max_20x")
+        )
+
+        XCTAssertEqual(plan, "Max 5x")
+    }
+
+    func testLiveProfileCanReplaceStaleMaxPlanWithPro() throws {
+        let response = HTTPResponse(
+            statusCode: 200,
+            headers: [:],
+            body: Data(#"{"account":{"has_claude_max":false,"has_claude_pro":true},"organization":{"organization_type":"claude_pro","rate_limit_tier":"default_claude_pro"}}"#.utf8)
+        )
+
+        let plan = try ClaudeUsageMapper.mapProfileResponse(
+            response,
+            fallback: ClaudeOAuth(subscriptionType: "max", rateLimitTier: "default_claude_max_20x")
+        )
+
+        XCTAssertEqual(plan, "Pro")
+    }
+
     func testMapsFableScopedWeeklyLimitFromLimitsArray() throws {
         // Anthropic moved per-model weekly windows into `limits[]` as `weekly_scoped` rows keyed by
         // `scope.model.display_name`; the legacy `seven_day_<model>` top-level keys now come back null.
@@ -361,6 +391,44 @@ final class ClaudeUsageMapperTests: XCTestCase {
 
 @MainActor
 final class ClaudeProviderTests: XCTestCase {
+    func testRefreshUsesLiveProfileInsteadOfStaleCredentialTier() async {
+        let now = OpenUsageISO8601.date(from: "2026-02-20T16:00:00.000Z")!
+        let httpClient = RoutingHTTPClient { request in
+            if request.url.absoluteString.hasSuffix("/api/oauth/profile") {
+                return HTTPResponse(
+                    statusCode: 200,
+                    headers: [:],
+                    body: Data(#"{"account":{"has_claude_max":true,"has_claude_pro":false},"organization":{"organization_type":"claude_max","rate_limit_tier":"default_claude_max_5x"}}"#.utf8)
+                )
+            }
+            return HTTPResponse(
+                statusCode: 200,
+                headers: [:],
+                body: Data(#"{"five_hour":{"utilization":25,"resets_at":"2099-01-01T00:00:00.000Z"}}"#.utf8)
+            )
+        }
+        let provider = ClaudeProvider(
+            authStore: ClaudeAuthStore(
+                environment: FakeEnvironment(["CLAUDE_CONFIG_DIR": "/tmp/claude"]),
+                files: FakeFiles([
+                    "/tmp/claude/.credentials.json": #"{"claudeAiOauth":{"accessToken":"token","subscriptionType":"max","rateLimitTier":"default_claude_max_20x","scopes":["user:profile"]}}"#
+                ]),
+                keychain: FakeKeychain(),
+                now: { now }
+            ),
+            usageClient: ClaudeUsageClient(httpClient: httpClient),
+            logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+            now: { now },
+            pricing: { TestPricing.bundled }
+        )
+
+        let snapshot = await provider.refresh()
+
+        XCTAssertEqual(snapshot.plan, "Max 5x")
+        XCTAssertTrue(httpClient.requests.contains { $0.url.absoluteString.hasSuffix("/api/oauth/usage") })
+        XCTAssertTrue(httpClient.requests.contains { $0.url.absoluteString.hasSuffix("/api/oauth/profile") })
+    }
+
     func testRefreshFetchesLiveUsageAndScansConfigDirLogs() async throws {
         let now = OpenUsageISO8601.date(from: "2026-02-20T16:00:00.000Z")!
         let httpClient = FakeHTTPClient(response: HTTPResponse(

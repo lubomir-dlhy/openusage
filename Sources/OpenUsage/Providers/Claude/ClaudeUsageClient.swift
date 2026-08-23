@@ -12,6 +12,31 @@ struct ClaudeRefreshResponse: Decodable, Hashable, Sendable {
     }
 }
 
+struct ClaudeProfileResponse: Decodable, Hashable, Sendable {
+    struct Account: Decodable, Hashable, Sendable {
+        var hasClaudeMax: Bool?
+        var hasClaudePro: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case hasClaudeMax = "has_claude_max"
+            case hasClaudePro = "has_claude_pro"
+        }
+    }
+
+    struct Organization: Decodable, Hashable, Sendable {
+        var organizationType: String?
+        var rateLimitTier: String?
+
+        enum CodingKeys: String, CodingKey {
+            case organizationType = "organization_type"
+            case rateLimitTier = "rate_limit_tier"
+        }
+    }
+
+    var account: Account?
+    var organization: Organization?
+}
+
 enum ClaudeUsageError: Error, LocalizedError, Equatable {
     case connectionFailed
     case invalidResponse
@@ -73,5 +98,20 @@ struct ClaudeUsageClient: Sendable {
             )
         )
     }
-}
 
+    func fetchProfile(accessToken: String, config: ClaudeOAuthConfig) async throws -> HTTPResponse {
+        try await httpClient.send(
+            HTTPRequest(
+                method: "GET",
+                url: config.profileURL,
+                headers: [
+                    "Authorization": "Bearer \(accessToken.trimmingCharacters(in: .whitespacesAndNewlines))",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "User-Agent": "claude-code/2.1.69"
+                ],
+                timeout: 10
+            )
+        )
+    }
+}

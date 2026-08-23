@@ -151,6 +151,7 @@ enum ClaudeAuthError: Error, LocalizedError, Equatable {
 
 struct ClaudeOAuthConfig: Hashable, Sendable {
     var usageURL: URL
+    var profileURL: URL
     var refreshURL: URL
     var clientID: String
 }
@@ -442,14 +443,19 @@ struct ClaudeAuthStore: Sendable {
     func oauthConfig() throws -> ClaudeOAuthConfig {
         let endpoints = resolveOAuthEndpoints()
         let usageURLString = "\(endpoints.baseAPI)/api/oauth/usage"
+        let profileURLString = "\(endpoints.baseAPI)/api/oauth/profile"
         guard let usageURL = URL(string: usageURLString) else {
             throw ClaudeAuthError.invalidOAuthURL(usageURLString)
+        }
+        guard let profileURL = URL(string: profileURLString) else {
+            throw ClaudeAuthError.invalidOAuthURL(profileURLString)
         }
         guard let refreshURL = URL(string: endpoints.refreshURL) else {
             throw ClaudeAuthError.invalidOAuthURL(endpoints.refreshURL)
         }
         return ClaudeOAuthConfig(
             usageURL: usageURL,
+            profileURL: profileURL,
             refreshURL: refreshURL,
             clientID: endpoints.clientID
         )

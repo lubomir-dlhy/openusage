@@ -302,7 +302,11 @@ final class ClaudeDesktopAuthStoreTests: XCTestCase {
         }
 
         XCTAssertNil(badge(snapshot.lines, "Error"))
-        XCTAssertEqual(httpClient.requests.count, 2)
+        // Revoked CLI usage, successful Desktop usage, then the best-effort live profile lookup.
+        XCTAssertEqual(httpClient.requests.count, 3)
+        XCTAssertEqual(httpClient.requests.map(\.url.path), [
+            "/api/oauth/usage", "/api/oauth/usage", "/api/oauth/profile"
+        ])
         XCTAssertTrue(httpClient.requests.last?.headers["Authorization"]?.contains("desktop-token") == true)
     }
 
@@ -348,7 +352,12 @@ final class ClaudeDesktopAuthStoreTests: XCTestCase {
         }
 
         XCTAssertNil(badge(snapshot.lines, "Error"))
-        XCTAssertEqual(httpClient.requests.count, 2)
+        // The inference-only environment token is never probed: Desktop usage succeeds, then supplies
+        // the token for the best-effort live profile lookup.
+        XCTAssertEqual(httpClient.requests.count, 3)
+        XCTAssertEqual(httpClient.requests.map(\.url.path), [
+            "/api/oauth/usage", "/api/oauth/usage", "/api/oauth/profile"
+        ])
         XCTAssertTrue(httpClient.requests.last?.headers["Authorization"]?.contains("desktop-token") == true)
     }
 
