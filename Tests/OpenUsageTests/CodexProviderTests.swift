@@ -761,6 +761,9 @@ final class CodexProviderTests: XCTestCase {
             if case .badge(_, let value, _, _) = line { return value == "No usage data" }
             return false
         })
+        XCTAssertFalse(httpClient.requests.contains {
+            $0.url.path.contains("daily-token-usage-breakdown")
+        }, "Codex refresh must not fetch credit percentages for token or cost estimation")
     }
 
     private func values(_ lines: [MetricLine], _ label: String) -> [MetricValue]? {

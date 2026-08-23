@@ -60,7 +60,7 @@ final class CodexProvider: ProviderRuntime {
                 .exportingHistory(
                     scope: .machineLocal,
                     estimatedCost: true,
-                    sourceNote: "From your Codex logs (estimated)"
+                    sourceNote: "Token counts from your Codex logs; cost estimated"
                 )
         ] + WidgetDescriptor.spendTiles(provider: provider)
     }
@@ -156,37 +156,23 @@ final class CodexProvider: ProviderRuntime {
         // Cancellation can land between the native and pi scans. Treat the pair as one unit so a
         // partial result cannot replace the last-good combined history in WidgetDataStore.
         if !Task.isCancelled, let scan = DailyUsageAccumulator.merged([nativeScan, piScan]) {
-            // ChatGPT's cloud analytics cover the surfaces local logs can't see (desktop, web,
-            // cloud exec); tokens and dollars are imputed by calibrating against the local logs
-            // (see `CodexCloudUsage`). Empty when the fetch fails or calibration is impossible,
-            // leaving tiles and trend exactly as local-only. Kept OUT of `usageHistory`: that record
-            // is machine-local by contract (iCloud sync adds machines together), and the cloud
-            // analytics are account-wide, so syncing them would double-count across machines.
-            let cloudExtra = await fetchCloudUsageExtraBestEffort(
-                accessToken: currentToken,
-                accountID: authState.auth.tokens?.accountID,
-                series: scan.series
-            )
             var sources = "your Codex logs"
             if piScan != nil { sources += " and pi" }
-            if !cloudExtra.isEmpty { sources += " + ChatGPT cloud analytics" }
-            let note = "From \(sources) (estimated)"
+            let sourceNote = "From \(sources)"
             usageHistory = ProviderUsageHistory(
                 series: scan.series,
                 modelUsage: scan.modelUsage,
                 unknownModelsByDay: scan.unknownModelsByDay
             )
             SpendTileMapper.appendTokenUsage(
-                CodexCloudUsage.mergedTileSeries(scan.series, cloudByDay: cloudExtra),
+                scan.series,
                 to: &mapped.lines, now: now(),
                 unknownModelsByDay: scan.unknownModelsByDay,
-                modelUsage: CodexCloudUsage.mergedTileModelUsage(scan.modelUsage, cloudByDay: cloudExtra),
-                modelSourceNote: note
+                modelUsage: scan.modelUsage,
+                modelSourceNote: "\(sourceNote); cost estimated"
             )
             SpendTileMapper.appendUsageTrend(
-                scan.series, cloudExtraTokensByDay: cloudExtra.mapValues(\.tokens),
-                to: &mapped.lines, now: now(),
-                note: note
+                scan.series, to: &mapped.lines, now: now(), note: sourceNote
             )
         }
 
@@ -198,39 +184,6 @@ final class CodexProvider: ProviderRuntime {
             refreshedAt: now(),
             usageHistory: usageHistory
         )
-    }
-
-    /// Fetches the cloud analytics and imputes per-day tokens and dollars for the non-CLI surfaces
-    /// (see `CodexCloudUsage`). Best-effort like the reset-credit fetch: any failure — network,
-    /// non-2xx, unparseable body — logs a warning and returns empty, so the tiles and trend stay
-    /// local-only rather than failing the whole refresh.
-    private func fetchCloudUsageExtraBestEffort(
-        accessToken: String,
-        accountID: String?,
-        series: DailyUsageSeries
-    ) async -> [String: CodexCloudEstimate] {
-        let calendar = Calendar.current
-        let end = now()
-        guard let start = calendar.date(byAdding: .day, value: -30, to: end) else { return [:] }
-        do {
-            let response = try await usageClient.fetchDailyUsageBreakdown(
-                accessToken: accessToken,
-                accountID: accountID,
-                startDate: DailyUsageAccumulator.dayKey(from: start),
-                endDate: DailyUsageAccumulator.dayKey(from: end)
-            )
-            guard (200..<300).contains(response.statusCode), let body = ProviderParse.jsonObject(response.body) else {
-                AppLog.warn(LogTag.plugin("codex"), "cloud analytics fetch returned \(response.statusCode); spend stays local-only")
-                return [:]
-            }
-            return CodexCloudUsage.estimatedCloudUsageByDay(
-                cloudDays: CodexCloudUsage.parseDays(body),
-                localSeries: series
-            )
-        } catch {
-            AppLog.warn(LogTag.plugin("codex"), "cloud analytics fetch failed; spend stays local-only: \(error.localizedDescription)")
-            return [:]
-        }
     }
 
     /// Fetches the on-demand reset-credit balance (and per-credit expiry) without ever failing the

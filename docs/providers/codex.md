@@ -27,13 +27,15 @@ Today / Yesterday / Last 30 Days are computed **locally**: OpenUsage reads the C
 
 For supported GPT-5.4, GPT-5.5, and GPT-5.6 models, requests above 272k input tokens use OpenAI's long-context rates for the whole request. Daybreak Blue usage is priced as GPT-5.6 Sol, matching OpenAI's published alias and Daybreak pricing. Cached input uses the published cache-read discount when the pricing source provides one; otherwise it is estimated at the full input rate. Fast/priority estimates use each model's published Codex multiplier (for example, GPT-5.5 uses 2.5×); model names ending in `-fast` are normalized to their unscaled base rate before that multiplier is applied once.
 
-On top of the local logs, the tiles also count your usage on the surfaces those logs can't see — the Codex desktop app, the web, and cloud tasks — estimated from ChatGPT's cloud analytics the same way the Usage Trend does (see below). The estimated share rides in each tile's hover breakdown as its own **ChatGPT Cloud** row, so the measured local models and the estimated cloud usage stay distinguishable; its dollars use the same blended rate your local usage priced at. If the analytics call fails or there's nothing to calibrate from, the tiles quietly stay local-only.
+The tiles intentionally exclude Codex usage from the desktop app, web, and cloud tasks. ChatGPT's cloud
+analytics reports those surfaces as percentages of plan credits rather than raw token counts, so OpenUsage
+does not convert them into estimated tokens or dollars.
 
 ## The Usage Trend
 
-The Usage Trend merges two sources into one bar per day. The base is the same local session logs the spend tiles use — measured token counts. On top of that, OpenUsage asks ChatGPT's cloud analytics how much you used across **all** surfaces (CLI, the Codex desktop app, the web, cloud tasks). That API only reports usage as a percentage of your plan's credits, not tokens, so OpenUsage converts it: on days where your local logs and the analytics' "CLI" number overlap, it works out how many credits a token costs you, then uses that rate to estimate tokens for the non-CLI surfaces. Hovering a day with cloud activity shows both halves — the measured local tokens and the estimated cloud tokens (`≈485M tokens · 412M local + ~73M cloud (est.)`).
-
-Because it's a calibration, the cloud half is an estimate: it drifts with the mix of models you use, and it assumes this Mac is where your CLI usage happens. If the analytics call fails, or there's no overlap to calibrate from (say, you never use the CLI), the trend — and the spend tiles' cloud share — quietly stay local-only, exactly what they showed before.
+The Usage Trend uses the same locally measured token counts as the spend tiles, grouped into one bar per
+day. It does not include or estimate Codex desktop, web, or cloud-task usage because those surfaces do not
+provide raw token counts through the available cloud analytics endpoint.
 
 ## Troubleshooting
 
@@ -49,7 +51,9 @@ Spark and Spark Weekly come from the same response's `additional_rate_limits` ar
 
 OpenUsage preserves Codex's reported `used_percent` verbatim. If the API reports 1% used for an untouched window, the app shows 99% left; if it reports 0%, the app shows 100% left. Codex rows use the normal reset label rather than inferring a special "Not started" state. Burn-rate pacing still waits until enough of the window has elapsed to make a useful projection.
 
-The cloud half of the Usage Trend and the spend tiles comes from a best-effort `GET https://chatgpt.com/backend-api/wham/usage/daily-token-usage-breakdown` call (the same API the Codex analytics page uses), summing each day's per-surface credit percentages. The `cli` surface calibrates credits-per-token against the local logs; the remaining surfaces impute tokens at that rate, and the tiles price those tokens at the local window's blended $/token rate. Any failure — or no overlap to calibrate from — leaves the trend and tiles local-only.
+OpenUsage does not call the daily cloud-analytics endpoint for spend or token history. That endpoint
+returns per-surface credit percentages rather than raw token counts, which are not accurate enough to mix
+with the measured local history.
 
 The "Rate Limit Resets" row shows the on-demand reset-credit count, e.g. `2 available`, with a colored dot for the soonest credit's expiry — blue beyond a week, yellow within a week, red within 48 hours. OpenUsage also makes a best-effort `GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits` call — the dedicated endpoint that lists each credit's expiry — and surfaces those in a popover when you hover the value: a timeline of each reset, soonest-first — a numbered color dot, the exact expiry time (`Jul 12 at 5:30 PM`), and the countdown to it (`12d 18h`) on the trailing edge. When no credits are available it reads `0 available` and the popover shows `You have no rate limit resets`. If the dedicated call fails, the row falls back to the count embedded in the usage body (`rate_limit_reset_credits.available_count`); since that body carries no per-credit expiries, the popover states the count (`N available`) and notes that expiry times are unavailable rather than implying there are none.
 
