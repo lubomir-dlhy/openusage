@@ -1,4 +1,5 @@
 import Foundation
+import KeyboardShortcuts
 import Observation
 
 /// Composition root: owns the (constant) registry and the (mutable) stores, injected
@@ -25,8 +26,8 @@ final class AppContainer {
     /// Quota pace notification preferences (three independent triggers). Drives the Settings section
     /// and is read by `WidgetDataStore.evaluateNotifications`.
     let notificationSettings: NotificationSettingsStore
-    /// Anonymous, opt-out usage telemetry (daily rollups). Exposed so Settings can toggle it and the
-    /// app-termination hook can flush any queued events.
+    /// Anonymous usage telemetry (mandatory daily activity and crashes, optional provider rollups).
+    /// Exposed so Settings can toggle extra analytics and termination can flush queued events.
     let telemetry: TelemetryRecorder
     /// Source of truth for the popover's transparency: the persisted Increase Transparency toggle, the
     /// ephemeral secret-code easter-egg state, and the system accessibility flags it yields to. Read by both
@@ -187,10 +188,11 @@ final class AppContainer {
             )
         }
 
-        // Anonymous, opt-out usage telemetry (two daily-rollup events). Its state lives in a dedicated
-        // UserDefaults suite, kept separate from app settings so the user's opt-out choice and the
-        // install id stay independent of any settings change. The snapshot closure reads the live
-        // layout/enablement so `app_daily_active` always reflects the current configuration.
+        // Anonymous usage telemetry (mandatory daily activity and crashes, optional provider rollups).
+        // Its state lives in a dedicated UserDefaults suite, kept separate from app settings so the user's
+        // optional-analytics choice and the install id stay independent of any settings change. The
+        // snapshot closure reads the live layout/enablement so `app_daily_active` always reflects
+        // the current configuration.
         let telemetryStore = TelemetryStore()
         let telemetry = TelemetryRecorder(
             sink: PostHogTelemetrySink(enabled: telemetryStore.enabled),
@@ -309,6 +311,31 @@ final class AppContainer {
         FirstRunSeeder.reseed(providers: providers, enablement: enablement)
     }
 
+    /// Restores every user preference owned by the container while deliberately preserving telemetry
+    /// identity/consent, provider credentials, the iCloud device identity, and cached usage snapshots.
+    /// Launch at Login and Sparkle preferences are reset by `SettingsScreen` alongside this call.
+    func resetAllSettings() {
+        layout.resetToDefault()
+        layout.menuBarStyle = .text
+        reseedEnabledProviders()
+        dataStore.resetDisplaySettings()
+        notificationSettings.resetToDefaults()
+        transparency.resetToDefaults()
+        privacy.hideUsageWhileScreenSharing = false
+        iCloudSync.enabled = false
+        for key in [
+            AppearanceSetting.key, TimeFormatSetting.key, DensitySetting.key,
+            ReduceAnimationsSetting.key, LogLevelSetting.key, TotalSpendSetting.key,
+            TotalSpendSetting.periodKey, TotalSpendSetting.metricKey,
+        ] {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        KeyboardShortcuts.reset(.togglePopover)
+        AppearanceSetting.applyCurrent()
+        AppLog.reloadLevel()
+        AppLog.info(.config, "All settings reset to defaults")
+    }
+
     /// Drives live updates: refresh on launch, then again every refresh interval. Each pass honors the
     /// cache, so it only hits the network once a snapshot has actually expired. `@Observable` propagates
     /// the resulting snapshot changes to the menu-bar label and any open widgets, so the UI refreshes on
@@ -336,9 +363,9 @@ final class AppContainer {
                 // and on every loop (not just on a fetch) so pace worsening from elapsed time alone still
                 // alerts even with the popover closed.
                 await dataStore.evaluateNotifications()
-                // Day-rollover beat: emits `app_daily_active` once per local day and flushes any
-                // prior-day provider rollups. Runs on launch and every interval, so always-running
-                // instances still produce a daily-active signal.
+                // Day-rollover beat: always emits `app_daily_active` once per local day; flushes
+                // prior-day provider rollups only while optional analytics are on. Runs on launch
+                // and every interval, so always-running instances still produce a daily-active signal.
                 telemetry.tick()
                 await wakeSignal.waitForWake(timeout: RefreshSetting.interval)
             }
