@@ -26,9 +26,6 @@ final class AppContainer {
     /// Quota pace notification preferences (three independent triggers). Drives the Settings section
     /// and is read by `WidgetDataStore.evaluateNotifications`.
     let notificationSettings: NotificationSettingsStore
-    /// Anonymous usage telemetry (mandatory daily activity and crashes, optional provider rollups).
-    /// Exposed so Settings can toggle extra analytics and termination can flush queued events.
-    let telemetry: TelemetryRecorder
     /// Source of truth for the popover's transparency: the persisted Increase Transparency toggle, the
     /// ephemeral secret-code easter-egg state, and the system accessibility flags it yields to. Read by both
     /// the SwiftUI surface and the AppKit panel (`StatusItemController`).
@@ -202,36 +199,6 @@ final class AppContainer {
             )
         }
 
-        // Anonymous usage telemetry (mandatory daily activity and crashes, optional provider rollups).
-        // Its state lives in a dedicated UserDefaults suite, kept separate from app settings so the user's
-        // optional-analytics choice and the install id stay independent of any settings change. The
-        // snapshot closure reads the live layout/enablement so `app_daily_active` always reflects
-        // the current configuration.
-        let telemetryStore = TelemetryStore()
-        let telemetry = TelemetryRecorder(
-            sink: PostHogTelemetrySink(enabled: telemetryStore.enabled),
-            store: telemetryStore,
-            snapshot: { [registry, enablement, layout] in
-                // Report the *active* configuration: a metric whose provider is turned off is hidden
-                // from the dashboard and menu bar, so exclude it here too — keeping the metric arrays
-                // consistent with `enabledProviders` (which is also enablement-filtered).
-                let providerOn: (String) -> Bool = { metricID in
-                    guard let providerID = registry.descriptor(id: metricID)?.providerID else { return false }
-                    return enablement.isEnabled(providerID)
-                }
-                return TelemetryConfigSnapshot(
-                    enabledProviders: registry.providers.map(\.id).filter { enablement.isEnabled($0) },
-                    enabledMetricIDs: layout.placed.map(\.descriptorID).filter(providerOn),
-                    pinnedMetricIDs: layout.pinnedMetricIDs.filter(providerOn),
-                    expandedMetricIDs: layout.expandedMetricIDs.filter(providerOn),
-                    menuBarStyle: layout.menuBarStyle.rawValue
-                )
-            }
-        )
-        dataStore.onRefreshOutcome = { [weak telemetry] providerID, outcome, category, manual in
-            telemetry?.record(providerID: providerID, outcome: outcome, category: category, manual: manual)
-        }
-        self.telemetry = telemetry
         self.transparency = PopoverTransparencyStore()
         self.privacy = MenuBarPrivacyStore()
         self.localAPI = LocalUsageServer(state: { [layout, enablement, dataStore, accounts] in
@@ -246,7 +213,7 @@ final class AppContainer {
             // exactly like every UI surface.
             .resolvingDisplayNames(accounts.resolvedDisplayNamesByCardID)
         })
-        self.refreshTask = Self.startPeriodicRefresh(dataStore: dataStore, telemetry: telemetry)
+        self.refreshTask = Self.startPeriodicRefresh(dataStore: dataStore)
         localAPI.start()
 
         // Apply account changes (add/remove, or edit icon/label/config dir) live: rebuild the per-account
@@ -291,7 +258,7 @@ final class AppContainer {
 
     /// Watch `AccountsStore` and, on each change, rebuild the runtimes + registry from the current
     /// accounts and apply them in place to the live stores (same instances, so the refresh loop / local
-    /// API / telemetry stay valid), then fetch. Captures the stores (not `self`), mirroring `refreshTask`.
+    /// API stays valid), then fetch. Captures the stores (not `self`), mirroring `refreshTask`.
     private static func startAccountsObserver(
         accounts: AccountsStore,
         claudeCards: [ClaudeAccountCard],
@@ -328,8 +295,8 @@ final class AppContainer {
         FirstRunSeeder.reseed(providers: providers, enablement: enablement)
     }
 
-    /// Restores every user preference owned by the container while deliberately preserving telemetry
-    /// identity/consent, provider credentials, the iCloud device identity, and cached usage snapshots.
+    /// Restores every user preference owned by the container while deliberately preserving provider
+    /// credentials, the iCloud device identity, and cached usage snapshots.
     /// Launch at Login and Sparkle preferences are reset by `SettingsScreen` alongside this call.
     func resetAllSettings() {
         layout.resetToDefault()
@@ -371,7 +338,7 @@ final class AppContainer {
     /// Sparkle's update bookkeeping, and unrelated global-domain changes from other processes. Waking on
     /// that, with no minimum interval before re-refreshing, collapsed the fixed 5-minute cadence into a
     /// refresh storm.
-    private static func startPeriodicRefresh(dataStore: WidgetDataStore, telemetry: TelemetryRecorder) -> Task<Void, Never> {
+    private static func startPeriodicRefresh(dataStore: WidgetDataStore) -> Task<Void, Never> {
         Task {
             let wakeSignal = RefreshWakeSignal()
             while !Task.isCancelled {
@@ -380,10 +347,6 @@ final class AppContainer {
                 // and on every loop (not just on a fetch) so pace worsening from elapsed time alone still
                 // alerts even with the popover closed.
                 await dataStore.evaluateNotifications()
-                // Day-rollover beat: always emits `app_daily_active` once per local day; flushes
-                // prior-day provider rollups only while optional analytics are on. Runs on launch
-                // and every interval, so always-running instances still produce a daily-active signal.
-                telemetry.tick()
                 await wakeSignal.waitForWake(timeout: RefreshSetting.interval)
             }
         }

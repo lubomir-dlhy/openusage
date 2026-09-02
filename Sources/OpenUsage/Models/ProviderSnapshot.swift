@@ -20,8 +20,8 @@ struct ProviderSnapshot: Hashable, Sendable, Codable {
     /// surfaces as the provider header's amber triangle rather than blanking the provider. Cached with the
     /// snapshot; cleared on the next refresh when the condition resolves.
     var warning: String?
-    /// Set only on error snapshots: a stable, non-PII bucket for the failure, read by telemetry on the
-    /// failure path. Always `nil` on success (and error snapshots aren't cached), so it never persists.
+    /// Set only on error snapshots: a stable machine-readable classification for diagnostics. Always
+    /// `nil` on success (and error snapshots aren't cached), so it never persists.
     var errorCategory: ErrorCategory?
 
     init(
@@ -71,7 +71,7 @@ struct ProviderSnapshot: Hashable, Sendable, Codable {
     }
 
     /// Build an error snapshot straight from a caught error: the badge text stays the error's
-    /// user-facing `localizedDescription` (UI copy is unchanged), and the telemetry category is derived
+    /// user-facing `localizedDescription` (UI copy is unchanged), and the diagnostic category is derived
     /// from the error's `CategorizedError` conformance (falling back to `.other` for anything that
     /// doesn't classify itself). Preferred over `error(provider:message:)` wherever an `Error` is in hand.
     static func error(provider: Provider, error: Error) -> ProviderSnapshot {

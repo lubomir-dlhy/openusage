@@ -362,6 +362,26 @@ final class SettingsMigratorTests: XCTestCase {
         XCTAssertEqual(pinsAfterFirst, ["antigravity.geminiPro", "copilot.premium", "ghost.metric"])
     }
 
+    // MARK: - v4: analytics removal
+
+    func testV4DeletesLegacyTelemetryDomain() {
+        let (defaults, domain) = makeDefaults("V4TelemetryRemoval")
+        defer { defaults.removePersistentDomain(forName: domain) }
+        defaults.set(3, forKey: SettingsMigrator.schemaVersionKey)
+
+        let telemetrySuite = (Bundle.main.bundleIdentifier ?? "com.openusage.app") + ".telemetry"
+        let telemetryDefaults = try! XCTUnwrap(UserDefaults(suiteName: telemetrySuite))
+        defer { telemetryDefaults.removePersistentDomain(forName: telemetrySuite) }
+        telemetryDefaults.set("anonymous-install-id", forKey: "installID")
+        telemetryDefaults.set(true, forKey: "enabled")
+
+        let result = SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+
+        XCTAssertEqual(result, SettingsSchema.current)
+        XCTAssertNil(telemetryDefaults.string(forKey: "installID"))
+        XCTAssertNil(telemetryDefaults.object(forKey: "enabled"))
+    }
+
     // MARK: - Schema integrity
 
     /// Guards against editing the migration list without bumping `current` (or vice versa): every

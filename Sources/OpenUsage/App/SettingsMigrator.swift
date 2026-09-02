@@ -18,7 +18,7 @@ struct SettingsMigration: Sendable {
 enum SettingsSchema {
     /// Current schema version. Keep equal to the highest migration `version` below (or the baseline when
     /// there are none). This is NOT the app version — bump it only alongside a migration you add.
-    static let current = 3
+    static let current = 4
 
     /// The provider IDs that existed when the v2 migration shipped, frozen forever. A migration is a
     /// point-in-time transform: any future build with more providers also contains this migration, so a
@@ -70,6 +70,13 @@ enum SettingsSchema {
             remapJSONMetricIDArray(defaults, key: "openusage.layout.v1.seededDefaults")
             remapJSONMetricOrder(defaults, key: "openusage.layout.v1.metricOrderByProvider")
             remapJSONPlacedWidgets(defaults, key: "openusage.layout.v1")
+        },
+        // v4 removes the dedicated analytics domain left by builds that bundled PostHog. The SDK and
+        // all analytics code are gone; deleting its isolated defaults also removes the anonymous install
+        // identifier, consent flag, and unsent daily counters from the Mac.
+        SettingsMigration(version: 4) { _ in
+            let suite = (Bundle.main.bundleIdentifier ?? "com.openusage.app") + ".telemetry"
+            UserDefaults.standard.removePersistentDomain(forName: suite)
         }
     ]
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Typed failures for the OpenCode provider, so telemetry groups them by a stable category
+/// Typed failures for the OpenCode provider, so diagnostics use a stable category
 /// (see `ErrorCategory.swift`).
 enum OpenCodeUsageError: Error, LocalizedError, Equatable {
     case notLoggedIn

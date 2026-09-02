@@ -242,25 +242,6 @@ struct SettingsScreen: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(alignment: .center, spacing: 10) {
-                Text("Help make OpenUsage better by sharing anonymous usage analytics")
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Toggle("", isOn: Binding(
-                    get: { container.telemetry.isEnabled },
-                    set: { container.telemetry.setEnabled($0) }
-                ))
-                .settingsSwitchStyle()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, density.controlRowPadding)
-            // Daily activity and crash reports are always on; the toggle only gates extra analytics.
-            Text("A daily anonymous active ping and crash reports are always sent. This toggle shares extra anonymous usage analytics — provider refreshes and error types. No account details, credentials, or usage values are sent.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

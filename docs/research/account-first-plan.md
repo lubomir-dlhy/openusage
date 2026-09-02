@@ -130,7 +130,7 @@ tests land in-slice (repo policy). Estimated source LOC excludes tests.
 ### Phase 6 — Attribution polish (small)
 
 - Pi spend attribution routed through the resolver to the badge holder.
-- Family-keyed telemetry rollups (`accounts_per_family` gauge).
+- Family-keyed diagnostic rollups (`accounts_per_family` gauge).
 - Total Spend family grouping/tinting if still wanted (see `c6a63eb` on the old branch for why
   plain size order won before).
 
