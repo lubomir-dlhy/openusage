@@ -24,7 +24,8 @@ enum SpendTileMapper {
         estimated: Bool = true,
         unknownModelsByDay: [String: Set<String>] = [:],
         modelUsage: ModelUsageSeries? = nil,
-        modelSourceNote: String? = nil
+        modelSourceNote: String? = nil,
+        fallbackPricingModelsByDay: [String: Set<String>]? = nil
     ) {
         let today = dayKey(from: now)
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now).map(dayKey(from:))
@@ -37,7 +38,8 @@ enum SpendTileMapper {
                                         days: [today],
                                         totalTokens: entry.totalTokens,
                                         totalCostUSD: entry.costUSD,
-                                        sourceNote: modelSourceNote
+                                        sourceNote: modelSourceNote,
+                                        fallbackPricingModelsByDay: fallbackPricingModelsByDay
                                       )))
         }
         if let entry = usage.daily.first(where: { dayKey(fromUsageDate: $0.date) == yesterday }), hasUsage(entry) {
@@ -48,7 +50,8 @@ enum SpendTileMapper {
                                         days: Set([yesterday].compactMap { $0 }),
                                         totalTokens: entry.totalTokens,
                                         totalCostUSD: entry.costUSD,
-                                        sourceNote: modelSourceNote
+                                        sourceNote: modelSourceNote,
+                                        fallbackPricingModelsByDay: fallbackPricingModelsByDay
                                       )))
         }
 
@@ -65,7 +68,8 @@ enum SpendTileMapper {
                                     days: Set(usage.daily.compactMap { dayKey(fromUsageDate: $0.date) }),
                                     totalTokens: totalTokens,
                                     totalCostUSD: totalCost,
-                                    sourceNote: modelSourceNote
+                                    sourceNote: modelSourceNote,
+                                    fallbackPricingModelsByDay: fallbackPricingModelsByDay
                                  )))
         }
     }
@@ -84,11 +88,15 @@ enum SpendTileMapper {
         _ usage: DailyUsageSeries,
         to lines: inout [MetricLine],
         now: Date = Date(),
-        note: String
+        note: String,
+        fallbackPricingModelsByDay: [String: Set<String>]? = nil
     ) {
         let points = trendPoints(usage, now: now)
         guard !points.isEmpty else { return }
-        lines.append(.chart(label: "Usage Trend", points: points, note: note))
+        let days = Set(usage.daily.compactMap { dayKey(fromUsageDate: $0.date) })
+            .intersection(UsageHistoryWindow.dayKeys(through: now))
+        let sourceNote = PricingFallbackOption.sourceNote(note, modelsByDay: fallbackPricingModelsByDay, days: days)
+        lines.append(.chart(label: "Usage Trend", points: points, note: sourceNote))
     }
 
     /// Per-day token points across the queried window (today + the previous 30 days), oldest first.
@@ -292,7 +300,8 @@ enum SpendTileMapper {
         days: Set<String>,
         totalTokens: Int,
         totalCostUSD: Double?,
-        sourceNote: String?
+        sourceNote: String?,
+        fallbackPricingModelsByDay: [String: Set<String>]?
     ) -> ModelUsageBreakdown? {
         guard let usage, let sourceNote, !days.isEmpty else { return nil }
 
@@ -314,7 +323,7 @@ enum SpendTileMapper {
             totalTokens: totalTokens,
             totalCostUSD: totalCostUSD,
             models: folded,
-            sourceNote: sourceNote
+            sourceNote: PricingFallbackOption.sourceNote(sourceNote, modelsByDay: fallbackPricingModelsByDay, days: days)
         )
     }
 

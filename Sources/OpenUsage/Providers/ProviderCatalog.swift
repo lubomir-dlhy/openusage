@@ -12,13 +12,15 @@ enum ProviderCatalog {
     static func make(
         defaults: UserDefaults = .standard,
         claudeCards: [ClaudeAccountCard] = [],
-        defaultClaudeExtraLogRoots: [URL] = []
+        defaultClaudeExtraLogRoots: [URL] = [],
+        claudeIdentityKeys: [String: String] = [:]
     ) -> [ProviderRuntime] {
         make(
             accounts: AccountsStore(defaults: defaults),
             defaults: defaults,
             claudeCards: claudeCards,
-            defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots
+            defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
+            claudeIdentityKeys: claudeIdentityKeys
         )
     }
 
@@ -30,7 +32,8 @@ enum ProviderCatalog {
         accounts: AccountsStore,
         defaults: UserDefaults = .standard,
         claudeCards: [ClaudeAccountCard] = [],
-        defaultClaudeExtraLogRoots: [URL] = []
+        defaultClaudeExtraLogRoots: [URL] = [],
+        claudeIdentityKeys: [String: String] = [:]
     ) -> [ProviderRuntime] {
         // Default provider order (see AGENTS.md "## Providers"): the three established providers first,
         // then every other provider alphabetically by display name. Account cards slot in right after
@@ -40,17 +43,25 @@ enum ProviderCatalog {
         // account registry and are resolved at render time (`ProviderAccountRecord.resolvedDisplayName`),
         // so a baked name can never be a stale copy of one.
         let configuredClaude = accounts.accounts(for: "claude")
-        var runtimes: [ProviderRuntime] = [ClaudeProvider(
-            account: configuredClaude[0],
-            // Once extra Claude cards exist, an unpinned Desktop fallback could borrow a login that
-            // belongs to one of them — fetching that account's usage onto the default card. Desktop
-            // returns as its own properly-pinned source kind in Phase 3.
-            authStore: ClaudeAuthStore(allowsDesktopFallback: claudeCards.isEmpty),
-            logUsageScanner: ClaudeLogUsageScanner(additionalRoots: defaultClaudeExtraLogRoots)
-        )]
-        runtimes += configuredClaude.dropFirst().map { ClaudeProvider(account: $0) }
-        for card in claudeCards {
-            runtimes.append(claudeAccountRuntime(card: card))
+        let organizationCards = claudeCards.filter { $0.configDirPath == nil }
+        let configDirectoryCards = claudeCards.filter { $0.configDirPath != nil }
+        var runtimes: [ProviderRuntime] = []
+        if organizationCards.isEmpty {
+            runtimes.append(ClaudeProvider(
+                account: configuredClaude[0],
+                authStore: ClaudeAuthStore(allowsDesktopFallback: configDirectoryCards.isEmpty),
+                logUsageScanner: ClaudeLogUsageScanner(additionalRoots: defaultClaudeExtraLogRoots)
+            ))
+            runtimes += configuredClaude.dropFirst().map { ClaudeProvider(account: $0) }
+        } else {
+            runtimes += organizationCards.map {
+                claudeAccountRuntime(card: $0, identityKey: claudeIdentityKeys[$0.id])
+            }
+            let representedIDs = Set(organizationCards.map(\.id))
+            runtimes += configuredClaude.filter { !representedIDs.contains($0.id) }.map { ClaudeProvider(account: $0) }
+        }
+        runtimes += configDirectoryCards.map {
+            claudeAccountRuntime(card: $0, identityKey: claudeIdentityKeys[$0.id])
         }
         runtimes += accounts.accounts(for: "codex").map { CodexProvider(account: $0) }
         runtimes += [
@@ -69,16 +80,41 @@ enum ProviderCatalog {
     /// An extra Claude account card: same provider machinery, credentials and logs pinned to one
     /// login. The scanner's parse cache is partitioned per card so distinct homes never share
     /// records.
-    private static func claudeAccountRuntime(card: ClaudeAccountCard) -> ClaudeProvider {
-        ClaudeProvider(
+    private static func claudeAccountRuntime(
+        card: ClaudeAccountCard,
+        identityKey: String?
+    ) -> ClaudeProvider {
+        if let configDirPath = card.configDirPath, let keychainLiteral = card.keychainLiteral {
+            return ClaudeProvider(
+                provider: ClaudeProvider.makeProvider(id: card.id, displayName: card.displayName),
+                authStore: ClaudeAuthStore(
+                    scope: .configDir(path: configDirPath, keychainLiteral: keychainLiteral),
+                    expectedIdentityKey: identityKey ?? card.identityKey
+                ),
+                logUsageScanner: ClaudeLogUsageScanner(
+                    cacheIdentityOverride: "claude-account:\(card.id)",
+                    rootsOverride: [URL(fileURLWithPath: configDirPath)] + card.extraLogRoots
+                ),
+                allowsUnattributedPiUsage: card.allowsUnattributedPiUsage
+            )
+        }
+
+        let identity = identityKey ?? card.identityKey
+        let user = identity.split(separator: "|").first.map(String.init)
+        return ClaudeProvider(
             provider: ClaudeProvider.makeProvider(id: card.id, displayName: card.displayName),
             authStore: ClaudeAuthStore(
-                scope: .configDir(path: card.configDirPath, keychainLiteral: card.keychainLiteral)
+                desktopOrganization: card.organizationID,
+                expectedIdentityKey: identity,
+                desktopOnly: card.usesDesktopCredentials,
+                preferOrganizationScopedDesktop: !card.usesDesktopCredentials
             ),
             logUsageScanner: ClaudeLogUsageScanner(
-                cacheIdentityOverride: "claude-account:\(card.id)",
-                rootsOverride: [URL(fileURLWithPath: card.configDirPath)] + card.extraLogRoots
-            )
+                accountUUID: user,
+                organizationUUID: card.organizationID,
+                allowsUnattributedSessions: card.allowsUnattributedPiUsage
+            ),
+            allowsUnattributedPiUsage: card.allowsUnattributedPiUsage
         )
     }
 }

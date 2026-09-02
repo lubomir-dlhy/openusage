@@ -123,7 +123,7 @@ final class PeerHistoryIdentityTests: XCTestCase {
         )
 
         let document = dataStore.localHistoryDocument(deviceID: "dev", deviceName: "This Mac")
-        XCTAssertEqual(document.schema, UsageHistoryDocument.currentSchema)
+        XCTAssertEqual(document.schema, UsageHistoryDocument.accountSchema)
         XCTAssertNotNil(document.providers["claude@f15456b0"], "account cards sync now")
         XCTAssertEqual(document.identities?["claude"], maxKey)
         XCTAssertEqual(document.identities?["claude@f15456b0"], teamKey)
@@ -245,6 +245,9 @@ final class PeerHistoryIdentityTests: XCTestCase {
         identities: [String: String]?
     ) -> UsageHistoryDocument {
         UsageHistoryDocument(
+            schema: providers.keys.contains(where: { $0.contains("@") })
+                ? UsageHistoryDocument.accountSchema
+                : UsageHistoryDocument.currentSchema,
             deviceID: UUID().uuidString,
             deviceName: deviceName,
             updatedAt: Date(),

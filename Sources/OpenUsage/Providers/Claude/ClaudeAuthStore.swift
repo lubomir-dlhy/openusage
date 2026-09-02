@@ -191,6 +191,14 @@ struct ClaudeAuthStore: Sendable {
     /// because the Desktop login could belong to any of them — borrowing it unpinned could fetch one
     /// account's usage onto another account's card. Desktop-backed cards return properly in Phase 3.
     let allowsDesktopFallback: Bool
+    /// Optional organization pin used by automatically discovered Claude Desktop account cards.
+    let desktopOrganization: String?
+    /// Stable `account|organization` identity used to verify that a credential belongs to this card.
+    let expectedIdentityKey: String?
+    /// Desktop-backed cards must not read CLI or environment credentials.
+    let desktopOnly: Bool
+    /// Prefer the organization-scoped Desktop token when the global CLI token may belong elsewhere.
+    let preferOrganizationScopedDesktop: Bool
 
     init(
         environment: EnvironmentReading = ProcessEnvironmentReader(),
@@ -200,6 +208,10 @@ struct ClaudeAuthStore: Sendable {
         desktop: ClaudeDesktopAuthStore? = nil,
         scope: ClaudeCredentialScope = .standard,
         allowsDesktopFallback: Bool = true,
+        desktopOrganization: String? = nil,
+        expectedIdentityKey: String? = nil,
+        desktopOnly: Bool = false,
+        preferOrganizationScopedDesktop: Bool = false,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.environment = environment
@@ -209,6 +221,10 @@ struct ClaudeAuthStore: Sendable {
         self.desktop = desktop ?? ClaudeDesktopAuthStore(files: files, now: now)
         self.scope = scope
         self.allowsDesktopFallback = allowsDesktopFallback
+        self.desktopOrganization = desktopOrganization?.lowercased()
+        self.expectedIdentityKey = expectedIdentityKey?.lowercased()
+        self.desktopOnly = desktopOnly
+        self.preferOrganizationScopedDesktop = preferOrganizationScopedDesktop
         self.now = now
     }
 
@@ -221,7 +237,7 @@ struct ClaudeAuthStore: Sendable {
         allowDesktopInteraction: Bool = false,
         forceDesktopFallback: Bool = false
     ) -> ClaudeCredentialLoad {
-        var stored = orderedStoredCandidates()
+        var stored = desktopOnly ? [] : orderedStoredCandidates()
         var desktopStatus: ClaudeDesktopCredentialStatus = .notChecked
         // A working CLI login remains the source of truth and avoids a second Keychain prompt. Desktop
         // is a fallback for people who only use the native app (or whose stored CLI login lacks profile
@@ -236,8 +252,13 @@ struct ClaudeAuthStore: Sendable {
         let hasUsableCLILogin = stored.contains {
             $0.hasUsableAccessToken && liveUsageAvailability($0) == .available
         }
-        if desktopAllowed, forceDesktopFallback || !hasUsableCLILogin {
-            let result = desktop.load(allowInteraction: allowDesktopInteraction)
+        if desktopAllowed, forceDesktopFallback || !hasUsableCLILogin || preferOrganizationScopedDesktop {
+            let expectedUser = expectedIdentityKey?.split(separator: "|").first.map(String.init)
+            let result = desktop.load(
+                allowInteraction: allowDesktopInteraction,
+                organization: desktopOrganization,
+                expectedAccountUUID: expectedUser
+            )
             desktopStatus = result.status
             if let oauth = result.oauth {
                 stored.insert(ClaudeCredentialState(
@@ -249,7 +270,7 @@ struct ClaudeAuthStore: Sendable {
             }
         }
 
-        let candidates = applyingEnvironmentToken(to: stored)
+        let candidates = desktopOnly ? stored : applyingEnvironmentToken(to: stored)
         return ClaudeCredentialLoad(candidates: candidates, desktopStatus: desktopStatus)
     }
 

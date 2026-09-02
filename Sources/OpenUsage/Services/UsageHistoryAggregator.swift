@@ -7,15 +7,63 @@ enum UsageHistoryAggregator {
         localSnapshots: [String: ProviderSnapshot],
         peerDocuments: [UsageHistoryDocument],
         descriptors: [String: UsageHistoryDescriptor],
+        providerIdentityKeys: [String: String] = [:],
         now: Date = Date()
     ) -> [String: ProviderUsageHistory] {
-        var pairs: [(String, ProviderUsageHistory)] = []
-        for document in UsageHistoryDocument.newestByDevice(peerDocuments) {
-            for (providerID, history) in document.providers {
-                pairs.append((providerID, history))
+        var inputs: [String: [ProviderUsageHistory]] = [:]
+        let peerDocuments = UsageHistoryDocument.newestByDevice(peerDocuments)
+        let localClaudeCards = Set(descriptors.keys.filter {
+            ProviderAccountID.family(of: $0) == "claude"
+        }).union(providerIdentityKeys.keys.filter {
+            ProviderAccountID.family(of: $0) == "claude"
+        })
+        for (providerID, descriptor) in descriptors where descriptor.scope == .machineLocal {
+            if let local = localSnapshots[providerID]?.usageHistory {
+                inputs[providerID, default: []].append(local)
+            }
+            for document in peerDocuments {
+                let peer: ProviderUsageHistory?
+                if ProviderAccountID.family(of: providerID) == "claude" {
+                    peer = claudeHistory(
+                        in: document,
+                        providerID: providerID,
+                        identity: providerIdentityKeys[providerID],
+                        allowsUnattributedHistory: localClaudeCards.count <= 1
+                    )
+                } else {
+                    peer = document.providers[providerID]
+                }
+                if let peer {
+                    inputs[providerID, default: []].append(peer)
+                }
             }
         }
-        return merged(localSnapshots: localSnapshots, peerHistories: pairs, descriptors: descriptors, now: now)
+        let includedDays = UsageHistoryWindow.dayKeys(through: now)
+        return inputs.mapValues { merge($0, includedDays: includedDays) }
+    }
+
+    private static func claudeHistory(
+        in document: UsageHistoryDocument,
+        providerID: String,
+        identity: String?,
+        allowsUnattributedHistory: Bool
+    ) -> ProviderUsageHistory? {
+        if let identities = document.identities,
+           identities.keys.contains(where: { ProviderAccountID.family(of: $0) == "claude" })
+        {
+            guard let identity,
+                  let matchingID = identities.first(where: {
+                      ProviderAccountID.family(of: $0.key) == "claude"
+                          && $0.value.caseInsensitiveCompare(identity) == .orderedSame
+                  })?.key
+            else { return nil }
+            return document.providers[matchingID]
+        }
+
+        guard document.schema == UsageHistoryDocument.currentSchema,
+              allowsUnattributedHistory
+        else { return nil }
+        return document.providers["claude"]
     }
 
     /// The identity-remapped variant: peers arrive as (LOCAL card id, history) pairs — see
@@ -53,9 +101,13 @@ enum UsageHistoryAggregator {
         var days: [String: (tokens: Int, cost: Double?, sawCost: Bool)] = [:]
         var models: [String: [String: ModelAccumulator]] = [:]
         var unknown: [String: Set<String>] = [:]
+        var fallbackModelsByDay: [String: Set<String>] = [:]
 
         for history in histories {
             for day in history.series.daily where includedDays.contains(day.date) {
+                if let fallbackModels = history.fallbackPricingModelsByDay?[day.date] {
+                    fallbackModelsByDay[day.date, default: []].formUnion(fallbackModels)
+                }
                 var value = days[day.date] ?? (0, nil, false)
                 value.tokens += day.totalTokens
                 if let cost = day.costUSD {
@@ -93,7 +145,8 @@ enum UsageHistoryAggregator {
         return ProviderUsageHistory(
             series: series,
             modelUsage: modelDays.isEmpty ? nil : ModelUsageSeries(daily: modelDays),
-            unknownModelsByDay: unknown
+            unknownModelsByDay: unknown,
+            fallbackPricingModelsByDay: fallbackModelsByDay.isEmpty ? nil : fallbackModelsByDay
         )
     }
 
@@ -161,7 +214,7 @@ enum UsageHistorySnapshotRenderer {
     ) -> ProviderSnapshot {
         var result = snapshot
         result.lines.removeAll { historyLabels.contains($0.label) }
-        let sourceNote = combined ? "Across your Macs · \(descriptor.sourceNote)" : descriptor.sourceNote
+        let baseNote = combined ? "Across your Macs · \(descriptor.sourceNote)" : descriptor.sourceNote
         SpendTileMapper.appendTokenUsage(
             history.series,
             to: &result.lines,
@@ -169,13 +222,15 @@ enum UsageHistorySnapshotRenderer {
             estimated: descriptor.estimatedCost,
             unknownModelsByDay: history.unknownModelsByDay,
             modelUsage: history.modelUsage,
-            modelSourceNote: sourceNote
+            modelSourceNote: baseNote,
+            fallbackPricingModelsByDay: history.fallbackPricingModelsByDay
         )
         SpendTileMapper.appendUsageTrend(
             history.series,
             to: &result.lines,
             now: now,
-            note: sourceNote
+            note: baseNote,
+            fallbackPricingModelsByDay: history.fallbackPricingModelsByDay
         )
         return result
     }

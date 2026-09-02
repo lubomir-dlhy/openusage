@@ -57,7 +57,7 @@ final class JSONLScannerCancellationTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: home) }
         let file = try XCTUnwrap(JSONLScanning.jsonlFiles(under: home.appendingPathComponent("projects")).first)
         let incremental = IncrementalJSONLScanner<ClaudeLogUsageScanner.Entry>()
-        let blockingParser = BlockingClaudeParser()
+        let blockingParser = BlockingParser(finish: { ClaudeLogUsageScanner.parseFile($0) })
         let firstTask = Task {
             await incremental.items(
                 from: [file],
@@ -174,25 +174,5 @@ final class JSONLScannerCancellationTests: XCTestCase {
             size: try XCTUnwrap(values.fileSize),
             mtime: try XCTUnwrap(values.contentModificationDate)
         )
-    }
-}
-
-private final class BlockingClaudeParser: @unchecked Sendable {
-    private let lock = NSLock()
-    private var started = false
-    private let release = DispatchSemaphore(value: 0)
-
-    var hasStarted: Bool {
-        lock.withLock { started }
-    }
-
-    func parse(_ data: Data) -> [ClaudeLogUsageScanner.Entry]? {
-        lock.withLock { started = true }
-        release.wait()
-        return ClaudeLogUsageScanner.parseFile(data)
-    }
-
-    func unblock() {
-        release.signal()
     }
 }
