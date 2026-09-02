@@ -1,5 +1,69 @@
 # Changelog
 
+## v0.7.13
+
+### New Features
+- Add Grok Bot usage and match Cursor dashboard model names ([#1134](https://github.com/robinebers/openusage/pull/1134)) by @robinebers
+- Add Antigravity local spend and usage history ([#1139](https://github.com/robinebers/openusage/pull/1139)) by @robinebers
+- Support multiple organization-aware Claude accounts ([#1164](https://github.com/robinebers/openusage/pull/1164)) by @robinebers
+- Add optional fallback pricing for unknown Codex models ([#1177](https://github.com/robinebers/openusage/pull/1177)) by @robinebers
+- Include Codex OAuth usage generated through OpenCode and apply consistent Codex request pricing ([#1195](https://github.com/robinebers/openusage/pull/1195)) by @validatedev
+
+### Bug Fixes
+- Restore Grok spend history and include subagent session usage ([#1135](https://github.com/robinebers/openusage/pull/1135), [#1193](https://github.com/robinebers/openusage/pull/1193)) by @robinebers
+- Smooth popover transitions and refresh launch-at-login state after returning from Settings ([#1136](https://github.com/robinebers/openusage/pull/1136)) by @robinebers
+- Load Claude local spend without OAuth credentials and show Fable directly below Weekly ([#1138](https://github.com/robinebers/openusage/pull/1138), [#1141](https://github.com/robinebers/openusage/pull/1141)) by @robinebers
+- Keep Codex Session enabled by default ([#1165](https://github.com/robinebers/openusage/pull/1165)) by @robinebers
+- Show Claude reset countdowns for active sessions below 1% usage ([#1167](https://github.com/robinebers/openusage/pull/1167)) by @robinebers
+- Bound usage-log memory and reject malformed token counts ([#1172](https://github.com/robinebers/openusage/pull/1172)) by @robinebers
+- Add GLM 5.3 and Fable 5.1 pricing plus Grok Bot aliases ([#1171](https://github.com/robinebers/openusage/pull/1171), [#1197](https://github.com/robinebers/openusage/pull/1197)) by @robinebers
+- Accept legacy Codex account identity metadata during usage-history sync ([#1196](https://github.com/robinebers/openusage/pull/1196)) by @robinebers
+- Recognize ChatGPT Business Premium entitlement ([#1194](https://github.com/robinebers/openusage/pull/1194)) by @robinebers
+- Repair obsolete menu-bar pin identifiers during settings migration ([#1179](https://github.com/robinebers/openusage/pull/1179)) by @FelixIsaac
+
+### Refactor
+- Simplify and deduplicate tests while preserving regression coverage ([#1143](https://github.com/robinebers/openusage/pull/1143), [#1163](https://github.com/robinebers/openusage/pull/1163)) by @robinebers
+
+### Chores
+- Update PostHog 3.69.6 to 3.69.12 ([#1185](https://github.com/robinebers/openusage/pull/1185)) by @dependabot[bot]
+- Synchronize current upstream changes while preserving fork-specific functionality ([#8](https://github.com/lubomir-dlhy/openusage/pull/8)) by @lubomir-dlhy
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.12...v0.7.13](https://github.com/lubomir-dlhy/openusage/compare/v0.7.12...v0.7.13)
+
+- [65324c6](https://github.com/robinebers/openusage/commit/65324c6c) feat(cursor): add Grok Bot usage and match dashboard model names (#1134) by @robinebers
+- [b948107](https://github.com/robinebers/openusage/commit/b9481075) fix(grok): restore spend history from session ledgers (#1135) by @robinebers
+- [505a0d8](https://github.com/robinebers/openusage/commit/505a0d89) Fix laggy screen transitions and Settings navigation (#1136) by @robinebers
+- [90cf96a](https://github.com/robinebers/openusage/commit/90cf96ae) Hide Codex Session by default (#1137) by @robinebers
+- [0b7653c](https://github.com/robinebers/openusage/commit/0b7653c5) fix(cursor): order metrics as Total, Cursor, Other, and Grok by @robinebers
+- [251ab79](https://github.com/robinebers/openusage/commit/251ab79c) docs: changelog for v0.7.10-beta.2 by @robinebers
+- [7f2b4ab](https://github.com/robinebers/openusage/commit/7f2b4ab2) fix(claude): load local spend without OAuth credentials (#1138) by @robinebers
+- [1e753ac](https://github.com/robinebers/openusage/commit/1e753acd) fix(claude): show Fable directly below Weekly (#1141) by @robinebers
+- [7adda61](https://github.com/robinebers/openusage/commit/7adda612) Add Antigravity local spend and usage history (#1139) by @robinebers
+- [b053901](https://github.com/robinebers/openusage/commit/b053901e) Simplify test suites while preserving regression coverage (#1143) by @robinebers
+- [a7f603e](https://github.com/robinebers/openusage/commit/a7f603e6) Deduplicate test fixtures and prune subsumed tests (#1163) by @robinebers
+- [1c1e57f](https://github.com/robinebers/openusage/commit/1c1e57fc) fix(codex): restore Session by default (#1165) by @robinebers
+- [8eeb1ce](https://github.com/robinebers/openusage/commit/8eeb1cea) Remove obsolete documentation screenshot assets (#1159) by @robinebers
+- [dd8b6ac](https://github.com/robinebers/openusage/commit/dd8b6ac2) Support multiple Claude accounts (#1164) by @robinebers
+- [83202dd](https://github.com/robinebers/openusage/commit/83202ddb) fix(claude): show reset countdown for sub-1% sessions instead of “Not started” (#1167) by @robinebers
+- [3c7f026](https://github.com/robinebers/openusage/commit/3c7f0262) docs: changelog for v0.7.10-beta.3 by @robinebers
+- [acebc45](https://github.com/robinebers/openusage/commit/acebc450) Enforce approved and assigned external contributions (#1170) by @robinebers
+- [16e497d](https://github.com/robinebers/openusage/commit/16e497df) fix(pricing): add GLM 5.3 model rates (#1171) by @robinebers
+- [fd3b780](https://github.com/robinebers/openusage/commit/fd3b7802) fix: bound usage log memory and guard malformed token counts (#1172) by @robinebers
+- [52b35ae](https://github.com/robinebers/openusage/commit/52b35ae6) Add optional fallback pricing for Codex usage (#1177) by @robinebers
+- [05c40a1](https://github.com/robinebers/openusage/commit/05c40a1d) docs: changelog for v0.7.10 by @robinebers
+- [30d556d](https://github.com/robinebers/openusage/commit/30d556d8) fix(pricing): add Fable 5.1 rates and Grok bot aliases (#1197) by @robinebers
+- [b15fd6c](https://github.com/robinebers/openusage/commit/b15fd6cc) fix(sync): accept legacy Codex account identity metadata (#1196) by @robinebers
+- [db09426](https://github.com/robinebers/openusage/commit/db09426d) feat(codex): attribute OpenCode Codex OAuth usage and share Codex request pricing (#1195) by @validatedev
+- [d5166d6](https://github.com/robinebers/openusage/commit/d5166d65) fix(codex): recognize Business Premium entitlement (#1194) by @robinebers
+- [ec23a9a](https://github.com/robinebers/openusage/commit/ec23a9af) chore(deps): bump PostHog from 3.69.6 to 3.69.12 (#1185) by @dependabot[bot]
+- [17b0b26](https://github.com/robinebers/openusage/commit/17b0b266) fix(settings): remap dead menu-bar pin IDs on upgrade (#1179) by @FelixIsaac
+- [bb94841](https://github.com/robinebers/openusage/commit/bb94841f) fix(grok): include subagent session usage (#1193) by @robinebers
+- [3dcdc4b](https://github.com/lubomir-dlhy/openusage/commit/3dcdc4b2) merge upstream/main (bb94841) preserving fork features by @lubomir-dlhy
+- [bed48b6](https://github.com/lubomir-dlhy/openusage/commit/bed48b66) Merge pull request #8 from lubomir-dlhy/chore/upstream-sync by @lubomir-dlhy
+
 ## v0.7.12
 
 ### New Features
