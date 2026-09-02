@@ -159,6 +159,20 @@ jobs:
           prerelease: ${{ steps.meta.outputs.prerelease }}
           files: dist/OpenUsage-${{ steps.meta.outputs.version }}.dmg
 
+      # The frozen Tauri edition checks the stable release's latest.json asset. Keep its final
+      # v0.6.28 manifest attached to every stable Swift release so those installs still resolve
+      # their last compatible update after GitHub moves the `latest` release pointer.
+      - name: Carry forward the legacy updater manifest
+        if: steps.meta.outputs.channel == 'stable'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/robinebers/openusage/releases/download/v0.6.28/latest.json \
+            --output "$RUNNER_TEMP/latest.json"
+          gh release upload "$TAG" "$RUNNER_TEMP/latest.json" --clobber
+
       - name: Generate appcast with Sparkle
         env:
           DMG: OpenUsage-${{ steps.meta.outputs.version }}.dmg
