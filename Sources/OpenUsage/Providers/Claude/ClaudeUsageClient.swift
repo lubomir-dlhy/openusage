@@ -57,6 +57,12 @@ enum ClaudeUsageError: Error, LocalizedError, Equatable {
 struct ClaudeUsageClient: Sendable {
     private static let scopes = "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
 
+    private struct AccountProfile: Decodable {
+        struct Identity: Decodable { var uuid: String }
+        var account: Identity
+        var organization: Identity?
+    }
+
     var httpClient: HTTPClient
 
     init(httpClient: HTTPClient = URLSessionHTTPClient()) {
@@ -99,6 +105,8 @@ struct ClaudeUsageClient: Sendable {
         )
     }
 
+    /// Fetches current plan metadata independently from the usage response. Claude Code's stored
+    /// subscription metadata is only a login-time snapshot and can become stale after plan changes.
     func fetchProfile(accessToken: String, config: ClaudeOAuthConfig) async throws -> HTTPResponse {
         try await httpClient.send(
             HTTPRequest(
@@ -113,5 +121,41 @@ struct ClaudeUsageClient: Sendable {
                 timeout: 10
             )
         )
+    }
+
+    func verifyAccount(
+        accessToken: String,
+        expectedIdentityKey: String,
+        config: ClaudeOAuthConfig
+    ) async throws -> HTTPResponse? {
+        let expected = expectedIdentityKey.split(separator: "|", omittingEmptySubsequences: false)
+        guard expected.count == 2 else { throw ClaudeAuthError.sessionExpired }
+
+        let response: HTTPResponse
+        do {
+            response = try await httpClient.send(HTTPRequest(
+                method: "GET",
+                url: config.usageURL.deletingLastPathComponent().appendingPathComponent("profile"),
+                headers: [
+                    "Authorization": "Bearer \(accessToken.trimmingCharacters(in: .whitespacesAndNewlines))",
+                    "Accept": "application/json",
+                    "anthropic-beta": "oauth-2025-04-20"
+                ],
+                timeout: 10
+            ))
+        } catch {
+            throw ClaudeUsageError.connectionFailed
+        }
+        guard (200..<300).contains(response.statusCode) else { return response }
+        guard let profile = try? JSONDecoder().decode(AccountProfile.self, from: response.body) else {
+            throw ClaudeUsageError.invalidResponse
+        }
+        guard profile.account.uuid.caseInsensitiveCompare(String(expected[0])) == .orderedSame,
+              profile.organization?.uuid.caseInsensitiveCompare(String(expected[1])) == .orderedSame
+        else {
+            AppLog.warn(LogTag.auth("claude"), "Claude credential does not match its account or organization")
+            throw ClaudeAuthError.sessionExpired
+        }
+        return nil
     }
 }

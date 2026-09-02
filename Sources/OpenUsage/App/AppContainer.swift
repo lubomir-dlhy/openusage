@@ -92,14 +92,28 @@ final class AppContainer {
         let providers = ProviderCatalog.make(
             accounts: configuredAccounts,
             claudeCards: accountAssembly.claudeCards,
-            defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots
+            defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots,
+            claudeIdentityKeys: accountAssembly.identityKeysByCard
         )
         let registry = WidgetRegistry.from(providers)
         let apiKeyProviders = providers.compactMap { $0 as? any APIKeyManaging }
         let enablement = ProviderEnablementStore()
         let notificationSettings = NotificationSettingsStore()
+        let additionalClaudeIDs = providers.map(\.provider.id).filter {
+            $0 != "claude" && ProviderAccountID.family(of: $0) == "claude"
+        }
+        let claudeAccountDefaults: ([String]) -> [String] = { metricIDs in
+            metricIDs.flatMap { metricID -> [String] in
+                guard metricID.hasPrefix("claude.") else { return [metricID] }
+                let suffix = metricID.dropFirst("claude".count)
+                return [metricID] + additionalClaudeIDs.map { "\($0)\(suffix)" }
+            }
+        }
         let layout = LayoutStore(
             registry: registry,
+            defaultMetricIDs: claudeAccountDefaults(DefaultLayout.metricIDs),
+            defaultPinnedMetricIDs: claudeAccountDefaults(DefaultLayout.pinnedMetricIDs),
+            defaultExpandedMetricIDs: claudeAccountDefaults(DefaultLayout.expandedMetricIDs),
             isProviderEnabled: { [enablement] in enablement.isEnabled($0) }
         )
         let dataStore = WidgetDataStore(
@@ -242,6 +256,7 @@ final class AppContainer {
             accounts: configuredAccounts,
             claudeCards: accountAssembly.claudeCards,
             defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots,
+            claudeIdentityKeys: accountAssembly.identityKeysByCard,
             layout: layout,
             dataStore: dataStore
         )
@@ -281,6 +296,7 @@ final class AppContainer {
         accounts: AccountsStore,
         claudeCards: [ClaudeAccountCard],
         defaultClaudeExtraLogRoots: [URL],
+        claudeIdentityKeys: [String: String],
         layout: LayoutStore,
         dataStore: WidgetDataStore
     ) -> Task<Void, Never> {
@@ -289,7 +305,8 @@ final class AppContainer {
                 let providers = ProviderCatalog.make(
                     accounts: accounts,
                     claudeCards: claudeCards,
-                    defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots
+                    defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
+                    claudeIdentityKeys: claudeIdentityKeys
                 )
                 let registry = WidgetRegistry.from(providers)
                 AppLog.info(.lifecycle, "accounts changed — rebuilding \(providers.count) runtimes live")

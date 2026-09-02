@@ -39,8 +39,8 @@ struct WidgetData: Hashable {
     /// state when none are available) and lights up like the spend rows — so it stays reachable even
     /// at "0 available", where `expiriesAt` is empty. Off for every other row.
     var showsResetExpiries: Bool = false
-    /// Names of models this period's spend used that the pricing sources can't price. Their usage is
-    /// left out of the displayed total, so the period's figures can be understated.
+    /// Names of models this period's spend used that have no known price. Their usage is excluded
+    /// unless a fallback estimate is enabled; either way the missing-price warning stays visible.
     /// Drives the label warning triangle and its hover list. Empty for every other row.
     var unknownModels: [String] = []
     /// Period-scoped model spend/tokens for the Today / Yesterday / Last 30 Days hover popover. Nil for
@@ -77,10 +77,25 @@ struct WidgetData: Hashable {
     /// Rate Limit Resets → "2 resets"). Set by the descriptor, so renaming the tile can't silently drop
     /// the suffix — replaces matching on the tile's title. `nil` for tiles that show the bare value.
     var traySuffix: String?
-    /// Session-window meters (Claude/Antigravity 5-hour pools) that read "Not started" when unused.
-    /// Set by those descriptors and carried through `WidgetDataStore.resolve`, so the "fresh window"
-    /// treatment is a descriptor opt-in rather than a hardcoded widget-ID list in the model.
-    var isSessionWindow: Bool = false
+    /// Session-window meters (Claude/Antigravity/OpenCode rolling 5-hour pools) that read "Not started"
+    /// while the window hasn't begun — the value names the signal that detects that state, because the
+    /// providers report fresh windows differently (see `SessionStartSignal`). Set by those descriptors
+    /// and carried through `WidgetDataStore.resolve`, so the treatment is a descriptor opt-in rather
+    /// than a hardcoded widget-ID list in the model. `nil` for every other row.
+    var sessionStartSignal: SessionStartSignal?
+
+    /// How a session-window meter tells a not-yet-started window from an in-flight one.
+    enum SessionStartSignal: Hashable {
+        /// Zero usage is the fresh signal. These providers report a reset instant even for an
+        /// untouched window (Antigravity's mapper rounds a fresh pool's fraction-derived percent
+        /// to 0; OpenCode reports 0 directly), so `used == 0` is what marks the window as fresh.
+        case zeroUsage
+        /// A missing reset date is the fresh signal. Claude's five-hour block only exists once the
+        /// first message is sent, so a reported `resets_at` proves the window started. Zero usage is
+        /// NOT trusted here: Claude reports utilization in whole percents, so an in-flight window
+        /// under 1% also reads 0 (#1160) — the reset date is what tells the two apart.
+        case missingResetDate
+    }
     /// Per-day points for a Usage Trend row (empty for every other tile). Set true `isChart` flags the
     /// row so the view draws the sparkline instead of the value layout; `chartNote` is the source line
     /// shown on hover (e.g. "From your Claude usage history (estimated)").
@@ -376,15 +391,15 @@ struct WidgetData: Hashable {
         return ([header] + entries).joined(separator: "\n")
     }
 
-    /// True when this period's spend used at least one model the pricing manifest can't price, so its
-    /// dollar figure is incomplete. Drives the label warning triangle on the Cursor spend tiles.
+    /// True when this period used at least one model without known pricing, even if its cost was
+    /// estimated with a fallback. Drives the spend tile's label warning triangle.
     var hasUnknownModels: Bool {
         hasData && !unknownModels.isEmpty
     }
 
     /// Hover copy for the unknown-model warning triangle: a header naming the problem, then each unpriced
-    /// model on its own line. Singular/plural header to read naturally. `nil` when the period priced every
-    /// model it used (the common case), so the triangle and its tooltip stay off.
+    /// model on its own line. Singular/plural header to read naturally. `nil` when every model has
+    /// known pricing, so the triangle and its tooltip stay off.
     var unknownModelTooltip: String? {
         guard hasUnknownModels else { return nil }
         let header = unknownModels.count == 1 ? "Unknown model found" : "Unknown models found"
@@ -589,8 +604,14 @@ extension WidgetData {
     /// Still gated on `now < resetsAt`: once the reset has passed the snapshot is stale, so we drop the
     /// "Not started" claim and let the row fall back to the normal "Resets soon"/countdown formatting.
     func isFreshSessionWindow(now: Date = Date()) -> Bool {
-        guard isSessionWindow, hasData, limit != nil, let resetsAt, used <= 0 else { return false }
-        return now < resetsAt
+        guard let signal = sessionStartSignal, hasData, limit != nil, used <= 0 else { return false }
+        switch signal {
+        case .zeroUsage:
+            guard let resetsAt else { return false }
+            return now < resetsAt
+        case .missingResetDate:
+            return resetsAt == nil
+        }
     }
 
     /// True when the bounded primary row's trailing text is a concrete reset countdown (so the row makes
