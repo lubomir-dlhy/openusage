@@ -90,6 +90,7 @@ final class AppContainer {
             accounts: configuredAccounts,
             claudeCards: accountAssembly.claudeCards,
             defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots,
+            defaultClaudeConfigDirs: accountAssembly.defaultClaudeConfigDirs,
             claudeIdentityKeys: accountAssembly.identityKeysByCard
         )
         let registry = WidgetRegistry.from(providers)
@@ -223,6 +224,7 @@ final class AppContainer {
             accounts: configuredAccounts,
             claudeCards: accountAssembly.claudeCards,
             defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots,
+            defaultClaudeConfigDirs: accountAssembly.defaultClaudeConfigDirs,
             claudeIdentityKeys: accountAssembly.identityKeysByCard,
             layout: layout,
             dataStore: dataStore
@@ -263,6 +265,7 @@ final class AppContainer {
         accounts: AccountsStore,
         claudeCards: [ClaudeAccountCard],
         defaultClaudeExtraLogRoots: [URL],
+        defaultClaudeConfigDirs: [String],
         claudeIdentityKeys: [String: String],
         layout: LayoutStore,
         dataStore: WidgetDataStore
@@ -273,6 +276,7 @@ final class AppContainer {
                     accounts: accounts,
                     claudeCards: claudeCards,
                     defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
+                    defaultClaudeConfigDirs: defaultClaudeConfigDirs,
                     claudeIdentityKeys: claudeIdentityKeys
                 )
                 let registry = WidgetRegistry.from(providers)

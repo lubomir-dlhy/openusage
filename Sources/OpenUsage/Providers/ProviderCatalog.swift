@@ -13,6 +13,7 @@ enum ProviderCatalog {
         defaults: UserDefaults = .standard,
         claudeCards: [ClaudeAccountCard] = [],
         defaultClaudeExtraLogRoots: [URL] = [],
+        defaultClaudeConfigDirs: [String] = [],
         claudeIdentityKeys: [String: String] = [:]
     ) -> [ProviderRuntime] {
         make(
@@ -20,6 +21,7 @@ enum ProviderCatalog {
             defaults: defaults,
             claudeCards: claudeCards,
             defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
+            defaultClaudeConfigDirs: defaultClaudeConfigDirs,
             claudeIdentityKeys: claudeIdentityKeys
         )
     }
@@ -33,6 +35,7 @@ enum ProviderCatalog {
         defaults: UserDefaults = .standard,
         claudeCards: [ClaudeAccountCard] = [],
         defaultClaudeExtraLogRoots: [URL] = [],
+        defaultClaudeConfigDirs: [String] = [],
         claudeIdentityKeys: [String: String] = [:]
     ) -> [ProviderRuntime] {
         // Default provider order (see AGENTS.md "## Providers"): the three established providers first,
@@ -45,20 +48,30 @@ enum ProviderCatalog {
         let configuredClaude = accounts.accounts(for: "claude")
         let organizationCards = claudeCards.filter { $0.configDirPath == nil }
         let configDirectoryCards = claudeCards.filter { $0.configDirPath != nil }
+        var automaticallyRepresentedConfigDirs = configDirectoryCards.compactMap(\.configDirPath)
+        if !organizationCards.isEmpty {
+            automaticallyRepresentedConfigDirs += defaultClaudeConfigDirs
+        }
+        let representedConfigDirs = Set(automaticallyRepresentedConfigDirs.map(canonicalConfigDir))
+        let deduplicatedConfiguredClaude = configuredClaude.filter { account in
+            guard !account.isDefault, let configDir = account.configDir else { return true }
+            return !representedConfigDirs.contains(canonicalConfigDir(configDir))
+        }
         var runtimes: [ProviderRuntime] = []
         if organizationCards.isEmpty {
             runtimes.append(ClaudeProvider(
-                account: configuredClaude[0],
+                account: deduplicatedConfiguredClaude[0],
                 authStore: ClaudeAuthStore(allowsDesktopFallback: configDirectoryCards.isEmpty),
                 logUsageScanner: ClaudeLogUsageScanner(additionalRoots: defaultClaudeExtraLogRoots)
             ))
-            runtimes += configuredClaude.dropFirst().map { ClaudeProvider(account: $0) }
+            runtimes += deduplicatedConfiguredClaude.dropFirst().map { ClaudeProvider(account: $0) }
         } else {
             runtimes += organizationCards.map {
                 claudeAccountRuntime(card: $0, identityKey: claudeIdentityKeys[$0.id])
             }
             let representedIDs = Set(organizationCards.map(\.id))
-            runtimes += configuredClaude.filter { !representedIDs.contains($0.id) }.map { ClaudeProvider(account: $0) }
+            runtimes += deduplicatedConfiguredClaude.filter { !representedIDs.contains($0.id) }
+                .map { ClaudeProvider(account: $0) }
         }
         runtimes += configDirectoryCards.map {
             claudeAccountRuntime(card: $0, identityKey: claudeIdentityKeys[$0.id])
@@ -75,6 +88,12 @@ enum ProviderCatalog {
             ZAIProvider()
         ]
         return runtimes
+    }
+
+    private static func canonicalConfigDir(_ path: String) -> String {
+        URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL.path
     }
 
     /// An extra Claude account card: same provider machinery, credentials and logs pinned to one

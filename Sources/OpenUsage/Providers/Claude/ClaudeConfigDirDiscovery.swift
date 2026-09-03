@@ -61,7 +61,7 @@ struct ClaudeConfigDirDiscovery {
     func run() -> Result {
         let started = now()
         var result = Result()
-        let excluded = Set(defaultClaudeConfigDirs().map(canonical))
+        let excluded = Set(defaultConfigDirs().map(canonical))
 
         for candidate in candidateDirectories() {
             if now().timeIntervalSince(started) > timeBudget {
@@ -177,7 +177,7 @@ struct ClaudeConfigDirDiscovery {
 
     /// The default card's config dirs: every `CLAUDE_CONFIG_DIR` entry when set, else the scanner's
     /// standard resolution (`$XDG_CONFIG_HOME/claude`, then `~/.claude`).
-    private func defaultClaudeConfigDirs() -> [String] {
+    func defaultConfigDirs() -> [String] {
         if let raw = environment.value(for: "CLAUDE_CONFIG_DIR")?
             .trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
             let dirs = raw.split(separator: ",")

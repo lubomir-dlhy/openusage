@@ -118,4 +118,66 @@ struct ProviderAccountIsolationTests {
             "claude", "claude#1", "claude@abcd1234", "codex", "codex#1", "cursor",
         ])
     }
+
+    @Test func catalogHidesLegacyClaudeAccountWhenAutomaticCardRepresentsItsConfigDir() {
+        let defaults = UserDefaults(suiteName: "ProviderCatalogAccountDedupe-\(UUID().uuidString)")!
+        let accounts = AccountsStore(defaults: defaults)
+        accounts.addAccount(
+            providerID: "claude",
+            label: "CulturePulse",
+            configDir: "/Users/example/.claude"
+        )
+
+        let runtimes = ProviderCatalog.make(
+            accounts: accounts,
+            defaults: defaults,
+            claudeCards: [
+                ClaudeAccountCard(
+                    id: "claude",
+                    identityKey: "user|personal",
+                    organizationID: "personal",
+                    displayName: "Claude",
+                    usesDesktopCredentials: true,
+                    allowsUnattributedPiUsage: false
+                ),
+                ClaudeAccountCard(
+                    id: "claude@culture",
+                    identityKey: "user|culture",
+                    organizationID: "culture",
+                    displayName: "Claude — CulturePulse",
+                    usesDesktopCredentials: false,
+                    allowsUnattributedPiUsage: false
+                ),
+            ],
+            defaultClaudeConfigDirs: ["/Users/example/.claude"]
+        )
+
+        #expect(runtimes.map(\.provider.id).filter { $0.hasPrefix("claude") } == [
+            "claude", "claude@culture",
+        ])
+    }
+
+    @Test func catalogKeepsLegacyClaudeAccountForADistinctConfigDir() {
+        let defaults = UserDefaults(suiteName: "ProviderCatalogDistinctAccount-\(UUID().uuidString)")!
+        let accounts = AccountsStore(defaults: defaults)
+        accounts.addAccount(providerID: "claude", label: "Other", configDir: "/Users/example/.claude-other")
+
+        let runtimes = ProviderCatalog.make(
+            accounts: accounts,
+            defaults: defaults,
+            claudeCards: [ClaudeAccountCard(
+                id: "claude@culture",
+                identityKey: "user|culture",
+                organizationID: "culture",
+                displayName: "Claude — CulturePulse",
+                usesDesktopCredentials: false,
+                allowsUnattributedPiUsage: false
+            )],
+            defaultClaudeConfigDirs: ["/Users/example/.claude"]
+        )
+
+        #expect(runtimes.map(\.provider.id).filter { $0.hasPrefix("claude") } == [
+            "claude@culture", "claude", "claude#1",
+        ])
+    }
 }

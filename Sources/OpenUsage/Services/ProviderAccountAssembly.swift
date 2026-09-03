@@ -62,6 +62,7 @@ struct ProviderAccountAssembly {
     let identityKeysByCard: [String: String]
     var claudeCards: [ClaudeAccountCard] = []
     var defaultClaudeExtraLogRoots: [URL] = []
+    var defaultClaudeConfigDirs: [String] = []
 
     /// `waitsForLoginShell`: true for the menu-bar app (a Finder/Dock launch inherits no shell
     /// exports, so the pass leans on the login-shell layers), false for the one-shot CLI (a terminal
@@ -169,6 +170,7 @@ struct ProviderAccountAssembly {
             dirs: [ClaudeConfigDirDiscovery.Finding]
         )] = []
         var defaultClaudeExtraLogRoots: [URL] = []
+        let defaultClaudeConfigDirs = claudeDiscovery?.defaultConfigDirs() ?? []
         let claudeOutcome = outcomes.first { $0.family == "claude" }?.outcome
         if let claudeDiscovery, let claudeOutcome, families.contains("claude") {
             if case .unresolved = claudeOutcome {
@@ -249,7 +251,8 @@ struct ProviderAccountAssembly {
             return ProviderAccountAssembly(
                 identityKeysByCard: identityKeys,
                 claudeCards: cards,
-                defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots
+                defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
+                defaultClaudeConfigDirs: defaultClaudeConfigDirs
             )
         }
 
@@ -322,7 +325,8 @@ struct ProviderAccountAssembly {
         return ProviderAccountAssembly(
             identityKeysByCard: identityKeys,
             claudeCards: cards,
-            defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots
+            defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
+            defaultClaudeConfigDirs: defaultClaudeConfigDirs
         )
     }
 
