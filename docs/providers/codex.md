@@ -33,7 +33,7 @@ Today / Yesterday / Last 30 Days are computed **locally**: OpenUsage reads the C
 Large session files are read in small chunks instead of being loaded into memory. Unusually large
 individual records are skipped and logged; local spend can be incomplete if a skipped record contained usage.
 
-For supported GPT-5.4, GPT-5.5, and GPT-5.6 models, requests above 272k input tokens use OpenAI's long-context rates for the whole request. These Codex-specific request rules apply consistently to native Codex logs and zero-cost Codex OAuth usage imported from pi or OpenCode. Daybreak Blue usage is priced as GPT-5.6 Sol, matching OpenAI's published alias and Daybreak pricing. Cached input uses the published cache-read discount when the pricing source provides one; otherwise it is estimated at the full input rate. Fast/priority estimates use each model's published Codex multiplier (for example, GPT-5.5 uses 2.5×); model names ending in `-fast` are normalized to their unscaled base rate before that multiplier is applied once.
+For supported GPT-5.4, GPT-5.5, GPT-5.6, and GPT-6 models, requests above 272k input tokens use OpenAI's long-context rates for the whole request. These Codex-specific request rules apply consistently to native Codex logs and zero-cost Codex OAuth usage imported from pi or OpenCode. Daybreak Blue usage is priced as GPT-5.6 Sol, matching OpenAI's published alias and Daybreak pricing. Cached input uses the published cache-read discount when the pricing source provides one; otherwise it is estimated at the full input rate. Fast/priority estimates use each model's published Codex multiplier (for example, GPT-5.5 uses 2.5×); model names ending in `-fast` are normalized to their unscaled base rate before that multiplier is applied once.
 
 The tiles intentionally exclude Codex usage from the desktop app, web, and cloud tasks. ChatGPT's cloud
 analytics reports those surfaces as percentages of plan credits rather than raw token counts, so OpenUsage
@@ -59,7 +59,7 @@ provide raw token counts through the available cloud analytics endpoint.
 
 Spark and Spark Weekly come from the same response's `additional_rate_limits` array — model-specific limits that reuse the duration-based Session/Weekly classification. OpenUsage surfaces the entry whose name identifies GPT-5.3-Codex-Spark as those two meters; accounts without the limit simply omit the entry, so the rows read "No data". Other model limits in that array aren't shown.
 
-OpenUsage preserves Codex's reported `used_percent` verbatim. If the API reports 1% used for an untouched window, the app shows 99% left; if it reports 0%, the app shows 100% left. Codex rows use the normal reset label rather than inferring a special "Not started" state. Burn-rate pacing still waits until enough of the window has elapsed to make a useful projection.
+OpenUsage preserves Codex's reported `used_percent` verbatim. If the API reports 1% used for an untouched window, the app shows 99% left; if it reports 0%, the app shows 100% left. Codex rows use the normal reset label rather than inferring a special "Not started" state. Burn-rate pacing still waits until enough of the window has elapsed — and until something has actually been used — to make a useful projection.
 
 OpenUsage does not call the daily cloud-analytics endpoint for spend or token history. That endpoint
 returns per-surface credit percentages rather than raw token counts, which are not accurate enough to mix
