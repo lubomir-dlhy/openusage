@@ -3,6 +3,14 @@
     <channel>
         <title>OpenUsage</title>
         <item>
+            <title>0.7.14</title>
+            <pubDate>Sat, 05 Sep 2026 16:18:56 +0000</pubDate>
+            <sparkle:version>641</sparkle:version>
+            <sparkle:shortVersionString>0.7.14</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/lubomir-dlhy/openusage/releases/download/v0.7.14/OpenUsage-0.7.14.dmg" length="18896274" type="application/octet-stream" sparkle:edSignature="fxLsbp2xIVRBkf+OYkPoFKHmprmDnoLehevPp0MUA1UQNTf2c6UOykly5JDGq32vYUtUpCVfDpAod3tcZ4jBAQ=="/>
+        </item>
+        <item>
             <title>0.7.13</title>
             <pubDate>Wed, 02 Sep 2026 15:25:28 +0000</pubDate>
             <sparkle:version>621</sparkle:version>
