@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.7.14
+
+### New Features
+- Add opt-in Ollama Cloud usage tracking ([#1173](https://github.com/robinebers/openusage/pull/1173)) by @tduarte
+
+### Bug Fixes
+- Restore Antigravity spend from all conversation stores and improve model pricing ([#1206](https://github.com/robinebers/openusage/pull/1206)) by @Nabsku
+- Read account-prefixed Claude Desktop credential caches ([#1212](https://github.com/robinebers/openusage/pull/1212)) by @robinebers
+- Stop showing fabricated remaining usage on untouched meters ([#1016](https://github.com/robinebers/openusage/pull/1016)) by @robinebers
+- Add GPT-6 Astra and Gemini 3.8 Flash pricing support ([#1208](https://github.com/robinebers/openusage/pull/1208), [#1211](https://github.com/robinebers/openusage/pull/1211)) by @robinebers
+- Deduplicate legacy and automatically discovered Claude accounts by @lubomir-dlhy
+
+### Chores
+- Remove PostHog analytics and crash reporting by @lubomir-dlhy
+- Preserve the legacy updater manifest during stable releases by @lubomir-dlhy
+- Synchronize current upstream changes while preserving fork functionality by @lubomir-dlhy
+
+### Heads-up
+- The upstream PostHog update exists in merged Git history, but PostHog remains completely absent from the final dependency graph and application.
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.13...v0.7.14](https://github.com/lubomir-dlhy/openusage/compare/v0.7.13...v0.7.14)
+
 ## v0.7.13
 
 ### New Features
