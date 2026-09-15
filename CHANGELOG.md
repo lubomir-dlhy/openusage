@@ -1,6 +1,52 @@
 # Changelog
 
+<<<<<<< HEAD
 ## v0.7.14
+=======
+## v0.7.12-beta.2
+
+### Bug Fixes
+- fix: discover Claude Swap accounts and isolate their usage ([#1226](https://github.com/robinebers/openusage/pull/1226)) by @maddada
+- Fix exhausted Devin weekly quota when percentage is omitted ([#1251](https://github.com/robinebers/openusage/pull/1251)) by @robinebers
+- fix(claude): keep usage records whose nested iteration model is null ([#1261](https://github.com/robinebers/openusage/pull/1261)) by @robinebers
+- fix(claude): read the plan badge from Anthropic's live profile ([#1262](https://github.com/robinebers/openusage/pull/1262)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.12-beta.1...v0.7.12-beta.2](https://github.com/robinebers/openusage/compare/v0.7.12-beta.1...v0.7.12-beta.2)
+
+- [a0b408c](https://github.com/robinebers/openusage/commit/a0b408cd6bf5829fe9d27bfb6b91a54624a4a56a) fix: discover Claude Swap accounts and isolate their usage (#1226) by @maddada
+- [6a28ace](https://github.com/robinebers/openusage/commit/6a28acec9a87320f88f5056c5ba9dd3daacf3167) Fix exhausted Devin weekly quota when percentage is omitted (#1251) by @robinebers
+- [da03748](https://github.com/robinebers/openusage/commit/da0374816ecd8f5a9acfc42f8ff8b80d8e13402d) fix(claude): keep usage records whose nested iteration model is null (#1261) by @robinebers
+- [ced86a1](https://github.com/robinebers/openusage/commit/ced86a14f46156201456ba3359097d26671320ed) fix(claude): read the plan badge from Anthropic's live profile (#1262) by @robinebers
+
+## v0.7.12-beta.1
+
+### New Features
+- Add Muse Spark 1.3 effort variants to model pricing ([#1244](https://github.com/robinebers/openusage/pull/1244)) by @validatedev
+
+### Bug Fixes
+- Separate Cursor Grok Bot mode pricing rates ([#1246](https://github.com/robinebers/openusage/pull/1246)) by @robinebers
+- Price Codex reserve usage at Luna rates ([#1247](https://github.com/robinebers/openusage/pull/1247)) by @robinebers
+- Avoid repeated Claude session ownership scans ([#1245](https://github.com/robinebers/openusage/pull/1245)) by @robinebers
+- Attribute nested Claude workflow usage to parent sessions ([#1241](https://github.com/robinebers/openusage/pull/1241)) by @robinebers
+- Exempt keep-open issues from stale auto-close ([#1225](https://github.com/robinebers/openusage/pull/1225)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.11...v0.7.12-beta.1](https://github.com/robinebers/openusage/compare/v0.7.11...v0.7.12-beta.1)
+
+- [cd7900b](https://github.com/robinebers/openusage/commit/cd7900b7d7afd6c6d1ecddc9e6b6f315c7e1205e) fix(pricing): separate Cursor Grok Bot mode rates (#1246) by @robinebers
+- [639bdbf](https://github.com/robinebers/openusage/commit/639bdbf98b766ac6622974db61e992c4884c2754) fix(codex): price reserve usage at Luna rates (#1247) by @robinebers
+- [29a2b84](https://github.com/robinebers/openusage/commit/29a2b84f7488c14ddd5fedfe7db98363eb1d70a9) Fix repeated Claude session ownership scans (#1245) by @robinebers
+- [adf0110](https://github.com/robinebers/openusage/commit/adf0110c048f8bfef79a83a3080c9e23a86d5e1c) fix: attribute nested Claude workflow usage to parent sessions (#1241) by @robinebers
+- [dd02c12](https://github.com/robinebers/openusage/commit/dd02c1276594ed35ba85e6c09c1a2bfcafab13c3) feat(pricing): integrate Muse Spark 1.3 effort variants (#1244) by @validatedev
+- [70dea9a](https://github.com/robinebers/openusage/commit/70dea9a8fa21ed205aa9ad625b416a1e7792d5a1) fix: exempt keep-open issues from stale auto-close (#1225) by @robinebers
+
+## v0.7.11
+>>>>>>> upstream/main
 
 ### New Features
 - Add opt-in Ollama Cloud usage tracking ([#1173](https://github.com/robinebers/openusage/pull/1173)) by @tduarte

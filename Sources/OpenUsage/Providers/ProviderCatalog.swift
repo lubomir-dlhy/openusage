@@ -39,6 +39,7 @@ enum ProviderCatalog {
         claudeIdentityKeys: [String: String] = [:]
     ) -> [ProviderRuntime] {
         // Default provider order (see AGENTS.md "## Providers"): the three established providers first,
+<<<<<<< HEAD
         // then every other provider alphabetically by display name. Account cards slot in right after
         // their family's default card.
         //
@@ -51,6 +52,38 @@ enum ProviderCatalog {
         var automaticallyRepresentedConfigDirs = configDirectoryCards.compactMap(\.configDirPath)
         if !organizationCards.isEmpty {
             automaticallyRepresentedConfigDirs += defaultClaudeConfigDirs
+=======
+        // then every other provider alphabetically by display name.
+        var providers: [ProviderRuntime]
+        if claudeCards.isEmpty {
+            providers = [ClaudeProvider()]
+        } else {
+            providers = claudeCards.map { card in
+                let identity = claudeIdentityKeys[card.id] ?? card.identityKey
+                let user = identity.split(separator: "|").first.map(String.init)
+                let scanner = ClaudeLogUsageScanner(
+                    accountUUID: user, organizationUUID: card.organizationID,
+                    allowsUnattributedSessions: card.allowsUnattributedPiUsage,
+                    additionalConfigDirectories: card.additionalLogDirectories
+                )
+                return ClaudeProvider(
+                    provider: ClaudeProvider.makeProvider(
+                        id: card.id,
+                        displayName: claudeCards.count == 1 ? "Claude" : card.displayName
+                    ),
+                    authStore: ClaudeAuthStore(
+                        desktopOrganization: card.organizationID,
+                        expectedIdentityKey: identity,
+                        desktopOnly: card.usesDesktopCredentials,
+                        swapAccount: card.swapAccount,
+                        preferOrganizationScopedDesktop: claudeCards.count > 1
+                            && card.organizationID != nil && !card.usesDesktopCredentials
+                    ),
+                    logUsageScanner: scanner,
+                    allowsUnattributedPiUsage: card.allowsUnattributedPiUsage
+                )
+            }
+>>>>>>> upstream/main
         }
         let representedConfigDirs = Set(automaticallyRepresentedConfigDirs.map(canonicalConfigDir))
         let deduplicatedConfiguredClaude = configuredClaude.filter { account in
