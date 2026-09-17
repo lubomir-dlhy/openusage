@@ -33,6 +33,10 @@ protocol ProviderRuntime: AnyObject {
     var account: ProviderAccount { get }
     var widgetDescriptors: [WidgetDescriptor] { get }
 
+    /// Whether stored local spending still has usable account ownership for this card.
+    /// Applied before cached data can paint or be exported, including when refresh fails.
+    var allowsCachedLocalHistory: Bool { get }
+
     func refresh() async -> ProviderSnapshot
 
     /// Whether credentials for this provider already exist on this machine — a cheap, local-only probe
@@ -43,7 +47,11 @@ protocol ProviderRuntime: AnyObject {
 }
 
 extension ProviderRuntime {
+<<<<<<< HEAD
     var account: ProviderAccount { .makeDefault(providerID: provider.id) }
+=======
+    var allowsCachedLocalHistory: Bool { true }
+>>>>>>> upstream/main
 }
 
 /// Run a blocking, `Sendable` credential load off the MainActor.
