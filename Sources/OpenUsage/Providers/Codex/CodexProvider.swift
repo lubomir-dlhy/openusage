@@ -2,8 +2,21 @@ import Foundation
 
 @MainActor
 final class CodexProvider: ProviderRuntime {
+<<<<<<< HEAD
     let account: ProviderAccount
     let provider: Provider
+=======
+    static func makeProvider(id: String = "codex", displayName: String = "Codex") -> Provider {
+        Provider(id: id, displayName: displayName, icon: .providerMark("codex"), links: [
+            .init(label: "Status", url: "https://status.openai.com/"),
+            .init(label: "Dashboard", url: "https://chatgpt.com/codex/settings/usage")
+        ])
+    }
+
+    let provider: Provider
+    let allowsUnattributedHistory: Bool
+    var allowsCachedLocalHistory: Bool { allowsUnattributedHistory }
+>>>>>>> upstream/main
 
     let authStore: CodexAuthStore
     let usageClient: CodexUsageClient
@@ -14,15 +27,22 @@ final class CodexProvider: ProviderRuntime {
     let fallbackModel: @MainActor () -> String?
 
     init(
+<<<<<<< HEAD
         account: ProviderAccount = .makeDefault(providerID: "codex"),
         authStore: CodexAuthStore? = nil,
+=======
+        provider: Provider = CodexProvider.makeProvider(),
+        authStore: CodexAuthStore = CodexAuthStore(),
+>>>>>>> upstream/main
         usageClient: CodexUsageClient = CodexUsageClient(),
         logUsageScanner: CodexLogUsageScanner = CodexLogUsageScanner(),
         openCodeUsageScanner: OpenCodeCodexUsageScanner = OpenCodeCodexUsageScanner(),
+        allowsUnattributedHistory: Bool = true,
         now: @escaping @Sendable () -> Date = Date.init,
         pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() },
         fallbackModel: @escaping @MainActor () -> String? = { CodexFallbackModelSetting.current() }
     ) {
+<<<<<<< HEAD
         self.account = account
         self.provider = Provider(
             id: account.id,
@@ -35,6 +55,11 @@ final class CodexProvider: ProviderRuntime {
             tintHex: account.colorHex
         )
         self.authStore = authStore ?? CodexAuthStore(configDir: account.configDir)
+=======
+        self.provider = provider
+        self.allowsUnattributedHistory = allowsUnattributedHistory
+        self.authStore = authStore
+>>>>>>> upstream/main
         self.usageClient = usageClient
         self.logUsageScanner = logUsageScanner
         self.openCodeUsageScanner = openCodeUsageScanner
@@ -84,6 +109,7 @@ final class CodexProvider: ProviderRuntime {
     }
 
     func refresh() async -> ProviderSnapshot {
+        if authStore.expectedIdentity != nil { return await refreshAccount() }
         let fileCandidates = authStore.loadAuthCandidates()
         var lastFallbackError: Error?
 
@@ -150,8 +176,13 @@ final class CodexProvider: ProviderRuntime {
             accessToken: currentToken,
             accountID: authState.auth.tokens?.accountID
         )
-        var mapped = try CodexUsageMapper.mapUsageResponse(response, resetCredits: resetCredits, now: now())
+        let mapped = try CodexUsageMapper.mapUsageResponse(response, resetCredits: resetCredits, now: now())
 
+        return await snapshot(mapped: mapped)
+    }
+
+    func snapshot(mapped initial: CodexMappedUsage) async -> ProviderSnapshot {
+        var mapped = initial
         // Local spend tiles, scanned natively from the Codex CLI's session rollouts and priced through
         // the shared pricing store, merged with Codex usage that happened inside pi or OpenCode. Those
         // agents attribute their underlying Codex OAuth traffic back to this card.
@@ -162,11 +193,13 @@ final class CodexProvider: ProviderRuntime {
         async let native = logUsageScanner.scan(
             now: now(), pricing: pricing, fallbackModel: selectedFallbackModel
         )
-        async let pi = PiUsageScanner.shared.scan(
+        async let pi = allowsUnattributedHistory ? PiUsageScanner.shared.scan(
             cardID: provider.id, now: now(), pricing: pricing,
             estimateCost: { CodexUsagePricing.estimatedCost(pricing: pricing, model: $0, tokens: $1) }
         )
-        async let openCode = openCodeUsageScanner.scan(now: now(), pricing: pricing)
+            : nil
+        async let openCode = allowsUnattributedHistory
+            ? openCodeUsageScanner.scan(now: now(), pricing: pricing) : nil
         let (nativeScan, piScan, openCodeScan) = await (native, pi, openCode)
         var usageHistory: ProviderUsageHistory?
         // Cancellation can land between the local scans. Treat them as one unit so a
