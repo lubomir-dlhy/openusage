@@ -34,6 +34,7 @@ struct CodexAuthState: Hashable, Sendable {
 
     var auth: CodexAuth
     var source: Source
+    var readOnly: Bool = false
 
     /// Whether this candidate carries a non-empty OAuth access token — the same bar `refresh()`'s
     /// probe requires before fetching usage (an API-key-only auth.json can't serve the usage API).
@@ -93,23 +94,36 @@ struct CodexAuthStore: Sendable {
     var files: TextFileAccessing
     var keychain: KeychainAccessing
     var now: @Sendable () -> Date
+<<<<<<< HEAD
     /// Per-account credential-source override — the `CODEX_HOME` value for THIS account. When set it takes
     /// precedence over the process env so multiple accounts can read different homes within one process.
     /// `nil` = fall back to the `CODEX_HOME` env var, then the default `~/.config/codex` / `~/.codex`.
     var configDirOverride: String?
+=======
+    var expectedIdentity: CodexAccountIdentity?
+    var additionalAuthHomes: [String]
+>>>>>>> upstream/main
 
     init(
         environment: EnvironmentReading = ProcessEnvironmentReader(),
         files: TextFileAccessing = LocalTextFileAccessor(),
         keychain: KeychainAccessing = SecurityKeychainAccessor(),
+<<<<<<< HEAD
         configDir: String? = nil,
         now: @escaping @Sendable () -> Date = Date.init
+=======
+        now: @escaping @Sendable () -> Date = Date.init,
+        expectedIdentity: CodexAccountIdentity? = nil,
+        additionalAuthHomes: [String] = []
+>>>>>>> upstream/main
     ) {
         self.environment = environment
         self.files = files
         self.keychain = keychain
         self.configDirOverride = configDir
         self.now = now
+        self.expectedIdentity = expectedIdentity
+        self.additionalAuthHomes = additionalAuthHomes
     }
 
     /// True when this account explicitly pins a config dir. The provider uses this to skip the shared
@@ -135,7 +149,7 @@ struct CodexAuthStore: Sendable {
         else {
             return nil
         }
-        return CodexAuthState(auth: auth, source: .file(path: path))
+        return scoped(CodexAuthState(auth: auth, source: .file(path: path)))
     }
 
     func loadKeychainAuth() -> CodexAuthState? {
@@ -145,10 +159,11 @@ struct CodexAuthStore: Sendable {
         else {
             return nil
         }
-        return CodexAuthState(auth: auth, source: .keychain)
+        return scoped(CodexAuthState(auth: auth, source: .keychain))
     }
 
     func save(_ state: CodexAuthState) throws {
+        guard !state.readOnly else { throw CodexAuthError.tokenConflict }
         let encoder = JSONEncoder()
         encoder.outputFormatting = state.source.isFile ? [.prettyPrinted, .sortedKeys] : []
         let data = try encoder.encode(state.auth)
@@ -194,10 +209,9 @@ struct CodexAuthStore: Sendable {
     }
 
     func authPaths() -> [String] {
-        if let codexHome = codexHome() {
-            return [joinPath(codexHome, Self.authFile)]
-        }
-        return Self.defaultAuthHomes.map { joinPath($0, Self.authFile) }
+        let homes = (codexHome().map { [$0] } ?? Self.defaultAuthHomes) + additionalAuthHomes
+        var seen = Set<String>()
+        return homes.map { joinPath($0, Self.authFile) }.filter { seen.insert($0).inserted }
     }
 
     func codexHome() -> String? {
@@ -234,4 +248,3 @@ private extension CodexAuthState.Source {
         return false
     }
 }
-

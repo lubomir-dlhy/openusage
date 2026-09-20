@@ -36,7 +36,7 @@ struct CustomizeProviderDetailView: View {
                 if let keyProvider = container.apiKeyProviders.first(where: { $0.provider.id == providerID }) {
                     APIKeysSection(provider: keyProvider)
                 }
-                if providerID == "codex" {
+                if ProviderAccountID.family(of: providerID) == "codex" {
                     CodexPricingSection()
                 }
             }
