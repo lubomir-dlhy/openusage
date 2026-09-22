@@ -4,20 +4,26 @@ struct ClaudeAccountCard: Equatable, Sendable {
     let id: String
     let identityKey: String
     let organizationID: String?
-    let displayName: String
+    var displayName: String
     let usesDesktopCredentials: Bool
     let allowsUnattributedPiUsage: Bool
     let configDirPath: String?
     let keychainLiteral: String?
     let extraLogRoots: [URL]
+    var swapAccount: ClaudeSwapAccount? = nil
+    var additionalLogDirectories: [String] = []
+    var organizationName: String? = nil
 
     init(
         id: String,
         identityKey: String,
-        organizationID: String,
+        organizationID: String?,
         displayName: String,
         usesDesktopCredentials: Bool,
-        allowsUnattributedPiUsage: Bool
+        allowsUnattributedPiUsage: Bool,
+        swapAccount: ClaudeSwapAccount? = nil,
+        additionalLogDirectories: [String] = [],
+        organizationName: String? = nil
     ) {
         self.id = id
         self.identityKey = identityKey
@@ -28,6 +34,9 @@ struct ClaudeAccountCard: Equatable, Sendable {
         self.configDirPath = nil
         self.keychainLiteral = nil
         self.extraLogRoots = []
+        self.swapAccount = swapAccount
+        self.additionalLogDirectories = additionalLogDirectories
+        self.organizationName = organizationName
     }
 
     init(
@@ -63,6 +72,7 @@ struct ProviderAccountAssembly {
     var claudeCards: [ClaudeAccountCard] = []
     var defaultClaudeExtraLogRoots: [URL] = []
     var defaultClaudeConfigDirs: [String] = []
+    var codexCards: [CodexAccountCard] = []
 
     /// `waitsForLoginShell`: true for the menu-bar app (a Finder/Dock launch inherits no shell
     /// exports, so the pass leans on the login-shell layers), false for the one-shot CLI (a terminal
@@ -71,7 +81,7 @@ struct ProviderAccountAssembly {
         defaults: UserDefaults = .standard,
         accountsStore: ProviderAccountsStore? = nil,
         waitsForLoginShell: Bool
-    ) -> ProviderAccountAssembly {
+    ) async -> ProviderAccountAssembly {
         // The identity read needs the login shell's exports (CLAUDE_CONFIG_DIR/CODEX_HOME name the
         // default homes), and it reads them through the very same reader the provider auth stores
         // use — `ProcessEnvironmentReader`, which pins identity-relevant keys to the persisted
@@ -94,7 +104,7 @@ struct ProviderAccountAssembly {
         if families.count < ProviderAccountID.families.count {
             AppLog.info(.config, "account identity read skipped for \(ProviderAccountID.families.subtracting(families).sorted().joined(separator: ", ")): login shell cold and no shell-environment snapshot exists yet")
         }
-        return make(
+        return await make(
             observer: DefaultAccountObserver(),
             accountsStore: accountsStore ?? ProviderAccountsStore(defaults: defaults),
             families: families,
@@ -132,15 +142,17 @@ struct ProviderAccountAssembly {
                 return url.lastPathComponent
             }
         }
-    ) -> ProviderAccountAssembly {
-        var identityKeys: [String: String] = [:]
+    ) async -> ProviderAccountAssembly {
+        let codexCards = families.contains("codex")
+            ? await makeCodexCards(observer: observer, accountsStore: accountsStore) : []
+        var identityKeys = Dictionary(uniqueKeysWithValues: codexCards.map { ($0.id, $0.identity.key) })
         var observations: [ProviderAccountsStore.AccountObservation] = []
 
         let outcomes: [(family: String, outcome: DefaultAccountObserver.Outcome)] = [
             ("claude", { observer.observeClaude() }),
             ("codex", { observer.observeCodex() }),
         ].compactMap { family, observe in
-            families.contains(family) ? (family, observe()) : nil
+            families.contains(family) && (family != "codex" || codexCards.isEmpty) ? (family, observe()) : nil
         }
         for (family, outcome) in outcomes {
             switch outcome {
@@ -239,10 +251,34 @@ struct ProviderAccountAssembly {
 
         guard families.contains("claude") else {
             accountsStore.reconcile(with: observations)
-            return ProviderAccountAssembly(identityKeysByCard: identityKeys)
+            return ProviderAccountAssembly(identityKeysByCard: identityKeys, codexCards: codexCards)
         }
 
-        if let claudeIdentity = identityKeys["claude"], !claudeIdentity.contains("|") {
+        let swapAccounts = ClaudeSwapAccount.discover(files: observer.files, home: observer.homeDirectory())
+        if !swapAccounts.isEmpty {
+            AppLog.info(.config, "accounts: discovered \(swapAccounts.count) Claude Swap accounts")
+        }
+        for account in swapAccounts {
+            let source = ProviderAccountSource(
+                kind: .claudeSwap, anchor: account.sessionDirectory, holdsDefaultSource: false
+            )
+            if let index = observations.firstIndex(where: {
+                $0.family == "claude" && $0.identityKey == account.identityKey
+            }) {
+                observations[index].sources.append(source)
+            } else {
+                observations.append(ProviderAccountsStore.AccountObservation(
+                    family: "claude",
+                    identityKey: account.identityKey,
+                    label: "\(account.email) (\(account.organizationName ?? "Organization \(account.organizationID.prefix(8))"))",
+                    sources: [source]
+                ))
+            }
+        }
+
+        if let claudeIdentity = identityKeys["claude"],
+           !claudeIdentity.contains("|"), swapAccounts.isEmpty
+        {
             let records = accountsStore.reconcile(with: observations)
             let cards = configDirectoryCards(
                 records: records,
@@ -252,7 +288,8 @@ struct ProviderAccountAssembly {
                 identityKeysByCard: identityKeys,
                 claudeCards: cards,
                 defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
-                defaultClaudeConfigDirs: defaultClaudeConfigDirs
+                defaultClaudeConfigDirs: defaultClaudeConfigDirs,
+                codexCards: codexCards
             )
         }
 
@@ -303,6 +340,18 @@ struct ProviderAccountAssembly {
             cards.append(ClaudeAccountCard(
                 id: record.id, identityKey: defaultIdentity, organizationID: String(organization),
                 displayName: "Claude — \(label)", usesDesktopCredentials: false,
+                allowsUnattributedPiUsage: allowsUnattributedPiUsage, organizationName: label
+            ))
+            identityKeys.removeValue(forKey: "claude")
+            identityKeys[record.id] = defaultIdentity
+        } else if let defaultIdentity = defaultClaudeIdentity,
+                  let record = records.first(where: {
+                      $0.family == "claude" && $0.identityKey == defaultIdentity && !$0.removedTombstone
+                  }) {
+            // A UUID without an organization remains a default login, separate from scoped cards.
+            cards.append(ClaudeAccountCard(
+                id: record.id, identityKey: defaultIdentity, organizationID: nil,
+                displayName: "Claude: \(record.label ?? "Default Login")", usesDesktopCredentials: false,
                 allowsUnattributedPiUsage: allowsUnattributedPiUsage
             ))
             identityKeys.removeValue(forKey: "claude")
@@ -317,16 +366,41 @@ struct ProviderAccountAssembly {
             cards.append(ClaudeAccountCard(
                 id: cardID, identityKey: organization.identityKey, organizationID: organization.id,
                 displayName: "Claude — \(organizationLabel(record.label) ?? organization.label)",
-                usesDesktopCredentials: true, allowsUnattributedPiUsage: allowsUnattributedPiUsage
+                usesDesktopCredentials: true, allowsUnattributedPiUsage: allowsUnattributedPiUsage,
+                organizationName: organizationLabel(record.label) ?? organization.label
             ))
             identityKeys[cardID] = organization.identityKey
         }
 
+        for account in swapAccounts {
+            if let index = cards.firstIndex(where: { $0.identityKey == account.identityKey }) {
+                cards[index].displayName = account.displayName(
+                    fallbackOrganization: cards[index].organizationName
+                )
+                cards[index].swapAccount = account
+                cards[index].organizationName = account.organizationName ?? cards[index].organizationName
+                continue
+            }
+            guard let record = records.first(where: {
+                $0.family == "claude" && $0.identityKey == account.identityKey && !$0.removedTombstone
+            }) else { continue }
+            cards.append(ClaudeAccountCard(
+                id: record.id, identityKey: account.identityKey, organizationID: account.organizationID,
+                displayName: account.displayName(), usesDesktopCredentials: false,
+                allowsUnattributedPiUsage: allowsUnattributedPiUsage, swapAccount: account,
+                organizationName: account.organizationName
+            ))
+            identityKeys[record.id] = account.identityKey
+        }
+        for index in cards.indices {
+            cards[index].additionalLogDirectories = swapAccounts.map(\.sessionDirectory)
+        }
         return ProviderAccountAssembly(
             identityKeysByCard: identityKeys,
             claudeCards: cards,
             defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
-            defaultClaudeConfigDirs: defaultClaudeConfigDirs
+            defaultClaudeConfigDirs: defaultClaudeConfigDirs,
+            codexCards: codexCards
         )
     }
 
