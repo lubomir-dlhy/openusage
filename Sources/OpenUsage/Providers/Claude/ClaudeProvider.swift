@@ -35,10 +35,7 @@ final class ClaudeProvider: ProviderRuntime {
     private var verifiedCredentialFingerprint: Data?
     private var lastGoodUsage: ClaudeMappedUsage?
     private var rateLimitedUntil: Date?
-    private var cachedProfilePlan: String?
-    private var profileFetchAttemptedAt: Date?
     private static let rateLimitCooldown: TimeInterval = 5 * 60
-    private static let profileCacheDuration: TimeInterval = 60 * 60
 
     /// The plan Anthropic's profile endpoint reports for the current access token. Claude Code stamps
     /// `subscriptionType` / `rateLimitTier` into the login at sign-in and never updates them (a token refresh
@@ -321,12 +318,6 @@ final class ClaudeProvider: ProviderRuntime {
                 state: &state,
                 credentialGeneration: &credentialGeneration
             )
-            // Organization-bound cards already call the profile endpoint to verify ownership.
-            // Avoid a second profile request; the independent stale-plan refresh is for the
-            // unscoped/default credential path that has no ownership verification call.
-            if authStore.expectedIdentityKey == nil {
-                mapped.plan = await fetchCurrentPlan(credentials: state.oauth, fallback: mapped.plan)
-            }
             // A rate-limited fetch rides its "Updates blocked by Anthropic" notice on the mapped usage so
             // it reaches the header triangle even when the badge/note lines aren't in the user's layout.
             warning = mapped.warning
@@ -495,15 +486,8 @@ final class ClaudeProvider: ProviderRuntime {
         let accessToken = credentials.accessToken ?? ""
         let fingerprint = Data(SHA256.hash(data: Data("\(identity)\u{0}\(accessToken)".utf8)))
         guard verifiedCredentialFingerprint != fingerprint else { return nil }
-<<<<<<< HEAD
-        if let response = try await usageClient.verifyAccount(
-            accessToken: accessToken,
-            expectedIdentityKey: identity,
-            config: authStore.oauthConfig()
-=======
         switch try await usageClient.verifyAccount(
             accessToken: accessToken, expectedIdentityKey: identity, config: authStore.oauthConfig()
->>>>>>> upstream/main
         ) {
         case .failed(let response):
             return response
@@ -559,36 +543,6 @@ final class ClaudeProvider: ProviderRuntime {
         Data(SHA256.hash(data: Data((credentials.accessToken ?? "").utf8)))
     }
 
-    /// Plan metadata embedded in Claude Code's Keychain credential is only a login-time snapshot and can
-    /// stay stale across subscription upgrades or downgrades. Profile lookup is best-effort and attempted
-    /// at most once per hour for this login, including failures, so normal/manual refreshes cannot hammer
-    /// an endpoint whose value changes rarely. Usage bars keep working during a profile-only outage.
-    private func fetchCurrentPlan(credentials: ClaudeOAuth, fallback: String?) async -> String? {
-        guard let accessToken = credentials.accessToken, !accessToken.isEmpty else { return fallback }
-        let timestamp = now()
-        if let attemptedAt = profileFetchAttemptedAt {
-            let age = timestamp.timeIntervalSince(attemptedAt)
-            if age >= 0, age < Self.profileCacheDuration {
-                return cachedProfilePlan ?? fallback
-            }
-        }
-        // Record the attempt before suspension so a concurrent refresh cannot start a duplicate request.
-        profileFetchAttemptedAt = timestamp
-        do {
-            let response = try await usageClient.fetchProfile(
-                accessToken: accessToken,
-                config: authStore.oauthConfig()
-            )
-            let plan = try ClaudeUsageMapper.mapProfileResponse(response, fallback: credentials)
-            cachedProfilePlan = plan
-            return plan
-        } catch {
-            cachedProfilePlan = nil
-            AppLog.warn(LogTag.plugin("claude"), "profile fetch failed; using saved plan metadata: \(error.localizedDescription)")
-            return fallback
-        }
-    }
-
     /// Last-good usage with an appended staleness note when we have it; otherwise the plain rate-limited
     /// badge (no successful fetch yet this run). `lastGoodUsage` only ever holds a clean `mapUsageResponse`
     /// result (never a rate-limited snapshot), so the note is never duplicated and no stale spend tiles
@@ -616,8 +570,6 @@ final class ClaudeProvider: ProviderRuntime {
         cachedCredentialFingerprint = fingerprint
         lastGoodUsage = nil
         rateLimitedUntil = nil
-        cachedProfilePlan = nil
-        profileFetchAttemptedAt = nil
     }
 
     private static func credentialFingerprint(_ credentials: ClaudeOAuth) -> Data {

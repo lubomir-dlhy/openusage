@@ -17,20 +17,14 @@ the same account and organization through both Claude Code and Claude Desktop st
 | Today / Yesterday / Last 30 Days | Local spend, as cost, tokens, or both (see below) |
 
 Fable is enabled and always visible directly below Weekly by default. Sonnet stays off until you
-<<<<<<< HEAD
 enable it in Customize.
 
 When Claude reports your plan name, OpenUsage shows it beside the provider name. OpenUsage reads the
-current plan and tier from Claude's profile API, cached for one hour per login, so subscription upgrades
-and downgrades do not depend on Claude Code rewriting older plan metadata in its Keychain entry. Failed
-profile checks are also held for an hour to avoid repeatedly calling the endpoint; a new login invalidates
-the cache immediately.
-=======
-enable it in Customize. When Claude reports your plan name, OpenUsage shows it beside the provider name.
+current plan and tier from Claude's profile API, so subscription upgrades and downgrades do not depend
+on Claude Code rewriting older plan metadata in its Keychain entry. The profile is fetched once per login.
 The plan comes from Anthropic's live account profile, so an upgrade (say, Max 5x to Max 20x) shows up on
 the next refresh without signing in to Claude Code again. If the profile can't be read, the badge falls
 back to the plan saved with your login.
->>>>>>> upstream/main
 
 ## Where credentials come from
 

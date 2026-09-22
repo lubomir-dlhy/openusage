@@ -12,9 +12,9 @@ enum ProviderCatalog {
     static func make(
         defaults: UserDefaults = .standard,
         claudeCards: [ClaudeAccountCard] = [],
-<<<<<<< HEAD
         defaultClaudeExtraLogRoots: [URL] = [],
         defaultClaudeConfigDirs: [String] = [],
+        codexCards: [CodexAccountCard] = [],
         claudeIdentityKeys: [String: String] = [:]
     ) -> [ProviderRuntime] {
         make(
@@ -23,6 +23,7 @@ enum ProviderCatalog {
             claudeCards: claudeCards,
             defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
             defaultClaudeConfigDirs: defaultClaudeConfigDirs,
+            codexCards: codexCards,
             claudeIdentityKeys: claudeIdentityKeys
         )
     }
@@ -37,6 +38,7 @@ enum ProviderCatalog {
         claudeCards: [ClaudeAccountCard] = [],
         defaultClaudeExtraLogRoots: [URL] = [],
         defaultClaudeConfigDirs: [String] = [],
+        codexCards: [CodexAccountCard] = [],
         claudeIdentityKeys: [String: String] = [:]
     ) -> [ProviderRuntime] {
         // Default provider order (see AGENTS.md "## Providers"): the three established providers first,
@@ -77,49 +79,20 @@ enum ProviderCatalog {
         runtimes += configDirectoryCards.map {
             claudeAccountRuntime(card: $0, identityKey: claudeIdentityKeys[$0.id])
         }
-        runtimes += accounts.accounts(for: "codex").map { CodexProvider(account: $0) }
-        runtimes += [
-=======
-        codexCards: [CodexAccountCard] = [],
-        claudeIdentityKeys: [String: String] = [:]
-    ) -> [ProviderRuntime] {
-        // Default provider order (see AGENTS.md "## Providers"): the three established providers first,
-        // then every other provider alphabetically by display name.
-        var providers: [ProviderRuntime]
-        if claudeCards.isEmpty {
-            providers = [ClaudeProvider()]
-        } else {
-            providers = claudeCards.map { card in
-                let identity = claudeIdentityKeys[card.id] ?? card.identityKey
-                let user = identity.split(separator: "|").first.map(String.init)
-                let scanner = ClaudeLogUsageScanner(
-                    accountUUID: user, organizationUUID: card.organizationID,
-                    allowsUnattributedSessions: card.allowsUnattributedPiUsage,
-                    additionalConfigDirectories: card.additionalLogDirectories
-                )
-                return ClaudeProvider(
-                    provider: ClaudeProvider.makeProvider(
-                        id: card.id,
-                        displayName: claudeCards.count == 1 ? "Claude" : card.displayName
-                    ),
-                    authStore: ClaudeAuthStore(
-                        desktopOrganization: card.organizationID,
-                        expectedIdentityKey: identity,
-                        desktopOnly: card.usesDesktopCredentials,
-                        swapAccount: card.swapAccount,
-                        preferOrganizationScopedDesktop: claudeCards.count > 1
-                            && card.organizationID != nil && !card.usesDesktopCredentials
-                    ),
-                    logUsageScanner: scanner,
-                    allowsUnattributedPiUsage: card.allowsUnattributedPiUsage
-                )
-            }
-        }
+
         if codexCards.isEmpty {
-            providers.append(CodexProvider())
+            runtimes += accounts.accounts(for: "codex").map { CodexProvider(account: $0) }
         } else {
-            providers += codexCards.map { card in
+            runtimes += codexCards.map { card in
                 CodexProvider(
+                    account: ProviderAccount(
+                        id: card.id,
+                        providerID: "codex",
+                        label: card.displayName,
+                        configDir: nil,
+                        iconFileName: nil,
+                        colorHex: nil
+                    ),
                     provider: CodexProvider.makeProvider(id: card.id, displayName: card.displayName),
                     authStore: CodexAuthStore(expectedIdentity: card.identity, additionalAuthHomes: card.authHomes),
                     logUsageScanner: CodexLogUsageScanner(
@@ -129,9 +102,13 @@ enum ProviderCatalog {
                     allowsUnattributedHistory: card.allowsUnattributedHistory
                 )
             }
+            let representedHomes = Set(codexCards.flatMap(\.authHomes).map(canonicalConfigDir))
+            runtimes += accounts.accounts(for: "codex").filter { account in
+                guard !account.isDefault, let configDir = account.configDir else { return false }
+                return !representedHomes.contains(canonicalConfigDir(configDir))
+            }.map { CodexProvider(account: $0) }
         }
-        providers += [
->>>>>>> upstream/main
+        runtimes += [
             CursorProvider(),
             AntigravityProvider(),
             CopilotProvider(defaults: defaults),
@@ -163,11 +140,13 @@ enum ProviderCatalog {
                 provider: ClaudeProvider.makeProvider(id: card.id, displayName: card.displayName),
                 authStore: ClaudeAuthStore(
                     scope: .configDir(path: configDirPath, keychainLiteral: keychainLiteral),
-                    expectedIdentityKey: identityKey ?? card.identityKey
+                    expectedIdentityKey: identityKey ?? card.identityKey,
+                    swapAccount: card.swapAccount
                 ),
                 logUsageScanner: ClaudeLogUsageScanner(
                     cacheIdentityOverride: "claude-account:\(card.id)",
                     rootsOverride: [URL(fileURLWithPath: configDirPath)] + card.extraLogRoots
+                        + card.additionalLogDirectories.map { URL(fileURLWithPath: $0) }
                 ),
                 allowsUnattributedPiUsage: card.allowsUnattributedPiUsage
             )
@@ -181,12 +160,14 @@ enum ProviderCatalog {
                 desktopOrganization: card.organizationID,
                 expectedIdentityKey: identity,
                 desktopOnly: card.usesDesktopCredentials,
+                swapAccount: card.swapAccount,
                 preferOrganizationScopedDesktop: !card.usesDesktopCredentials
             ),
             logUsageScanner: ClaudeLogUsageScanner(
                 accountUUID: user,
                 organizationUUID: card.organizationID,
-                allowsUnattributedSessions: card.allowsUnattributedPiUsage
+                allowsUnattributedSessions: card.allowsUnattributedPiUsage,
+                additionalConfigDirectories: card.additionalLogDirectories
             ),
             allowsUnattributedPiUsage: card.allowsUnattributedPiUsage
         )

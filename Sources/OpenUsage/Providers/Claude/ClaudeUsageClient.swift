@@ -133,39 +133,9 @@ struct ClaudeUsageClient: Sendable {
         )
     }
 
-<<<<<<< HEAD
-    /// Fetches current plan metadata independently from the usage response. Claude Code's stored
-    /// subscription metadata is only a login-time snapshot and can become stale after plan changes.
-    func fetchProfile(accessToken: String, config: ClaudeOAuthConfig) async throws -> HTTPResponse {
-        try await httpClient.send(
-            HTTPRequest(
-                method: "GET",
-                url: config.profileURL,
-                headers: [
-                    "Authorization": "Bearer \(accessToken.trimmingCharacters(in: .whitespacesAndNewlines))",
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    "User-Agent": "claude-code/2.1.69"
-                ],
-                timeout: 10
-            )
-        )
-    }
-
-    func verifyAccount(
-        accessToken: String,
-        expectedIdentityKey: String,
-        config: ClaudeOAuthConfig
-    ) async throws -> HTTPResponse? {
-        let expected = expectedIdentityKey.split(separator: "|", omittingEmptySubsequences: false)
-        guard expected.count == 2 else { throw ClaudeAuthError.sessionExpired }
-
-        let response: HTTPResponse
-=======
     /// `GET /api/oauth/profile`. Transport failures surface as `connectionFailed`; the status code is the
     /// caller's to triage.
     func fetchProfile(accessToken: String, config: ClaudeOAuthConfig) async throws -> HTTPResponse {
->>>>>>> upstream/main
         do {
             return try await httpClient.send(HTTPRequest(
                 method: "GET",

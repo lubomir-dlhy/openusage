@@ -27,7 +27,7 @@ extension ProviderAccountAssembly {
                                   keychain: observer.keychain)
         let defaultPaths = auth.authPaths().map(expanded)
         let mainPaths = swaps.map { $0.mainHome + "/auth.json" }
-        var observations: [ProviderAccountsStore.Observation] = []
+        var observations: [ProviderAccountsStore.AccountObservation] = []
         var identities: [CodexAccountIdentity] = []
         var labels: [String: String] = [:]
         func observe(_ identity: CodexAccountIdentity, label: String, source: ProviderAccountSource) {

@@ -94,28 +94,21 @@ struct CodexAuthStore: Sendable {
     var files: TextFileAccessing
     var keychain: KeychainAccessing
     var now: @Sendable () -> Date
-<<<<<<< HEAD
     /// Per-account credential-source override — the `CODEX_HOME` value for THIS account. When set it takes
     /// precedence over the process env so multiple accounts can read different homes within one process.
     /// `nil` = fall back to the `CODEX_HOME` env var, then the default `~/.config/codex` / `~/.codex`.
     var configDirOverride: String?
-=======
     var expectedIdentity: CodexAccountIdentity?
     var additionalAuthHomes: [String]
->>>>>>> upstream/main
 
     init(
         environment: EnvironmentReading = ProcessEnvironmentReader(),
         files: TextFileAccessing = LocalTextFileAccessor(),
         keychain: KeychainAccessing = SecurityKeychainAccessor(),
-<<<<<<< HEAD
         configDir: String? = nil,
-        now: @escaping @Sendable () -> Date = Date.init
-=======
         now: @escaping @Sendable () -> Date = Date.init,
         expectedIdentity: CodexAccountIdentity? = nil,
         additionalAuthHomes: [String] = []
->>>>>>> upstream/main
     ) {
         self.environment = environment
         self.files = files

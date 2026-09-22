@@ -107,7 +107,6 @@ enum ClaudeUsageMapper {
         return "\(base) \(tier[match])"
     }
 
-<<<<<<< HEAD
     /// Claude Code stores plan metadata beside its OAuth tokens, but that metadata can remain stale after
     /// a subscription change. The live profile endpoint is authoritative for the current plan and tier.
     static func mapProfileResponse(_ response: HTTPResponse, fallback: ClaudeOAuth) throws -> String? {
@@ -143,7 +142,6 @@ enum ClaudeUsageMapper {
         }
     }
 
-=======
     /// Plan label from the live profile, formatted like the stored one so the badge reads the same either
     /// way. `organization_type` arrives as `claude_max` / `claude_pro`; the `claude_` prefix is dropped so it
     /// title-cases to "Max" / "Pro". Fields the profile omits fall back to the stored login so a partial
@@ -160,7 +158,6 @@ enum ClaudeUsageMapper {
         )
     }
 
->>>>>>> upstream/main
     private static func appendUsageWindow(_ value: Any?, label: String, periodDurationMs: Int, to lines: inout [MetricLine]) {
         guard let object = value as? [String: Any],
               let used = ProviderParse.number(object["utilization"])

@@ -47,11 +47,8 @@ protocol ProviderRuntime: AnyObject {
 }
 
 extension ProviderRuntime {
-<<<<<<< HEAD
     var account: ProviderAccount { .makeDefault(providerID: provider.id) }
-=======
     var allowsCachedLocalHistory: Bool { true }
->>>>>>> upstream/main
 }
 
 /// Run a blocking, `Sendable` credential load off the MainActor.

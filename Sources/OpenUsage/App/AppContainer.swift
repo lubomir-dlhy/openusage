@@ -38,19 +38,12 @@ final class AppContainer {
     /// `FirstRunSeeder` on a fresh install, so existing installs never see the card.
     let onboarding: OnboardingStore
     /// Claims Codex rate-limit reset credits from the resets popover (the app's only provider-API
-<<<<<<< HEAD
-    /// write). Shares the Codex provider's auth store and usage client; `nil` only if the Codex
-    /// provider were ever removed from the registry. Injected into the view tree via
-    /// `\.codexResetClaim`.
-    let codexResetClaim: CodexResetClaimService?
     /// The account registry the launch pass reconciled. The UI observes it live: a rename
     /// (`customLabel`) re-titles the card everywhere without a relaunch.
     let accounts: ProviderAccountsStore
-=======
     /// write). Each service shares its card's auth store and usage client. The view tree selects
     /// the matching service from `\.codexResetClaims` for each card's resets popover.
     let codexResetClaims: [String: CodexResetClaimService]
->>>>>>> upstream/main
     /// The provider runtimes, kept so on-demand credential detection (the Customize "Reset All" reseed)
     /// can re-probe `hasLocalCredentials()` the same way first-run seeding does.
     private let providers: [ProviderRuntime]
@@ -81,18 +74,12 @@ final class AppContainer {
         // Once the capture lands, persist its identity-relevant facts so the NEXT launch has them
         // even if that launch's own capture is slow (see `ShellEnvironmentSnapshot`).
         self.shellEnvironmentSnapshotTask = ShellEnvironmentSnapshotStore(defaults: .standard).startRefreshTask()
-<<<<<<< HEAD
         // The launch account pass: which account is signed in at each family's default home, plus
         // the config-dir scan for extra Claude logins. Feeds the snapshot cache's account stamp,
         // reconciles the account registry, and hands the catalog its extra-card build plan.
         let accounts = ProviderAccountsStore()
-        let accountAssembly = ProviderAccountAssembly.make(accountsStore: accounts, waitsForLoginShell: true)
+        let accountAssembly = await ProviderAccountAssembly.make(accountsStore: accounts, waitsForLoginShell: true)
         self.accounts = accounts
-=======
-        // The launch account pass: which account is signed in at each family's default home. Feeds
-        // the snapshot cache's account stamp and reconciles the account registry.
-        let accountAssembly = await ProviderAccountAssembly.make(waitsForLoginShell: true)
->>>>>>> upstream/main
 
         // Provider construction and order live in `ProviderCatalog` (shared with the one-shot CLI so
         // the runtimes can't drift). Preserve the fork's manually configured Claude/Codex accounts,
@@ -101,12 +88,9 @@ final class AppContainer {
         let providers = ProviderCatalog.make(
             accounts: configuredAccounts,
             claudeCards: accountAssembly.claudeCards,
-<<<<<<< HEAD
             defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots,
             defaultClaudeConfigDirs: accountAssembly.defaultClaudeConfigDirs,
-=======
             codexCards: accountAssembly.codexCards,
->>>>>>> upstream/main
             claudeIdentityKeys: accountAssembly.identityKeysByCard
         )
         let registry = WidgetRegistry.from(providers)

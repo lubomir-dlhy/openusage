@@ -2,10 +2,7 @@ import Foundation
 
 @MainActor
 final class CodexProvider: ProviderRuntime {
-<<<<<<< HEAD
     let account: ProviderAccount
-    let provider: Provider
-=======
     static func makeProvider(id: String = "codex", displayName: String = "Codex") -> Provider {
         Provider(id: id, displayName: displayName, icon: .providerMark("codex"), links: [
             .init(label: "Status", url: "https://status.openai.com/"),
@@ -16,7 +13,6 @@ final class CodexProvider: ProviderRuntime {
     let provider: Provider
     let allowsUnattributedHistory: Bool
     var allowsCachedLocalHistory: Bool { allowsUnattributedHistory }
->>>>>>> upstream/main
 
     let authStore: CodexAuthStore
     let usageClient: CodexUsageClient
@@ -27,13 +23,9 @@ final class CodexProvider: ProviderRuntime {
     let fallbackModel: @MainActor () -> String?
 
     init(
-<<<<<<< HEAD
         account: ProviderAccount = .makeDefault(providerID: "codex"),
+        provider: Provider? = nil,
         authStore: CodexAuthStore? = nil,
-=======
-        provider: Provider = CodexProvider.makeProvider(),
-        authStore: CodexAuthStore = CodexAuthStore(),
->>>>>>> upstream/main
         usageClient: CodexUsageClient = CodexUsageClient(),
         logUsageScanner: CodexLogUsageScanner = CodexLogUsageScanner(),
         openCodeUsageScanner: OpenCodeCodexUsageScanner = OpenCodeCodexUsageScanner(),
@@ -42,9 +34,8 @@ final class CodexProvider: ProviderRuntime {
         pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() },
         fallbackModel: @escaping @MainActor () -> String? = { CodexFallbackModelSetting.current() }
     ) {
-<<<<<<< HEAD
         self.account = account
-        self.provider = Provider(
+        self.provider = provider ?? Provider(
             id: account.id,
             displayName: account.displayName(providerDisplayName: "Codex"),
             icon: account.iconFileName.map(IconSource.customFile) ?? .providerMark("codex"),
@@ -55,11 +46,7 @@ final class CodexProvider: ProviderRuntime {
             tintHex: account.colorHex
         )
         self.authStore = authStore ?? CodexAuthStore(configDir: account.configDir)
-=======
-        self.provider = provider
         self.allowsUnattributedHistory = allowsUnattributedHistory
-        self.authStore = authStore
->>>>>>> upstream/main
         self.usageClient = usageClient
         self.logUsageScanner = logUsageScanner
         self.openCodeUsageScanner = openCodeUsageScanner

@@ -100,11 +100,8 @@ struct ClaudeAuthStore: Sendable {
     let expectedIdentityKey: String?
     /// Desktop-backed cards must not read CLI or environment credentials.
     let desktopOnly: Bool
-<<<<<<< HEAD
     /// Prefer the organization-scoped Desktop token when the global CLI token may belong elsewhere.
-=======
     let swapAccount: ClaudeSwapAccount?
->>>>>>> upstream/main
     let preferOrganizationScopedDesktop: Bool
 
     init(
@@ -181,11 +178,9 @@ struct ClaudeAuthStore: Sendable {
         let hasUsableCLILogin = stored.contains {
             $0.hasUsableAccessToken && liveUsageAvailability($0) == .available
         }
-<<<<<<< HEAD
-        if desktopAllowed, forceDesktopFallback || !hasUsableCLILogin || preferOrganizationScopedDesktop {
-=======
-        if swapAccount != nil || forceDesktopFallback || !hasUsableCLILogin || preferOrganizationScopedDesktop {
->>>>>>> upstream/main
+        if desktopAllowed,
+           swapAccount != nil || forceDesktopFallback || !hasUsableCLILogin || preferOrganizationScopedDesktop
+        {
             let expectedUser = expectedIdentityKey?.split(separator: "|").first.map(String.init)
             let result = desktop.load(
                 allowInteraction: allowDesktopInteraction,
@@ -333,15 +328,11 @@ struct ClaudeAuthStore: Sendable {
     }
 
     func claudeHomeOverride() -> String? {
-<<<<<<< HEAD
         if let override = configDirOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty {
             return override
         }
-        return envText("CLAUDE_CONFIG_DIR")
-=======
-        swapAccount?.sessionDirectory ?? envText("CLAUDE_CONFIG_DIR")
->>>>>>> upstream/main
+        return swapAccount?.sessionDirectory ?? envText("CLAUDE_CONFIG_DIR")
     }
 
     // Resolved OAuth endpoint strings before URL validation. The suffix is derived from the same
@@ -432,7 +423,6 @@ struct ClaudeAuthStore: Sendable {
         // Only needs the file suffix, which never fails — keep this off the throwing URL path so
         // credential loading stays forgiving even when a custom OAuth URL is malformed.
         let base = "\(Self.keychainServicePrefix)\(resolveOAuthEndpoints().suffix)-credentials"
-<<<<<<< HEAD
         switch scope {
         case .configDir(_, let keychainLiteral):
             // Exactly this card's item — never the bare default service, which is another account's
@@ -440,14 +430,10 @@ struct ClaudeAuthStore: Sendable {
             return ["\(base)-\(hashSuffix(keychainLiteral))"]
         case .standard:
             if let configDir = claudeHomeOverride() {
-                return ["\(base)-\(hashSuffix(configDir))", base]
+                let scoped = "\(base)-\(hashSuffix(configDir))"
+                return swapAccount == nil ? [scoped, base] : [scoped]
             }
             return [base]
-=======
-        if let configDir = claudeHomeOverride() {
-            let scoped = "\(base)-\(hashSuffix(configDir))"
-            return swapAccount == nil ? [scoped, base] : [scoped]
->>>>>>> upstream/main
         }
     }
 
@@ -530,14 +516,10 @@ struct ClaudeAuthStore: Sendable {
     }
 
     private func credentialsPath() -> String {
-<<<<<<< HEAD
         if case .configDir(let path, _) = scope {
             return "\(path)/\(Self.credentialFileName)"
         }
         return "\(claudeHomeOverride() ?? Self.defaultClaudeHome)/\(Self.credentialFileName)"
-=======
-        "\(claudeHomeOverride() ?? Self.defaultClaudeHome)/\(Self.credentialFileName)"
->>>>>>> upstream/main
     }
 
     private func envText(_ name: String) -> String? {
