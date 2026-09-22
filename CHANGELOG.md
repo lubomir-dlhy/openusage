@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.7.15
+
+### New Features
+- Discover Claude Swap and Codex Swap accounts with isolated usage tracking ([#1226](https://github.com/robinebers/openusage/pull/1226), [#1264](https://github.com/robinebers/openusage/pull/1264)) by @maddada
+- Add Muse Spark 1.3 effort-variant pricing ([#1244](https://github.com/robinebers/openusage/pull/1244)) by @validatedev
+
+### Bug Fixes
+- Read Claude subscription plans from Anthropic's live profile ([#1262](https://github.com/robinebers/openusage/pull/1262)) by @robinebers
+- Correctly attribute nested Claude workflow usage and reduce repeated session scans ([#1241](https://github.com/robinebers/openusage/pull/1241), [#1245](https://github.com/robinebers/openusage/pull/1245)) by @robinebers
+- Preserve Claude usage records with missing nested model information ([#1261](https://github.com/robinebers/openusage/pull/1261)) by @robinebers
+- Price Codex reserve usage at Luna rates ([#1247](https://github.com/robinebers/openusage/pull/1247)) by @robinebers
+- Correct Cursor Grok Bot pricing ([#1246](https://github.com/robinebers/openusage/pull/1246)) by @robinebers
+- Handle exhausted Devin weekly quotas when percentage data is omitted ([#1251](https://github.com/robinebers/openusage/pull/1251)) by @robinebers
+- Reconcile upstream account changes while preserving the fork's manual accounts, custom labels, icons, colors, and account isolation by @lubomir-dlhy
+
+### Chores
+- Update Sparkle and KeyboardShortcuts dependencies by @dependabot[bot]
+- Keep PostHog excluded from the fork by @lubomir-dlhy
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.14...v0.7.15](https://github.com/lubomir-dlhy/openusage/compare/v0.7.14...v0.7.15)
+
 ## v0.7.14
 
 ### New Features
