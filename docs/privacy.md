@@ -1,7 +1,40 @@
 # Privacy & Usage Data
 
+<<<<<<< HEAD
 OpenUsage does not include an analytics or crash-reporting SDK. It does not send activity pings,
 provider-refresh events, error reports, or crash reports to the OpenUsage maintainers.
+=======
+OpenUsage always sends an **anonymous daily active ping** and **anonymous crash reports** so we can
+count active users and fix app crashes. These are not optional.
+
+You can also share extra anonymous usage analytics to help us understand how the app is used and catch
+problems. Extra analytics is on by default for new installs. Turn it off any time in
+**Settings → Privacy → Help Make OpenUsage Better**. Existing
+installs keep the choice they already stored.
+
+## What is always shared
+
+Once per local day, OpenUsage sends an anonymous **app use** ping: that the app was active today, the
+app and macOS version, which providers and metrics you have enabled, and which metrics you've pinned
+to the menu bar or tucked behind the "show more" caret. A random ID (not tied to you or any account)
+lets us count daily active users without identifying anyone.
+
+- **Crash reports** — if OpenUsage crashes, it saves a report and sends it the next time you open the
+  app: the technical stack trace (which parts of *OpenUsage's own code* were running when it crashed)
+  plus the app and macOS version. This contains no account details, credentials, or usage values —
+  just where in the app the crash happened.
+
+## What the toggle shares
+
+When extra analytics are on, OpenUsage also sends, for each provider refreshed that day, at most one
+provider-refresh event:
+
+- **Provider refreshes** — per provider, how many refreshes succeeded or failed that day, the **kinds**
+  of errors that happened (for example "not logged in", "network", or an HTTP status group), and how
+  many manual refreshes you triggered.
+
+Turning the toggle off stops these extra events. Daily activity and crash reports continue.
+>>>>>>> upstream/main
 
 ## What is never shared
 
@@ -39,5 +72,23 @@ in this cache.
 
 If you explicitly turn on [iCloud Sync](icloud-sync.md), OpenUsage writes normalized daily tokens,
 spend, and model totals to its private iCloud container so your own Macs can show one combined summary.
+<<<<<<< HEAD
 Credentials, account limits, provider responses, and raw logs are never written there. iCloud Sync is
 off by default and uses your iCloud account.
+=======
+Credentials, account limits, provider responses, and raw logs are never written there. This is separate
+from anonymous usage analytics: iCloud Sync defaults off and uses your iCloud account, while the
+analytics toggle controls extra PostHog events, not daily activity or crash reports.
+
+## How it works
+
+- Data is fully anonymous: OpenUsage never identifies you to the analytics service and creates no user profile.
+- Daily activity and crash reports are always enabled, regardless of the extra-analytics switch.
+- Counts are rolled up locally and sent as daily summaries, so the app's normal 5-minute refresh never turns into a flood of network calls.
+- Your analytics choice and the anonymous ID are stored separately from the rest of the app's settings, so settings migrations and updates do not re-enable extra analytics or change your ID.
+
+## Turning extra analytics off
+
+Open **Settings → Privacy** and switch **Help Make OpenUsage Better**
+off. Extra usage analytics stop. Daily activity and crash reports continue.
+>>>>>>> upstream/main

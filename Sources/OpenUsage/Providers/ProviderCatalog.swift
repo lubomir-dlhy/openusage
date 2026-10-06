@@ -12,6 +12,7 @@ enum ProviderCatalog {
     static func make(
         defaults: UserDefaults = .standard,
         claudeCards: [ClaudeAccountCard] = [],
+<<<<<<< HEAD
         defaultClaudeExtraLogRoots: [URL] = [],
         defaultClaudeConfigDirs: [String] = [],
         codexCards: [CodexAccountCard] = [],
@@ -39,6 +40,9 @@ enum ProviderCatalog {
         defaultClaudeExtraLogRoots: [URL] = [],
         defaultClaudeConfigDirs: [String] = [],
         codexCards: [CodexAccountCard] = [],
+=======
+        codex: CodexAccountDiscovery = CodexAccountDiscovery(),
+>>>>>>> upstream/main
         claudeIdentityKeys: [String: String] = [:]
     ) -> [ProviderRuntime] {
         // Default provider order (see AGENTS.md "## Providers"): the three established providers first,
@@ -55,6 +59,7 @@ enum ProviderCatalog {
         if !organizationCards.isEmpty {
             automaticallyRepresentedConfigDirs += defaultClaudeConfigDirs
         }
+<<<<<<< HEAD
         let representedConfigDirs = Set(automaticallyRepresentedConfigDirs.map(canonicalConfigDir))
         let deduplicatedConfiguredClaude = configuredClaude.filter { account in
             guard !account.isDefault, let configDir = account.configDir else { return true }
@@ -84,6 +89,19 @@ enum ProviderCatalog {
             runtimes += accounts.accounts(for: "codex").map { CodexProvider(account: $0) }
         } else {
             runtimes += codexCards.map { card in
+=======
+        if codex.cards.isEmpty {
+            providers.append(CodexProvider(
+                authStore: CodexAuthStore(
+                    additionalAuthHomes: codex.plainAuthHomes,
+                    writableAuthHomes: Set(codex.plainWritableAuthHomes),
+                    piCredentialSources: codex.plainPiCredentialSources
+                ),
+                logUsageScanner: CodexLogUsageScanner(additionalHomes: codex.plainAuthHomes)
+            ))
+        } else {
+            providers += codex.cards.map { card in
+>>>>>>> upstream/main
                 CodexProvider(
                     account: ProviderAccount(
                         id: card.id,
@@ -94,12 +112,13 @@ enum ProviderCatalog {
                         colorHex: nil
                     ),
                     provider: CodexProvider.makeProvider(id: card.id, displayName: card.displayName),
-                    authStore: CodexAuthStore(expectedIdentity: card.identity, additionalAuthHomes: card.authHomes),
-                    logUsageScanner: CodexLogUsageScanner(
-                        allowsUnattributedHistory: card.allowsUnattributedHistory,
-                        additionalHomes: card.logHomes
+                    authStore: CodexAuthStore(
+                        expectedIdentity: card.identity,
+                        additionalAuthHomes: card.authHomes,
+                        writableAuthHomes: Set(card.writableAuthHomes),
+                        piCredentialSources: card.piCredentialSources
                     ),
-                    allowsUnattributedHistory: card.allowsUnattributedHistory
+                    historyScope: .account(card.identity, codex.historyHomes, claimsPiUsage: card.claimsPiUsage)
                 )
             }
             let representedHomes = Set(codexCards.flatMap(\.authHomes).map(canonicalConfigDir))

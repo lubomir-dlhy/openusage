@@ -242,6 +242,23 @@ struct SettingsScreen: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
+<<<<<<< HEAD
+=======
+            row("Help Make OpenUsage Better") {
+                Toggle("", isOn: Binding(
+                    get: { container.telemetry.isEnabled },
+                    set: { container.telemetry.setEnabled($0) }
+                ))
+                .settingsSwitchStyle()
+            }
+            // Daily activity and crash reports are always on; the toggle only gates extra analytics.
+            Text("Share additional anonymous usage stats that tell the team where to improve.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+>>>>>>> upstream/main
         }
     }
 
@@ -252,9 +269,10 @@ struct SettingsScreen: View {
         // dev build and a bare `swift run`, with no feed, hide this).
         if updater.isActive {
             section("Updates") {
-                row("Update Automatically") {
+                row("Check Automatically") {
                     Toggle("", isOn: $updater.automaticallyChecksForUpdates)
                         .settingsSwitchStyle()
+                        .hoverTooltip("Checks hourly and shows a banner when an update is available.")
                 }
                 row("Beta Updates") {
                     Toggle("", isOn: $updater.betaChannelEnabled)
