@@ -3,6 +3,7 @@ import Foundation
 struct CodexMappedUsage: Equatable, Sendable {
     var plan: String?
     var lines: [MetricLine]
+    var renewal: SubscriptionRenewal?
 }
 
 enum CodexUsageMapper {
@@ -43,6 +44,7 @@ enum CodexUsageMapper {
         // array, each entry reusing the primary/secondary window shape. Surfaced as their own Spark /
         // Spark Weekly meters (issue #796) — the JS edition had these; the Swift rewrite dropped them.
         lines.append(contentsOf: sparkLines(body: body, now: now))
+        lines.append(contentsOf: lunaReserveLines(body: body, now: now))
 
         // On-demand rate-limit reset credits, shown before Credits — mirrors the JS plugin (PR #577).
         // The row reads "2 available" (the count is carried raw, so the menu-bar tile reads the same
@@ -199,6 +201,26 @@ enum CodexUsageMapper {
         )
     }
 
+    /// Pro's Luna Reserve (`gpt-reserve`, serving `gpt-5.6-luna`): a separate weekly pool Codex falls back
+    /// to once the main Weekly limit is used up.
+    private static func lunaReserveLines(body: [String: Any], now: Date) -> [MetricLine] {
+        guard let rawEntries = body["additional_rate_limits"] as? [Any],
+              let reserve = rawEntries.compactMap({ $0 as? [String: Any] }).first(where: isLunaReserveEntry),
+              let rateLimit = reserve["rate_limit"] as? [String: Any]
+        else { return [] }
+        return classifiedWindowLines(
+            rateLimit: rateLimit,
+            labels: (session: "Luna Reserve Session", weekly: "Luna Reserve"),
+            now: now
+        )
+    }
+
+    private static func isLunaReserveEntry(_ entry: [String: Any]) -> Bool {
+        let name = (entry["limit_name"] as? String)?.lowercased() ?? ""
+        let model = (entry["normal_model_slug"] as? String)?.lowercased() ?? ""
+        return name.contains("reserve") || model.contains("luna")
+    }
+
     /// True when an `additional_rate_limits` entry is the Spark limit — matched on either `limit_name`
     /// ("GPT-5.3-Codex-Spark") or `metered_feature`, case-insensitively, so a wording change on either
     /// field still resolves it.
@@ -223,6 +245,27 @@ enum CodexUsageMapper {
         guard let window else { return nil }
         guard let seconds = ProviderParse.number(window["limit_window_seconds"]) else { return nil }
         return Int(seconds * 1000)
+    }
+
+    /// The ChatGPT subscription's current period end from the login's ID token claims. The claims are
+    /// only as fresh as the token: a lapsed `active_until` on a still-working login means it renewed
+    /// since, so the date rolls forward by the period length (yearly when the last period ran over
+    /// 300 days, else monthly) and is marked estimated.
+    static func renewal(auth: CodexAuth, now: Date) -> SubscriptionRenewal? {
+        let claims = [auth.tokens?.idToken, auth.tokens?.accessToken]
+            .compactMap { $0.flatMap(ProviderParse.jwtPayload)?["https://api.openai.com/auth"] as? [String: Any] }
+        let periods: [(start: Date?, until: Date)] = claims.compactMap { claim in
+            guard let until = (claim["chatgpt_subscription_active_until"] as? String).flatMap(OpenUsageISO8601.date(from:))
+            else { return nil }
+            return ((claim["chatgpt_subscription_active_start"] as? String).flatMap(OpenUsageISO8601.date(from:)), until)
+        }
+        guard let latest = periods.max(by: { $0.until < $1.until }) else { return nil }
+        if latest.until > now { return SubscriptionRenewal(date: latest.until, estimated: false) }
+        let yearly = latest.start.map { latest.until.timeIntervalSince($0) > 300 * 86_400 } ?? false
+        guard let next = SubscriptionRenewal.next(anchor: latest.until, months: yearly ? 12 : 1, after: now) else {
+            return nil
+        }
+        return SubscriptionRenewal(date: next, estimated: true)
     }
 
     /// Codex flex credits as raw values: the floored credit count and its dollar value (count × 4¢),
@@ -322,9 +365,11 @@ enum CodexUsageMapper {
         }
         switch raw.lowercased() {
         case "prolite":
-            return "Pro 5x"
+            return "Pro 100"
         case "pro":
-            return "Pro 20x"
+            return "Pro 200"
+        case "promax":
+            return "Pro 500"
         case "self_serve_business_prolite":
             return "Business Premium"
         default:

@@ -86,6 +86,13 @@ enum Formatters {
     /// Compact "Xd Yh" / "Xh Ym" / "Xm" duration. At the day scale it always shows two units — the
     /// hours ride along even when zero ("4d 0h") — so a span 4 days + 52 min out never reads as a flat
     /// "4d" that hides the sub-day remainder. Minutes are dropped at the day scale.
+    /// Time until a reset expires: whole days from a week out ("14d"), else `compactDuration` ("3d 5h").
+    static func expiryCountdown(_ seconds: TimeInterval) -> String? {
+        guard seconds.isFinite, seconds > 0 else { return nil }
+        if seconds >= 7 * 86_400 { return "\(Int(seconds / 86_400))d" }
+        return compactDuration(seconds)
+    }
+
     static func compactDuration(_ seconds: TimeInterval) -> String? {
         guard seconds.isFinite, seconds > 0 else { return nil }
         let totalMinutes = max(1, Int((seconds / 60).rounded(.up)))

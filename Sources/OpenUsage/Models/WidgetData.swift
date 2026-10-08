@@ -39,6 +39,8 @@ struct WidgetData: Hashable {
     /// state when none are available) and lights up like the spend rows — so it stays reachable even
     /// at "0 available", where `expiriesAt` is empty. Off for every other row.
     var showsResetExpiries: Bool = false
+    /// Balance rows (Codex credits) print every digit on the row instead of the abbreviated "62.5K".
+    var showsFullValues: Bool = false
     /// Names of models this period's spend used that have no known price. Their usage is excluded
     /// unless a fallback estimate is enabled; either way the missing-price warning stays visible.
     /// Drives the label warning triangle and its hover list. Empty for every other row.
@@ -77,23 +79,25 @@ struct WidgetData: Hashable {
     /// Rate Limit Resets → "2 resets"). Set by the descriptor, so renaming the tile can't silently drop
     /// the suffix — replaces matching on the tile's title. `nil` for tiles that show the bare value.
     var traySuffix: String?
-    /// Session-window meters (Claude/Antigravity/OpenCode rolling 5-hour pools) that read "Not started"
-    /// while the window hasn't begun — the value names the signal that detects that state, because the
-    /// providers report fresh windows differently (see `SessionStartSignal`). Set by those descriptors
-    /// and carried through `WidgetDataStore.resolve`, so the treatment is a descriptor opt-in rather
-    /// than a hardcoded widget-ID list in the model. `nil` for every other row.
+    /// Session-window meters (Claude/OpenCode rolling 5-hour pools, Antigravity's pools) that read
+    /// "Not started" while the window hasn't begun — the value names the signal that detects that state,
+    /// because the providers report fresh windows differently (see `SessionStartSignal`). Set by those
+    /// descriptors and carried through `WidgetDataStore.resolve`, so the treatment is a descriptor
+    /// opt-in rather than a hardcoded widget-ID list in the model. `nil` for every other row.
     var sessionStartSignal: SessionStartSignal?
 
     /// How a session-window meter tells a not-yet-started window from an in-flight one.
     enum SessionStartSignal: Hashable {
-        /// Zero usage is the fresh signal. These providers report a reset instant even for an
-        /// untouched window (Antigravity's mapper rounds a fresh pool's fraction-derived percent
-        /// to 0; OpenCode reports 0 directly), so `used == 0` is what marks the window as fresh.
+        /// Zero usage is the fresh signal. Antigravity reports a reset instant even for an untouched
+        /// window and its mapper rounds the fresh pool's fraction-derived percent to 0, so `used == 0`
+        /// is what marks the window as fresh.
         case zeroUsage
-        /// A missing reset date is the fresh signal. Claude's five-hour block only exists once the
-        /// first message is sent, so a reported `resets_at` proves the window started. Zero usage is
-        /// NOT trusted here: Claude reports utilization in whole percents, so an in-flight window
-        /// under 1% also reads 0 (#1160) — the reset date is what tells the two apart.
+        /// A missing reset date is the fresh signal: by the time a row carries one, a reset instant
+        /// means the window started. Claude's five-hour block is created by the first message, so it
+        /// simply reports no `resets_at` until then; OpenCode does report a placeholder for an untouched
+        /// window, which `OpenCodeUsageMapper` drops at capture time. Zero usage is NOT trusted here:
+        /// both APIs report utilization in whole percents, so an in-flight window under 1% also reads
+        /// 0 (#1160) — the reset date is what tells the two apart.
         case missingResetDate
     }
     /// Per-day points for a Usage Trend row (empty for every other tile). Set true `isChart` flags the
@@ -315,6 +319,8 @@ struct WidgetData: Hashable {
     /// Right-aligned descriptive line for an unbounded row (no bar): just "<value> <word>". The word is
     /// `unboundedValueWord` when set (extras always read "1,503 left", spend rows "$12.34 spent");
     /// otherwise it falls back to the global left/used mode word.
+    private var rowStyle: MetricFormatter.Style { showsFullValues ? .full : .row }
+
     var unboundedDetail: String {
         guard hasData else { return Self.noDataSubtitle }
         if let valueTextOverride { return valueTextOverride }
@@ -326,11 +332,11 @@ struct WidgetData: Hashable {
             if selected.count == 1 {
                 let value = selected[0]
                 if value.kind == .dollars, let word = unboundedValueWord {
-                    return "\(MetricFormatter.number(value.number, kind: .dollars, style: .row)) \(word)"
+                    return "\(MetricFormatter.number(value.number, kind: .dollars, style: rowStyle)) \(word)"
                 }
-                return MetricFormatter.string(for: value, style: .row)
+                return MetricFormatter.string(for: value, style: rowStyle)
             }
-            return selected.map { MetricFormatter.string(for: $0, style: .row) }.joined(separator: " · ")
+            return selected.map { MetricFormatter.string(for: $0, style: rowStyle) }.joined(separator: " · ")
         }
         // Fallback for an unbounded row without typed values: "<value> <suffix> <word>".
         let word = unboundedValueWord ?? displayMode.label.lowercased()

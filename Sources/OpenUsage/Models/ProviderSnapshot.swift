@@ -9,6 +9,7 @@ struct ProviderSnapshot: Hashable, Sendable, Codable {
     /// renames without persisting them.
     var displayName: String
     var plan: String?
+    var renewal: SubscriptionRenewal?
     var lines: [MetricLine]
     var refreshedAt: Date
     /// Raw normalized daily history used to build spend rows. This always belongs to this Mac; peer
@@ -28,6 +29,7 @@ struct ProviderSnapshot: Hashable, Sendable, Codable {
         providerID: String,
         displayName: String,
         plan: String? = nil,
+        renewal: SubscriptionRenewal? = nil,
         lines: [MetricLine],
         refreshedAt: Date = Date(),
         usageHistory: ProviderUsageHistory? = nil,
@@ -37,6 +39,7 @@ struct ProviderSnapshot: Hashable, Sendable, Codable {
         self.providerID = providerID
         self.displayName = displayName
         self.plan = plan
+        self.renewal = renewal
         self.lines = lines
         self.refreshedAt = refreshedAt
         self.usageHistory = usageHistory
@@ -54,6 +57,7 @@ struct ProviderSnapshot: Hashable, Sendable, Codable {
     static func make(
         provider: Provider,
         plan: String?,
+        renewal: SubscriptionRenewal? = nil,
         lines: [MetricLine],
         refreshedAt: Date,
         usageHistory: ProviderUsageHistory? = nil,
@@ -63,6 +67,7 @@ struct ProviderSnapshot: Hashable, Sendable, Codable {
             providerID: provider.id,
             displayName: provider.displayName,
             plan: plan,
+            renewal: renewal,
             lines: lines,
             refreshedAt: refreshedAt,
             usageHistory: usageHistory,

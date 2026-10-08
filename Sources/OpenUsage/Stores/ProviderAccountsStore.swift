@@ -46,6 +46,8 @@ struct ProviderAccountSource: Codable, Equatable, Sendable {
         case configDir
         case claudeSwap
         case codexSwap
+        case codexHome
+        case pi
     }
 
     var kind: Kind

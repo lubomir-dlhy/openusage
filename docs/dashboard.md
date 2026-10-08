@@ -14,6 +14,25 @@ When you expand a card, the tucked-away metrics open below the caret as a single
 
 A provider card can also show **quick-link buttons** pinned at the bottom of its expanded section — Status, Console, Dashboard, and the like — that open the provider's own pages in your default browser. They're part of the expander, so collapsing the caret hides them along with the tucked-away metrics. Buttons lay out up to three across, wrapping to a second row when there are more.
 
+## Several accounts of one provider
+
+In **Compact** density, a provider with two or more accounts (say three Claude logins) shows as one
+card instead of one card per account. Each account is a row; the limits its accounts share (Session,
+Weekly, Fable, and Credits for Claude; Weekly, Luna Reserve, and Credits for Codex) become columns, up to four.
+Credits always get a column, even when you've tucked them behind the caret. The card's header adds up
+the last-30-days spend of all its accounts (`30d $9.4K`); hover it for the per-account split. Under each
+account's name you'll see its plan and last-30-days spend, and up to two small tags: 💳 with the
+renewal date (`💳 25 Oct`) and ↻ with how many limit resets the account has and when the first
+expires (`↻ 2 · 29 Oct`). The ↻ icon turns yellow when that reset expires within a week and red
+within 48 hours. Hover a tag for the details: the full renewal date, how far away it is, and whether
+it's an estimate; or every reset with its exact expiry time and countdown.
+
+Anything that may be cut off has a tooltip: hover an account name for the full name and login, the
+plan line for exact spend, and a cell for the full reading and reset time. Click an account row to unfold its full card (usage trend, spend, links); click the
+provider's header to open or close all of them. Right-click a row for the usual Hide, Refresh,
+Rename, and Customize actions, and drag rows to reorder accounts. Default density keeps one card per
+account.
+
 ## Total Spend
 
 When any enabled provider tracks daily spend (Claude, Codex, Cursor, Grok, or OpenCode), a card sits above the provider sections. The title is a pull-down menu for **Cost**, **Cost/MTok**, or **Tokens** (Cost is the default; the choice sticks across restarts). A capsule switcher flips the period between **Today**, **Yesterday**, and **30 Days**. The ring, center total, and ranked legend follow the selected metric:
@@ -65,7 +84,7 @@ The image is a flexible-height PNG using the app's look — the provider's mark 
 
 ## Footer
 
-The bar pinned to the bottom of the popover. On the left: the app version, and a live "Next update in …" countdown you can click (or press **⌘R**) to refresh right away. On the right: an **Options** menu button. It holds everything in one place — **Customize**, **Settings**, **Share Screenshot** (submenu of providers), **Check for Updates…**, **About OpenUsage**, and **Quit OpenUsage**.
+The bar pinned to the bottom of the popover. On the left: the app version, and a live "Next update in …" countdown you can click (or press **⌘R**) to refresh right away. On the right: an **Options** menu button. It holds everything in one place — **Customize**, **Settings**, **Share Screenshot** (submenu of providers), **Check for Updates…**, **Report an Issue…**, **About OpenUsage**, and **Quit OpenUsage**. **Report an Issue…** opens GitHub's issue chooser in your browser.
 
 ## Customize
 

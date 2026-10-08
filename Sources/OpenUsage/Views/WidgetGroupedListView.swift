@@ -10,20 +10,20 @@ import SwiftUI
 /// obvious place to do the same plus toggle metrics on/off. Both surfaces use the same local gesture/geometry
 /// helper so they work inside the menu-bar popover without a system drag/drop session.
 struct WidgetGroupedListView: View {
-    @Environment(AppContainer.self) private var container
-    @Environment(LayoutStore.self) private var layout
-    @Environment(WidgetDataStore.self) private var dataStore
+    @Environment(AppContainer.self) var container
+    @Environment(LayoutStore.self) var layout
+    @Environment(WidgetDataStore.self) var dataStore
     @Environment(\.colorScheme) private var colorScheme
     let reorderSpaceName: String
     @Binding var reorderLift: ReorderLift?
 
     @State private var frameStore = ReorderFrameStore()
-    @State private var activeProviderID: String?
+    @State var activeProviderID: String?
     @State private var activeMetricID: String?
     /// The card the "Rename…" alert is currently editing; `nil` when the alert is closed.
     @State private var renameCardID: String?
     @State private var renameDraft = ""
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @AppStorage(DensitySetting.key) var density = DensitySetting.regular
 
     @Environment(\.codexResetClaims) private var codexResetClaims
 
@@ -31,8 +31,13 @@ struct WidgetGroupedListView: View {
         // Provider-section spacing is noticeably wider than the in-card row rhythm (so groups
         // still read as groups); the exact step comes from the density setting.
         VStack(alignment: .leading, spacing: density.sectionSpacing) {
-            ForEach(layout.displayGroups) { group in
-                section(group)
+            ForEach(dashboardSections) { item in
+                switch item {
+                case .provider(let group):
+                    section(group)
+                case .accounts(let family, let groups):
+                    accountsSection(family: family, groups: groups)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,35 +85,38 @@ struct WidgetGroupedListView: View {
         // Keep the provider mark and hover-revealed copy control aligned with the card's content edges.
         .padding(.horizontal, 8)
         .highPriorityGesture(providerDragGesture(for: group))
-        .contextMenu {
-            let name = container.displayName(for: group.provider)
-            // Hides the whole provider section (the Customize provider list brings it back). Mirrors
-            // the per-metric "Hide" but one level up, so the verb order reads the same on a header as a row.
-            Button("Hide \(name)") {
-                container.enablement.setEnabled(false, for: group.provider.id)
-            }
-            Divider()
-            Button("Refresh \(name)") {
-                Task { await dataStore.refresh(providerID: group.provider.id, force: true) }
-            }
-            // Renaming needs an account record to write to, so it only shows on account-model cards
-            // whose identity has been observed at least once.
-            if container.canRename(group.provider.id) {
-                Button("Rename…") {
-                    // Seed with the STORED rename (empty when none), not the derived title —
-                    // confirming an untouched field must stay "no rename", not freeze the derived
-                    // name into a custom label that future account-label updates can't refresh.
-                    renameDraft = container.accounts.records
-                        .first { $0.id == group.provider.id }?.customLabel ?? ""
-                    renameCardID = group.provider.id
-                }
-            }
-            Button("Customize…") {
-                openCustomize(for: group.provider.id)
-            }
-            Divider()
-            Button("Share Screenshot") { _ = shareCard(group) }
+        .contextMenu { providerMenu(group) }
+    }
+
+    @ViewBuilder
+    func providerMenu(_ group: ProviderGroup) -> some View {
+        let name = container.displayName(for: group.provider)
+        // Hides the whole provider section (the Customize provider list brings it back). Mirrors
+        // the per-metric "Hide" but one level up, so the verb order reads the same on a header as a row.
+        Button("Hide \(name)") {
+            container.enablement.setEnabled(false, for: group.provider.id)
         }
+        Divider()
+        Button("Refresh \(name)") {
+            Task { await dataStore.refresh(providerID: group.provider.id, force: true) }
+        }
+        // Renaming needs an account record to write to, so it only shows on account-model cards
+        // whose identity has been observed at least once.
+        if container.canRename(group.provider.id) {
+            Button("Rename…") {
+                // Seed with the STORED rename (empty when none), not the derived title —
+                // confirming an untouched field must stay "no rename", not freeze the derived
+                // name into a custom label that future account-label updates can't refresh.
+                renameDraft = container.accounts.records
+                    .first { $0.id == group.provider.id }?.customLabel ?? ""
+                renameCardID = group.provider.id
+            }
+        }
+        Button("Customize…") {
+            openCustomize(for: group.provider.id)
+        }
+        Divider()
+        Button("Share Screenshot") { _ = shareCard(group) }
     }
 
     /// Renders the provider's branded share card and copies the PNG to the clipboard. The appearance is
@@ -130,7 +138,7 @@ struct WidgetGroupedListView: View {
     /// A row's placed widget paired with its resolved descriptor + data, so each `dataStore.data(for:)`
     /// is computed once per render and reused by both the condensing rule and the row. Keyed off the
     /// `PlacedWidget` so `ForEach` identity stays exactly what it was before this was precomputed.
-    private struct ResolvedRow: Identifiable {
+    struct ResolvedRow: Identifiable {
         let widget: PlacedWidget
         let descriptor: WidgetDescriptor
         let data: WidgetData
@@ -205,7 +213,7 @@ struct WidgetGroupedListView: View {
     /// Resolve placed widgets to rows. `hideEmpty` (Compact) drops rows with no data at all (e.g.
     /// "Extra Usage — No data", an empty spend tile) to reclaim space; a meter that carries a value —
     /// including a fresh "Not started" 0% window — still has data and stays.
-    private func resolvedRows(_ widgets: [PlacedWidget], hideEmpty: Bool) -> [ResolvedRow] {
+    func resolvedRows(_ widgets: [PlacedWidget], hideEmpty: Bool) -> [ResolvedRow] {
         widgets.compactMap { widget -> ResolvedRow? in
             guard let descriptor = layout.descriptor(for: widget) else { return nil }
             let data = dataStore.data(for: descriptor)
@@ -273,7 +281,7 @@ struct WidgetGroupedListView: View {
         return Set(offsets.map { rows[$0].descriptor.id })
     }
 
-    private func row(_ descriptor: WidgetDescriptor, data: WidgetData, in providerID: String,
+    func row(_ descriptor: WidgetDescriptor, data: WidgetData, in providerID: String,
                      condensedTop: Bool) -> some View {
         return WidgetRowView(
             data: data,
@@ -327,7 +335,7 @@ struct WidgetGroupedListView: View {
         }
     }
 
-    private func providerDragGesture(for group: ProviderGroup) -> some Gesture {
+    func providerDragGesture(for group: ProviderGroup) -> some Gesture {
         reorderDragGesture(
             id: group.provider.id,
             coordinateSpaceName: reorderSpaceName,

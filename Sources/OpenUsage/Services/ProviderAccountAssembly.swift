@@ -72,7 +72,8 @@ struct ProviderAccountAssembly {
     var claudeCards: [ClaudeAccountCard] = []
     var defaultClaudeExtraLogRoots: [URL] = []
     var defaultClaudeConfigDirs: [String] = []
-    var codexCards: [CodexAccountCard] = []
+    var codex = CodexAccountDiscovery()
+    var codexCards: [CodexAccountCard] { codex.cards }
 
     /// `waitsForLoginShell`: true for the menu-bar app (a Finder/Dock launch inherits no shell
     /// exports, so the pass leans on the login-shell layers), false for the one-shot CLI (a terminal
@@ -129,6 +130,7 @@ struct ProviderAccountAssembly {
         accountsStore: ProviderAccountsStore,
         families: Set<String> = ProviderAccountID.families,
         claudeDiscovery: ClaudeConfigDirDiscovery? = nil,
+        listCodexHomeDirectories: @escaping @Sendable (String) -> [String] = CodexHomeScanner.listSubdirectories,
         desktop: ClaudeDesktopAuthStore? = nil,
         listDesktopOrganizationDirectories: @escaping @Sendable (URL) -> [String] = { root in
             let urls = (try? FileManager.default.contentsOfDirectory(
@@ -143,8 +145,11 @@ struct ProviderAccountAssembly {
             }
         }
     ) async -> ProviderAccountAssembly {
-        let codexCards = families.contains("codex")
-            ? await makeCodexCards(observer: observer, accountsStore: accountsStore) : []
+        let codex = families.contains("codex")
+            ? await makeCodexCards(observer: observer, accountsStore: accountsStore,
+                                   listDirectories: listCodexHomeDirectories)
+            : CodexAccountDiscovery()
+        let codexCards = codex.cards
         var identityKeys = Dictionary(uniqueKeysWithValues: codexCards.map { ($0.id, $0.identity.key) })
         var observations: [ProviderAccountsStore.AccountObservation] = []
 
@@ -251,7 +256,7 @@ struct ProviderAccountAssembly {
 
         guard families.contains("claude") else {
             accountsStore.reconcile(with: observations)
-            return ProviderAccountAssembly(identityKeysByCard: identityKeys, codexCards: codexCards)
+            return ProviderAccountAssembly(identityKeysByCard: identityKeys, codex: codex)
         }
 
         let swapAccounts = ClaudeSwapAccount.discover(files: observer.files, home: observer.homeDirectory())
@@ -289,7 +294,7 @@ struct ProviderAccountAssembly {
                 claudeCards: cards,
                 defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
                 defaultClaudeConfigDirs: defaultClaudeConfigDirs,
-                codexCards: codexCards
+                codex: codex
             )
         }
 
@@ -400,7 +405,7 @@ struct ProviderAccountAssembly {
             claudeCards: cards,
             defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
             defaultClaudeConfigDirs: defaultClaudeConfigDirs,
-            codexCards: codexCards
+            codex: codex
         )
     }
 

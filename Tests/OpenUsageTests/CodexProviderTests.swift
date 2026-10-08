@@ -187,21 +187,6 @@ final class CodexUsageMapperTests: XCTestCase {
         XCTAssertEqual(progress(mapped.lines, "Weekly")?.periodDurationMs, CodexUsageMapper.weeklyPeriodMs)
     }
 
-    func testPlanNamesPreserveOtherPlansAndUnknownEntitlements() {
-        let cases = [
-            ("prolite", "Pro 5x"),
-            ("pro", "Pro 20x"),
-            ("team", "Team"),
-            ("business", "Business"),
-            ("self_serve_business", "Self Serve Business"),
-            ("self_serve_business_prolite_future", "Self Serve Business Prolite Future"),
-            ("future_plan", "Future Plan")
-        ]
-        for (raw, expected) in cases {
-            XCTAssertEqual(CodexUsageMapper.formatCodexPlan(raw), expected, raw)
-        }
-    }
-
     func testUnknownWindowDurationKeepsPositionalFallback() throws {
         let body = Data("""
         {
@@ -244,7 +229,7 @@ final class CodexUsageMapperTests: XCTestCase {
             now: Date(timeIntervalSince1970: 1_800_000_000)
         )
 
-        XCTAssertEqual(mapped.plan, "Pro 5x")
+        XCTAssertEqual(mapped.plan, "Pro 100")
         XCTAssertEqual(progress(mapped.lines, "Session")?.used, 10)
         XCTAssertEqual(progress(mapped.lines, "Weekly")?.used, 20)
         // Credits lead with the dollar value (4¢/credit), then the raw count — no inverted fake cap.
@@ -550,6 +535,38 @@ final class CodexUsageMapperTests: XCTestCase {
 
 @MainActor
 final class CodexProviderTests: XCTestCase {
+    func testLiveQuotaReturnsWhileLocalHistoryIsStillRunning() async throws {
+        let home = try CodexLogFixture.makeHome(files: [:])
+        let provider = CodexProvider.isolated(
+            localHistoryWait: .zero,
+            authStore: CodexAuthStore(
+                environment: FakeEnvironment(["CODEX_HOME": "/tmp/codex-fixture"]),
+                files: FakeFiles(["/tmp/codex-fixture/auth.json": #"{"tokens":{"access_token":"fixture"}}"#]),
+                keychain: FakeKeychain()
+            ),
+            usageClient: CodexUsageClient(http: FakeHTTPClient(response: HTTPResponse(
+                statusCode: 200, headers: [:],
+                body: Data(#"{"rate_limit":{"secondary_window":{"used_percent":58,"limit_window_seconds":604800,"reset_after_seconds":3600}}}"#.utf8)
+            ))),
+            logUsageScanner: CodexLogFixture.scanner(home: home),
+            now: { Date(timeIntervalSince1970: 4_075_747_200) },
+            pricing: {
+                try? await Task.sleep(for: .milliseconds(100))
+                return ModelPricing(supplement: PricingSupplement(), primary: PricingCatalog(entries: [:]), secondary: PricingCatalog(entries: [:]))
+            }
+        )
+        let snapshot = await provider.refresh()
+        XCTAssertNil(snapshot.errorCategory)
+        XCTAssertNotNil(snapshot.warning)
+        XCTAssertNil(snapshot.usageHistory)
+        guard case .progress(_, let used, let limit, _, _, _, _) = snapshot.line(label: "Weekly") else {
+            return XCTFail("Live weekly quota was lost while local history was pending")
+        }
+        XCTAssertEqual(used, 58)
+        XCTAssertEqual(limit, 100)
+    }
+
+
     func testNoUsageDataBadgeIsDroppedWhenLocalLogsHaveSpend() async throws {
         let now = OpenUsageISO8601.date(from: "2026-02-20T14:30:00.000Z")!
         // The live usage API returns nothing mappable (empty body -> no metric lines)...
@@ -563,7 +580,7 @@ final class CodexProviderTests: XCTestCase {
                 )
             ].joined(separator: "\n")
         ])
-        let provider = CodexProvider(
+        let provider = CodexProvider.isolated(
             authStore: CodexAuthStore(
                 environment: FakeEnvironment(["CODEX_HOME": "/tmp/codex-home"]),
                 files: FakeFiles(["/tmp/codex-home/auth.json": #"{"tokens":{"access_token":"token"}}"#]),
@@ -571,10 +588,6 @@ final class CodexProviderTests: XCTestCase {
             ),
             usageClient: CodexUsageClient(http: httpClient),
             logUsageScanner: CodexLogFixture.scanner(home: home),
-            // Assert the rollout scanner's own output: keep the unattributed sources out of the
-            // snapshot. Otherwise a developer machine with local OpenCode/pi Codex history folds that
-            // real spend in, and this assertion compares it against these fixture numbers.
-            allowsUnattributedHistory: false,
             now: { now },
             pricing: {
                 // 150 tokens -> $0.25 at these fixture rates: (100 x 1000 + 50 x 3000) / 1M.
@@ -615,10 +628,8 @@ final class CodexProviderTests: XCTestCase {
         )!.timeIntervalSince1970 * 1000)
         let openCodeRows = "[[\(milliseconds),0,150,\"gpt-test\",100,0,0,50,0,\"open-code-message\"]]"
         let openCodeScanner = OpenCodeCodexUsageScanner(
-            authStore: OpenCodeAuthStore(
-                files: FakeFiles(["/oc/auth.json": #"{"openai":{"type":"oauth","access":"token"}}"#]),
-                environment: FakeEnvironment(["OPENCODE_DATA_DIR": "/oc"]),
-                homeDirectory: { URL(fileURLWithPath: "/unused") }
+            authStore: openCodeAuthStore(
+                files: FakeFiles(["/oc/auth.json": #"{"openai":{"type":"oauth","access":"token"}}"#])
             ),
             sqlite: OpenCodeFakeSQLite(data: ["/oc/opencode.db": openCodeRows]),
             databasePaths: { ["/oc/opencode.db"] }
@@ -719,5 +730,14 @@ final class CodexUsageClientRefreshTests: XCTestCase {
         } catch {
             XCTFail("expected CodexAuthError.sessionExpired, got \(error)")
         }
+    }
+
+    @MainActor
+    func testCreditsRowShowsExactBalanceAndDollarValue() throws {
+        let descriptor = try XCTUnwrap(CodexProvider().widgetDescriptors.first { $0.id == "codex.credits" })
+        var data = descriptor.sample
+        data.values = CodexUsageMapper.creditValues(remaining: 62_497.6)
+        XCTAssertEqual(data.title, "Credits")
+        XCTAssertEqual(data.unboundedDetail, "$2,499.88 · 62,497 credits")
     }
 }
