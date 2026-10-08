@@ -27,7 +27,7 @@ enum DefaultLayout {
         "claude.session", "claude.weekly", "claude.fable", "claude.trend",
         "claude.extra", "claude.credits", "claude.rateLimitResets", "claude.today", "claude.yesterday", "claude.last30",
 
-        "codex.session", "codex.weekly", "codex.spark", "codex.sparkWeekly", "codex.trend",
+        "codex.session", "codex.weekly", "codex.lunaReserve", "codex.spark", "codex.sparkWeekly", "codex.trend",
         "codex.credits", "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30",
 
         "cursor.usage", "cursor.auto", "cursor.api", "cursor.grokBot", "cursor.trend",

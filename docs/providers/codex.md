@@ -9,6 +9,7 @@ Tracks your ChatGPT/Codex subscription limits using the login from the Codex CLI
 | Session | 5-hour rolling window usage |
 | Weekly | 7-day window usage |
 | Spark / Spark Weekly | GPT-5.3-Codex-Spark model limits — a 5-hour and a weekly window. Shown only when your account has the limit (otherwise "No data"), and tucked below the "show more" caret by default |
+| Luna Reserve | Pro's separate weekly pool for GPT-5.6 Luna that Codex switches to once Weekly is used up (`gpt-reserve` in `additional_rate_limits`); on and always visible by default, shown only on plans that have it |
 | Rate Limit Resets | On-demand rate-limit reset credits, shown as a count (e.g. `2 available`) with a colored dot for the soonest expiry; hover the value for a timeline of each credit's expiry |
 | Credits | Your ChatGPT credit balance with its USD equivalent at 4¢ per credit, every digit shown (e.g. `$2,499.88 · 62,497 credits`); always visible by default |
 | Today / Yesterday / Last 30 Days | Local spend, as cost, tokens, or both (see below) |

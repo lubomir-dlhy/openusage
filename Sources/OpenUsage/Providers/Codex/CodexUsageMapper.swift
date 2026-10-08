@@ -44,6 +44,7 @@ enum CodexUsageMapper {
         // array, each entry reusing the primary/secondary window shape. Surfaced as their own Spark /
         // Spark Weekly meters (issue #796) — the JS edition had these; the Swift rewrite dropped them.
         lines.append(contentsOf: sparkLines(body: body, now: now))
+        lines.append(contentsOf: lunaReserveLines(body: body, now: now))
 
         // On-demand rate-limit reset credits, shown before Credits — mirrors the JS plugin (PR #577).
         // The row reads "2 available" (the count is carried raw, so the menu-bar tile reads the same
@@ -198,6 +199,26 @@ enum CodexUsageMapper {
             labels: (session: "Spark", weekly: "Spark Weekly"),
             now: now
         )
+    }
+
+    /// Pro's Luna Reserve (`gpt-reserve`, serving `gpt-5.6-luna`): a separate weekly pool Codex falls back
+    /// to once the main Weekly limit is used up.
+    private static func lunaReserveLines(body: [String: Any], now: Date) -> [MetricLine] {
+        guard let rawEntries = body["additional_rate_limits"] as? [Any],
+              let reserve = rawEntries.compactMap({ $0 as? [String: Any] }).first(where: isLunaReserveEntry),
+              let rateLimit = reserve["rate_limit"] as? [String: Any]
+        else { return [] }
+        return classifiedWindowLines(
+            rateLimit: rateLimit,
+            labels: (session: "Luna Reserve Session", weekly: "Luna Reserve"),
+            now: now
+        )
+    }
+
+    private static func isLunaReserveEntry(_ entry: [String: Any]) -> Bool {
+        let name = (entry["limit_name"] as? String)?.lowercased() ?? ""
+        let model = (entry["normal_model_slug"] as? String)?.lowercased() ?? ""
+        return name.contains("reserve") || model.contains("luna")
     }
 
     /// True when an `additional_rate_limits` entry is the Spark limit — matched on either `limit_name`

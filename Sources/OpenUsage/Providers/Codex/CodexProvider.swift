@@ -69,6 +69,8 @@ final class CodexProvider: ProviderRuntime {
                 .exportingLimit("session", unit: "percent"),
             .percent(id: "\(provider.id).weekly", provider: provider, title: "Weekly")
                 .exportingLimit("weekly", unit: "percent"),
+            // Pro's Luna Reserve: the weekly pool Codex switches to once Weekly runs out.
+            .percent(id: "\(provider.id).lunaReserve", provider: provider, title: "Luna Reserve"),
             // Model-specific Spark limits (GPT-5.3-Codex-Spark), parsed from `additional_rate_limits`.
             // Declared right after Weekly so they group with the core rate-limit meters; seeded On
             // Demand (below the caret) and unpinned in `DefaultLayout`.
