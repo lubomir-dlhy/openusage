@@ -14,6 +14,23 @@ When you expand a card, the tucked-away metrics open below the caret as a single
 
 A provider card can also show **quick-link buttons** pinned at the bottom of its expanded section — Status, Console, Dashboard, and the like — that open the provider's own pages in your default browser. They're part of the expander, so collapsing the caret hides them along with the tucked-away metrics. Buttons lay out up to three across, wrapping to a second row when there are more.
 
+## Several accounts of one provider
+
+In **Compact** density, a provider with two or more accounts (say three Claude logins) shows as one
+card instead of one card per account. Each account is a row; the limits its accounts share (Session,
+Weekly, Fable for Claude; Weekly and Credits for Codex) become columns, up to three. Under each
+account's name you'll see its plan and last-30-days spend, and — when it has limit resets — how many
+and when the nearest one expires (`1 reset · expires in 14d`, `2 resets · next in 21d`). From a week
+out the countdown shows whole days; closer in it shows days and hours, then hours and minutes. The dot
+turns yellow within a week and red within 48 hours.
+
+Anything that may be cut off has a tooltip: hover an account name for the full name and login, the
+plan line for exact spend, a cell for the full reading and reset time, and the resets line for every
+expiry date. Click an account row to unfold its full card (usage trend, spend, links); click the
+provider's header to open or close all of them. Right-click a row for the usual Hide, Refresh,
+Rename, and Customize actions, and drag rows to reorder accounts. Default density keeps one card per
+account.
+
 ## Total Spend
 
 When any enabled provider tracks daily spend (Claude, Codex, Cursor, Grok, or OpenCode), a card sits above the provider sections. The title is a pull-down menu for **Cost**, **Cost/MTok**, or **Tokens** (Cost is the default; the choice sticks across restarts). A capsule switcher flips the period between **Today**, **Yesterday**, and **30 Days**. The ring, center total, and ranked legend follow the selected metric:
