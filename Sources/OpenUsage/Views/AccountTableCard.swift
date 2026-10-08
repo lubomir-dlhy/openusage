@@ -113,33 +113,30 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
     }
 
     private func accountRow(_ row: AccountTableRow, columns: [String], limitColumns: Set<String>) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .center, spacing: 10) {
-                AccountTableNameColumn(row: row)
-                    .frame(width: Self.nameWidth, alignment: .leading)
-                ForEach(columns, id: \.self) { title in
-                    AccountTableCell(entry: AccountTable.cell(for: title, in: row.entries), title: title)
-                        .frame(width: limitColumns.contains(title) ? nil : Self.balanceWidth, alignment: .leading)
-                        .frame(maxWidth: limitColumns.contains(title) ? .infinity : nil, alignment: .leading)
-                }
-                if columns.isEmpty { Spacer(minLength: 0) }
-            }
-            let resets = AccountTable.resets(in: row.entries)
-            if row.renewal != nil || resets != nil {
-                TimelineView(.periodic(from: .now, by: 30)) { context in
-                    HStack(spacing: 10) {
-                        if let renewal = row.renewal {
-                            AccountRenewalLabel(renewal: renewal, now: context.date)
-                        }
-                        if let resets {
-                            AccountResetsLine(resets: resets, now: context.date)
-                        }
-                        Spacer(minLength: 0)
+        // Renewal sits with the account (left); resets sit under that account's limits (right), so
+        // neither adds a line of its own.
+        HStack(alignment: .top, spacing: 10) {
+            AccountTableNameColumn(row: row)
+                .frame(width: Self.nameWidth, alignment: .leading)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .center, spacing: 10) {
+                    ForEach(columns, id: \.self) { title in
+                        AccountTableCell(entry: AccountTable.cell(for: title, in: row.entries), title: title)
+                            .frame(width: limitColumns.contains(title) ? nil : Self.balanceWidth, alignment: .leading)
+                            .frame(maxWidth: limitColumns.contains(title) ? .infinity : nil, alignment: .leading)
                     }
-                    .font(.system(size: 9.5))
-                    .lineLimit(1)
+                    if columns.isEmpty { Spacer(minLength: 0) }
+                }
+                if let resets = AccountTable.resets(in: row.entries) {
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        AccountResetsLine(resets: resets, now: context.date)
+                            .font(.system(size: 9.5))
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
+            .padding(.top, 2)
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
@@ -183,6 +180,13 @@ private struct AccountTableNameColumn: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .hoverTooltip(sublineTooltip)
+            }
+            if let renewal = row.renewal {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    AccountRenewalLabel(renewal: renewal, now: context.date)
+                        .font(.system(size: 9.5))
+                        .lineLimit(1)
+                }
             }
         }
     }
