@@ -167,6 +167,11 @@ profile response supplies the current plan and tier. Claude Code tokens refresh 
 itself. If a token is expired or revoked, OpenUsage retries with the next credential source before
 reporting an error.
 
+The same profile reports when the subscription started (`subscription_created_at`). Claude bills
+monthly on that day, so the renewal date in the multi-account table is projected from it and marked
+as an estimate. It only appears for active subscriptions paid through Stripe; Team and Enterprise
+organizations billed by invoice show none.
+
 The plan badge reads `GET https://api.anthropic.com/api/oauth/profile` (the organization's `rate_limit_tier`), because the plan Claude Code saves at sign-in never updates afterwards. To stay clear of Anthropic's rate limits, that lookup runs at most once per access token — after a usage fetch has succeeded — and cards bound to a specific account reuse the profile they already fetched to verify identity, so they make no extra request. Inference-only tokens skip it entirely.
 
 When the five-hour session window hasn't begun (the usage API reports no reset time), the Session row shows **Not started** on the trailing label; hover explains that the session begins after your first message. A reported reset time means the window is running, so the row always shows the countdown then — even when Anthropic's whole-percent numbers still read 0% because less than 1% has been used, which matches what Claude Code itself shows.

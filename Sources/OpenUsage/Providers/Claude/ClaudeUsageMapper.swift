@@ -2,6 +2,7 @@ import Foundation
 
 struct ClaudeMappedUsage: Equatable, Sendable {
     var plan: String?
+    var renewal: SubscriptionRenewal?
     var lines: [MetricLine]
     /// Provider header notice (amber triangle + tooltip) riding along with this usage, e.g. the
     /// rate-limited warning. `nil` for a clean fetch.
@@ -164,6 +165,19 @@ enum ClaudeUsageMapper {
             subscriptionType: subscriptionType ?? credentials.subscriptionType,
             rateLimitTier: organization.rateLimitTier ?? credentials.rateLimitTier
         )
+    }
+
+    /// The profile reports when the subscription started, not when it renews. Consumer plans bill
+    /// monthly on that day, so the next renewal is projected from it; always marked as an estimate.
+    /// Only active Stripe subscriptions qualify — invoiced and inactive organizations get no date.
+    static func renewal(profile: ClaudeAccountProfile, now: Date) -> SubscriptionRenewal? {
+        guard let organization = profile.organization,
+              organization.subscriptionStatus == "active",
+              organization.billingType == "stripe_subscription",
+              let anchor = resetDate(organization.subscriptionCreatedAt),
+              let date = SubscriptionRenewal.next(anchor: anchor, after: now)
+        else { return nil }
+        return SubscriptionRenewal(date: date, estimated: true)
     }
 
     private static func appendUsageWindow(_ value: Any?, label: String, periodDurationMs: Int, to lines: inout [MetricLine]) {

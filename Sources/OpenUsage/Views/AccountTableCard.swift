@@ -7,6 +7,7 @@ struct AccountTableRow: Identifiable {
     /// Full name for the hover tooltip; the row name truncates in its fixed column.
     let fullName: String
     let plan: String?
+    var renewal: SubscriptionRenewal?
     let entries: [AccountTable.Entry]
     let notice: String?
     let staleness: StalenessHint?
@@ -106,9 +107,20 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
                 }
                 if columns.isEmpty { Spacer(minLength: 0) }
             }
-            if let resets = AccountTable.resets(in: row.entries) {
+            let resets = AccountTable.resets(in: row.entries)
+            if row.renewal != nil || resets != nil {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
-                    AccountResetsLine(resets: resets, now: context.date)
+                    HStack(spacing: 10) {
+                        if let renewal = row.renewal {
+                            AccountRenewalLabel(renewal: renewal, now: context.date)
+                        }
+                        if let resets {
+                            AccountResetsLine(resets: resets, now: context.date)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .font(.system(size: 9.5))
+                    .lineLimit(1)
                 }
             }
         }
@@ -175,7 +187,34 @@ private struct AccountTableNameColumn: View {
     }
 }
 
-/// Full-width line under an account row: one entry per reset, each with its expiry date and countdown,
+/// "Renews 25 Oct (17d)" at the start of the line under an account row.
+private struct AccountRenewalLabel: View {
+    let renewal: SubscriptionRenewal
+    let now: Date
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "creditcard")
+                .font(.system(size: 8.5))
+                .foregroundStyle(.secondary)
+            Text("Renews").foregroundStyle(.secondary)
+            Text(renewal.date.formatted(.dateTime.month(.abbreviated).day()))
+                .foregroundStyle(.primary)
+            Text("(\(Formatters.expiryCountdown(renewal.date.timeIntervalSince(now)) ?? Formatters.imminent))")
+                .foregroundStyle(.tertiary)
+        }
+        .fixedSize()
+        .hoverTooltip(tooltip)
+    }
+
+    private var tooltip: String {
+        let line = "Subscription renews " + renewal.date.formatted(date: .long, time: .omitted)
+        guard renewal.estimated else { return line }
+        return line + "\nEstimated from the last billing date on record"
+    }
+}
+
+/// The resets part of the line under an account row: one entry per reset, each with its expiry date and countdown,
 /// e.g. "2 resets available · expire Oct 29 (21d) and Nov 7 (30d)".
 private struct AccountResetsLine: View {
     let resets: AccountTable.Resets
@@ -204,10 +243,7 @@ private struct AccountResetsLine: View {
                     Text("+\(resets.expiries.count - Self.shownExpiries) more").foregroundStyle(.tertiary)
                 }
             }
-            Spacer(minLength: 0)
         }
-        .font(.system(size: 9.5))
-        .lineLimit(1)
         .hoverTooltip(tooltip)
     }
 

@@ -648,6 +648,10 @@ final class WidgetDataStore {
         snapshots[providerID]?.plan
     }
 
+    func renewal(for providerID: String) -> SubscriptionRenewal? {
+        snapshots[providerID]?.renewal
+    }
+
     /// How long a displayed snapshot may age before the header calls it out. A healthy provider's
     /// snapshot resets to ~0 on every successful pass and only brushes one interval just before the next
     /// one, so the threshold sits at two intervals: it fires only when a refresh has actually been missed

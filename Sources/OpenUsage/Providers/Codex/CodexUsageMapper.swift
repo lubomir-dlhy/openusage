@@ -3,6 +3,7 @@ import Foundation
 struct CodexMappedUsage: Equatable, Sendable {
     var plan: String?
     var lines: [MetricLine]
+    var renewal: SubscriptionRenewal?
 }
 
 enum CodexUsageMapper {
@@ -223,6 +224,27 @@ enum CodexUsageMapper {
         guard let window else { return nil }
         guard let seconds = ProviderParse.number(window["limit_window_seconds"]) else { return nil }
         return Int(seconds * 1000)
+    }
+
+    /// The ChatGPT subscription's current period end from the login's ID token claims. The claims are
+    /// only as fresh as the token: a lapsed `active_until` on a still-working login means it renewed
+    /// since, so the date rolls forward by the period length (yearly when the last period ran over
+    /// 300 days, else monthly) and is marked estimated.
+    static func renewal(auth: CodexAuth, now: Date) -> SubscriptionRenewal? {
+        let claims = [auth.tokens?.idToken, auth.tokens?.accessToken]
+            .compactMap { $0.flatMap(ProviderParse.jwtPayload)?["https://api.openai.com/auth"] as? [String: Any] }
+        let periods: [(start: Date?, until: Date)] = claims.compactMap { claim in
+            guard let until = (claim["chatgpt_subscription_active_until"] as? String).flatMap(OpenUsageISO8601.date(from:))
+            else { return nil }
+            return ((claim["chatgpt_subscription_active_start"] as? String).flatMap(OpenUsageISO8601.date(from:)), until)
+        }
+        guard let latest = periods.max(by: { $0.until < $1.until }) else { return nil }
+        if latest.until > now { return SubscriptionRenewal(date: latest.until, estimated: false) }
+        let yearly = latest.start.map { latest.until.timeIntervalSince($0) > 300 * 86_400 } ?? false
+        guard let next = SubscriptionRenewal.next(anchor: latest.until, months: yearly ? 12 : 1, after: now) else {
+            return nil
+        }
+        return SubscriptionRenewal(date: next, estimated: true)
     }
 
     /// Codex flex credits as raw values: the floored credit count and its dollar value (count × 4¢),

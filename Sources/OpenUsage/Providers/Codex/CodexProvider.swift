@@ -180,7 +180,8 @@ final class CodexProvider: ProviderRuntime {
             accessToken: currentToken,
             accountID: authState.auth.tokens?.accountID
         )
-        let mapped = try CodexUsageMapper.mapUsageResponse(response, resetCredits: resetCredits, now: now())
+        var mapped = try CodexUsageMapper.mapUsageResponse(response, resetCredits: resetCredits, now: now())
+        mapped.renewal = CodexUsageMapper.renewal(auth: authState.auth, now: now())
 
         return await snapshot(mapped: mapped)
     }
@@ -219,7 +220,7 @@ final class CodexProvider: ProviderRuntime {
         // Pending history is not evidence of no usage. The store may restore last-good spend rows.
         if history != nil { MetricLine.appendNoDataIfNeeded(&mapped.lines) }
         return ProviderSnapshot.make(
-            provider: provider, plan: mapped.plan, lines: mapped.lines, refreshedAt: now(),
+            provider: provider, plan: mapped.plan, renewal: mapped.renewal, lines: mapped.lines, refreshedAt: now(),
             usageHistory: history?.usageHistory, warning: warning
         )
     }

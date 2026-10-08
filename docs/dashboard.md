@@ -20,8 +20,9 @@ In **Compact** density, a provider with two or more accounts (say three Claude l
 card instead of one card per account. Each account is a row; the limits its accounts share (Session,
 Weekly, Fable, and Usage Credits for Claude; Weekly and Credits for Codex) become columns, up to four.
 Credits always get a column, even when you've tucked them behind the caret. Under each
-account's name you'll see its plan and last-30-days spend. An account with limit resets gets one more
-line across the row listing each reset's expiry date with a countdown — `1 reset available · expires
+account's name you'll see its plan and last-30-days spend. A line across the row shows when the
+subscription renews (`Renews 25 Oct (17d)`; hover for the full date and whether it's an estimate) and,
+for an account with limit resets, lists each reset's expiry date with a countdown — `1 reset available · expires
 22 Oct (14d)`, or `2 resets available · expire 29 Oct (21d) and 6 Nov (29d)`; past two dates it adds
 `+N more`. From a week out the countdown shows whole days; closer in it shows days and hours, then
 hours and minutes, and turns yellow within a week and red within 48 hours. The reset icon takes the

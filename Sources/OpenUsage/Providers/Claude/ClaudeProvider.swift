@@ -52,6 +52,7 @@ final class ClaudeProvider: ProviderRuntime {
         var accessTokenFingerprint: Data
         /// `nil` when the lookup failed or the profile carried no organization; the stored plan is shown.
         var plan: String?
+        var profile: ClaudeAccountProfile?
     }
     private var livePlan: LivePlan?
 
@@ -392,6 +393,7 @@ final class ClaudeProvider: ProviderRuntime {
         return ProviderSnapshot.make(
             provider: provider,
             plan: mapped.plan,
+            renewal: mapped.renewal,
             lines: mapped.lines,
             refreshedAt: now(),
             usageHistory: usageHistory,
@@ -488,6 +490,7 @@ final class ClaudeProvider: ProviderRuntime {
         if let plan = await resolveLivePlan(credentials: working.oauth) {
             mapped.plan = plan
         }
+        mapped.renewal = cachedRenewal(for: working.oauth)
         lastGoodUsage = mapped
         rateLimitedUntil = nil
         pendingLaunchSnapshot = nil
@@ -568,6 +571,7 @@ final class ClaudeProvider: ProviderRuntime {
                     subscriptionType: credentials.subscriptionType,
                     rateLimitTier: credentials.rateLimitTier
                 ),
+            renewal: cachedRenewal(for: credentials) ?? snapshot.renewal,
             lines: lines
         )
     }
@@ -587,7 +591,7 @@ final class ClaudeProvider: ProviderRuntime {
             // A cancelled refresh is not a verdict on the endpoint; let the next refresh try again.
             guard !Task.isCancelled else { return nil }
             AppLog.warn(LogTag.plugin("claude"), "live plan lookup failed; showing the stored plan until the token rotates: \(error.localizedDescription)")
-            livePlan = LivePlan(accessTokenFingerprint: Self.accessTokenFingerprint(credentials), plan: nil)
+            livePlan = LivePlan(accessTokenFingerprint: Self.accessTokenFingerprint(credentials), plan: nil, profile: nil)
             return nil
         }
         return rememberLivePlan(from: profile, credentials: credentials)
@@ -599,8 +603,16 @@ final class ClaudeProvider: ProviderRuntime {
         if plan == nil {
             AppLog.info(LogTag.plugin("claude"), "live profile carries no organization plan; showing the stored plan")
         }
-        livePlan = LivePlan(accessTokenFingerprint: Self.accessTokenFingerprint(credentials), plan: plan)
+        livePlan = LivePlan(accessTokenFingerprint: Self.accessTokenFingerprint(credentials), plan: plan, profile: profile)
         return plan
+    }
+
+    /// Next renewal from the login's cached profile; recomputed each refresh so a passed date rolls on.
+    private func cachedRenewal(for credentials: ClaudeOAuth) -> SubscriptionRenewal? {
+        guard let livePlan, livePlan.accessTokenFingerprint == Self.accessTokenFingerprint(credentials),
+              let profile = livePlan.profile
+        else { return nil }
+        return ClaudeUsageMapper.renewal(profile: profile, now: now())
     }
 
     /// Cached live plan for the login, without making a request (the rate-limited paths use this).
@@ -625,8 +637,10 @@ final class ClaudeProvider: ProviderRuntime {
             if let plan = cachedLivePlan(for: credentials) {
                 mapped.plan = plan
             }
+            mapped.renewal = cachedRenewal(for: credentials)
             return mapped
         }
+        mapped.renewal = cachedRenewal(for: credentials) ?? mapped.renewal
         mapped.lines.append(ClaudeUsageMapper.rateLimitedNote(retryAfterSeconds: retryAfterSeconds))
         mapped.warning = ClaudeUsageMapper.rateLimitedWarning(retryAfterSeconds: retryAfterSeconds)
         return mapped

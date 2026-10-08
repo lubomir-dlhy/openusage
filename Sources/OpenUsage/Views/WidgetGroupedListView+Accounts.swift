@@ -75,6 +75,7 @@ extension WidgetGroupedListView {
             ),
             fullName: fullName.joined(separator: "\n"),
             plan: dataStore.plan(for: id),
+            renewal: dataStore.renewal(for: id),
             entries: entries,
             notice: dataStore.headerNotice(for: id),
             staleness: dataStore.stalenessHint(for: id),

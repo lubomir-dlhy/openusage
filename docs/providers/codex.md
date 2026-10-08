@@ -30,6 +30,13 @@ The Pro identifier mappings were verified against OpenAI's ChatGPT desktop app v
 Other Business/team plans keep their existing names; unfamiliar plan identifiers keep a readable name.
 If Codex reports only a 7-day window, it maps to Weekly without inventing a 5-hour Session meter.
 
+## Renewal date
+
+The ChatGPT login's ID token carries the current billing period (`chatgpt_subscription_active_until`).
+The multi-account table shows it as the renewal date. The token is only refreshed now and then, so when
+that date has already passed (the plan has renewed since), OpenUsage rolls it forward by the plan's
+billing period (monthly, or yearly for a period longer than 300 days) and marks it as an estimate.
+
 ## Where credentials come from
 
 Sign in once with the Codex CLI (`codex`); OpenUsage reads the same auth files (`$CODEX_HOME` respected) with a Keychain fallback. Tokens refresh automatically and rotate back into the same auth file or Keychain item they came from.

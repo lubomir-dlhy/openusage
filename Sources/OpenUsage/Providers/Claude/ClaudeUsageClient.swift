@@ -67,11 +67,17 @@ struct ClaudeAccountProfile: Decodable, Hashable, Sendable {
         var uuid: String
         var organizationType: String?
         var rateLimitTier: String?
+        var billingType: String?
+        var subscriptionStatus: String?
+        var subscriptionCreatedAt: String?
 
         enum CodingKeys: String, CodingKey {
             case uuid
             case organizationType = "organization_type"
             case rateLimitTier = "rate_limit_tier"
+            case billingType = "billing_type"
+            case subscriptionStatus = "subscription_status"
+            case subscriptionCreatedAt = "subscription_created_at"
         }
     }
 
