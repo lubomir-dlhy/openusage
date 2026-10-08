@@ -111,24 +111,19 @@ struct WidgetRowView: View {
         }
     }
 
-    /// Compact one-line meter: label · inline capsule bar · value + reset on a single row (the dense
-    /// "more on screen" mode). The bar flexes to fill between the fixed-width ends; the pace verdict is
-    /// carried by the bar color + tick and an inline flame when a limit is imminent, so the row stays
-    /// one line. Regular density keeps the roomy two-line treatment above.
+    /// Compact one-line meter: label · flexible bar · value + reset.
     private func compactBoundedRow(_ state: WidgetData.MeterState) -> some View {
-        // Two compact lines: label + value/reset on top, then a full-width progress bar. Denser than
-        // the three-line Regular row (label / bar / reading), but the bar keeps the whole width so it
-        // reads as a real progress indicator instead of a squeezed stub.
-        VStack(alignment: .leading, spacing: density.rowInnerSpacing) {
-            HStack(spacing: 6) {
-                Text(data.title)
-                    .font(labelFont)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
+        HStack(spacing: 8) {
+            Text(data.title)
+                .font(labelFont)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .frame(minWidth: Self.compactLabelWidth, alignment: .leading)
+                .fixedSize(horizontal: true, vertical: false)
+            meter(state)
+                .frame(minWidth: 40, maxWidth: .infinity)
+            HStack(spacing: 4) {
                 compactWarningGlyph(state)
-                // The value is the payload — full size + primary. The reset is quiet context: a step
-                // smaller/dimmer and prefix-free ("2d 15h").
                 headlineText
                     .font(supportingFont)
                 if data.compactTrailingText() != nil {
@@ -140,9 +135,14 @@ struct WidgetRowView: View {
                 }
             }
             .lineLimit(1)
-            meter(state)
+            .fixedSize(horizontal: true, vertical: false)
+            .frame(minWidth: Self.compactValueWidth, alignment: .trailing)
         }
     }
+
+    /// Minimum label and value columns, so the bars of a card's meters start and end on the same edges.
+    private static let compactLabelWidth: CGFloat = 58
+    private static let compactValueWidth: CGFloat = 112
 
     /// Compact trailing: the short reset ("2d 15h") with the same tap-to-flip toggle + tooltip as the
     /// roomy `trailingContext`, but rendered from `compactTrailingText` so it drops the "Resets in" prefix.

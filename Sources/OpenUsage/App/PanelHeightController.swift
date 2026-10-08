@@ -5,7 +5,7 @@ import AppKit
 /// AppKit.
 @MainActor
 final class PanelHeightController {
-    static let panelWidth: CGFloat = 340
+    static let panelWidth: CGFloat = 460
     static let defaultHeight: CGFloat = 800
 
     private let panel: MenuBarPanel
