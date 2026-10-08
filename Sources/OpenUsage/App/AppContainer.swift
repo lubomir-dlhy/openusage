@@ -90,7 +90,7 @@ final class AppContainer {
             claudeCards: accountAssembly.claudeCards,
             defaultClaudeExtraLogRoots: accountAssembly.defaultClaudeExtraLogRoots,
             defaultClaudeConfigDirs: accountAssembly.defaultClaudeConfigDirs,
-            codexCards: accountAssembly.codexCards,
+            codex: accountAssembly.codex,
             claudeIdentityKeys: accountAssembly.identityKeysByCard
         )
         let registry = WidgetRegistry.from(providers)

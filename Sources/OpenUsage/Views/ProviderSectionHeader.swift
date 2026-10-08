@@ -30,10 +30,12 @@ struct ProviderSectionHeader: View {
     @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
     /// Read for the live card name: a rename lands in the account registry and re-titles the header
     /// without a relaunch (the `Provider`'s own name is baked at launch).
-    @Environment(AppContainer.self) private var container
+    @Environment(AppContainer.self) private var container: AppContainer?
     /// Party easter egg: pulse the provider mark. Off by default everywhere else.
     @Environment(\.popoverPartyMode) private var partyMode
     @State private var isHovered = false
+
+    private var displayName: String { container?.displayName(for: provider) ?? provider.displayName }
 
     init(
         provider: Provider,
@@ -64,14 +66,14 @@ struct ProviderSectionHeader: View {
                 // Name + plan keep their width and stay on one line; under width pressure (a long plan
                 // name like "Super Grok Heavy") the lower-priority stale tag truncates first instead of
                 // wrapping the name to a second line.
-                Text(container.displayName(for: provider))
+                Text(displayName)
                     .font(.system(size: density.headerPointSize, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .layoutPriority(1)
                 if let plan {
                     ProviderPlanBadge(plan: plan)
-                        .layoutPriority(1)
+                        .layoutPriority(2)
                 }
                 // Tertiary, below the plan in hierarchy: outdated content, not something the user acts on.
                 // Short by design ("Outdated") so it never pushes the plan name onto a second line — the
@@ -99,7 +101,7 @@ struct ProviderSectionHeader: View {
             Spacer(minLength: 8)
             if let onCopyScreenshot {
                 CopyFeedbackButton(
-                    accessibilityLabel: "Copy \(container.displayName(for: provider)) Screenshot",
+                    accessibilityLabel: "Copy \(displayName) Screenshot",
                     isRevealed: isHovered,
                     action: onCopyScreenshot
                 )

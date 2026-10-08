@@ -118,7 +118,7 @@ final class PeerHistoryIdentityTests: XCTestCase {
             registry: registry,
             providers: [],
             cache: cache,
-            defaults: makeScratchDefaults("PublishDoc"),
+            defaults: peerScratchDefaults("PublishDoc"),
             providerIdentityKeys: ["claude": maxKey, "claude@f15456b0": teamKey]
         )
 
@@ -136,7 +136,7 @@ final class PeerHistoryIdentityTests: XCTestCase {
             registry: registry,
             providers: [],
             cache: scratchCache(),
-            defaults: makeScratchDefaults("RemoteTotal"),
+            defaults: peerScratchDefaults("RemoteTotal"),
             providerIdentityKeys: ["claude": maxKey]
         )
         let today = dayKey(Date())
@@ -168,7 +168,7 @@ final class PeerHistoryIdentityTests: XCTestCase {
             registry: makeRegistry(),
             providers: [],
             cache: scratchCache(),
-            defaults: makeScratchDefaults("ManyRemote"),
+            defaults: peerScratchDefaults("ManyRemote"),
             providerIdentityKeys: ["claude": maxKey]
         )
         let today = dayKey(Date())
@@ -198,7 +198,7 @@ final class PeerHistoryIdentityTests: XCTestCase {
             registry: makeRegistry(),
             providers: [],
             cache: scratchCache(),
-            defaults: makeScratchDefaults("ClearPeers"),
+            defaults: peerScratchDefaults("ClearPeers"),
             providerIdentityKeys: ["claude": maxKey]
         )
         let doc = makeDocument(
@@ -228,10 +228,10 @@ final class PeerHistoryIdentityTests: XCTestCase {
     }
 
     private func scratchCache() -> ProviderSnapshotCache {
-        ProviderSnapshotCache(userDefaults: makeScratchDefaults("Cache"), storageKey: "snapshots", ttl: 600)
+        ProviderSnapshotCache(userDefaults: peerScratchDefaults("Cache"), storageKey: "snapshots", ttl: 600)
     }
 
-    private func makeScratchDefaults(_ name: String) -> UserDefaults {
+    private func peerScratchDefaults(_ name: String) -> UserDefaults {
         let suiteName = "OpenUsageTests.PeerIdentity.\(name).\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
