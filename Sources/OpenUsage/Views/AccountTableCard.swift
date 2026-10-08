@@ -30,18 +30,22 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
     let rowGesture: (ProviderGroup) -> RowGesture
 
     private static var nameWidth: CGFloat { 138 }
+    /// Balance columns (credits) matter less than the limits, so they take a narrow fixed column and
+    /// the limit bars share the rest.
+    private static var balanceWidth: CGFloat { 72 }
 
     var body: some View {
         let columns = AccountTable.columns(rows.map(\.entries))
+        let limitColumns = Set(rows.flatMap(\.entries).filter(\.data.isBounded).map(\.data.title))
         let anyExpanded = rows.contains(where: \.isExpanded)
         VStack(alignment: .leading, spacing: 6) {
             header(expanded: anyExpanded)
             if !columns.isEmpty {
-                columnHeader(columns)
+                columnHeader(columns, limitColumns: limitColumns)
             }
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                 if index > 0 { Divider().opacity(0.5) }
-                accountRow(row, columns: columns)
+                accountRow(row, columns: columns, limitColumns: limitColumns)
                 if row.isExpanded {
                     let shown = Set(columns.compactMap { AccountTable.cell(for: $0, in: row.entries)?.id })
                     detail(row, shown)
@@ -75,7 +79,7 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
         .accessibilityLabel(expanded ? "Collapse all \(familyName) accounts" : "Expand all \(familyName) accounts")
     }
 
-    private func columnHeader(_ columns: [String]) -> some View {
+    private func columnHeader(_ columns: [String], limitColumns: Set<String>) -> some View {
         HStack(spacing: 10) {
             Color.clear.frame(width: Self.nameWidth, height: 1)
             ForEach(columns, id: \.self) { title in
@@ -83,20 +87,22 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
                     .font(.system(size: 9.5, weight: .medium))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(width: limitColumns.contains(title) ? nil : Self.balanceWidth, alignment: .leading)
+                    .frame(maxWidth: limitColumns.contains(title) ? .infinity : nil, alignment: .leading)
                     .hoverTooltip(title)
             }
         }
     }
 
-    private func accountRow(_ row: AccountTableRow, columns: [String]) -> some View {
+    private func accountRow(_ row: AccountTableRow, columns: [String], limitColumns: Set<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center, spacing: 10) {
                 AccountTableNameColumn(row: row)
                     .frame(width: Self.nameWidth, alignment: .leading)
                 ForEach(columns, id: \.self) { title in
                     AccountTableCell(entry: AccountTable.cell(for: title, in: row.entries), title: title)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(width: limitColumns.contains(title) ? nil : Self.balanceWidth, alignment: .leading)
+                        .frame(maxWidth: limitColumns.contains(title) ? .infinity : nil, alignment: .leading)
                 }
                 if columns.isEmpty { Spacer(minLength: 0) }
             }
@@ -284,13 +290,14 @@ private struct AccountTableCell: View {
     private func values(_ data: WidgetData) -> some View {
         let style: MetricFormatter.Style = data.showsFullValues ? .full : .row
         let selected = data.selectedValues
-        // A lone labelled value ("$0.00 used · off") splits so the amount keeps the bold line.
+        // A lone labelled value ("$0.00 used · off") splits so the amount keeps the first line.
         let parts = selected.count == 1 && selected[0].label != nil
             ? [MetricFormatter.number(selected[0].number, kind: selected[0].kind, style: style), selected[0].label ?? ""]
             : selected.map { MetricFormatter.string(for: $0, style: style) }
         return VStack(alignment: .leading, spacing: 1) {
             Text(parts.first ?? data.headline)
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
             if parts.count > 1 {
                 Text(parts.dropFirst().joined(separator: " · "))
