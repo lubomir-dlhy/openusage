@@ -17,13 +17,24 @@ final class AccountTableTests: XCTestCase {
         XCTAssertEqual(AccountTable.family(of: "codex@44de9546"), "codex")
     }
 
-    func testColumnsAreTheUnionOfAlwaysVisibleLimitsCappedAtThree() {
+    func testColumnsAreTheUnionOfAlwaysVisibleLimitsCappedAtFour() {
         var trend = WidgetData(title: "Usage Trend", icon: .providerMark("claude"), kind: .count, used: 0)
         trend.isChart = true
         let first = [entry("a.session", meter("Session", 1)), entry("a.weekly", meter("Weekly", 2)), entry("a.trend", trend)]
         let second = [entry("b.weekly", meter("Weekly", 3)), entry("b.fable", meter("Fable", 4)),
                       entry("b.sonnet", meter("Sonnet", 5)), entry("b.spark", meter("Spark", 6), always: false)]
-        XCTAssertEqual(AccountTable.columns([first, second]), ["Session", "Weekly", "Fable"])
+        XCTAssertEqual(AccountTable.columns([first, second]), ["Session", "Weekly", "Fable", "Sonnet"])
+    }
+
+    func testOnDemandCreditsStillGetAColumn() {
+        var credits = WidgetData(title: "Usage Credits", icon: .providerMark("claude"), kind: .dollars, used: 0)
+        credits.values = [MetricValue(number: 0, kind: .dollars, label: "used · off")]
+        let entries = [entry("a.session", meter("Session", 1)), entry("a.weekly", meter("Weekly", 2)),
+                       entry("a.fable", meter("Fable", 3)), entry("a.sonnet", meter("Sonnet", 4), always: false),
+                       entry("a.credits", credits, always: false)]
+        XCTAssertEqual(AccountTable.columns([entries]), ["Session", "Weekly", "Fable", "Usage Credits"])
+        XCTAssertEqual(AccountTable.cell(for: "Usage Credits", in: entries)?.id, "a.credits")
+        XCTAssertNil(AccountTable.cell(for: "Sonnet", in: entries))
     }
 
     func testRowWithoutDataIsNotAColumn() {

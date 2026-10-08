@@ -18,7 +18,8 @@ A provider card can also show **quick-link buttons** pinned at the bottom of its
 
 In **Compact** density, a provider with two or more accounts (say three Claude logins) shows as one
 card instead of one card per account. Each account is a row; the limits its accounts share (Session,
-Weekly, Fable for Claude; Weekly and Credits for Codex) become columns, up to three. Under each
+Weekly, Fable, and Usage Credits for Claude; Weekly and Credits for Codex) become columns, up to four.
+Credits always get a column, even when you've tucked them behind the caret. Under each
 account's name you'll see its plan and last-30-days spend, and — when it has limit resets — how many
 and when the nearest one expires (`1 reset · expires in 14d`, `2 resets · next in 21d`). From a week
 out the countdown shows whole days; closer in it shows days and hours, then hours and minutes. The dot

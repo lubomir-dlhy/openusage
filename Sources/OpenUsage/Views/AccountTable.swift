@@ -15,21 +15,23 @@ enum AccountTable {
         var soonest: Date? { expiries.min() }
     }
 
-    static let maxColumns = 3
+    static let maxColumns = 4
 
     /// `claude@ab12cd34` and the fork's configured `claude#1` both belong to `claude`.
     static func family(of cardID: String) -> String {
         cardID.firstIndex(where: { $0 == "@" || $0 == "#" }).map { String(cardID[..<$0]) } ?? cardID
     }
 
-    /// Titles of the Always Visible limits any account reports, in first-seen order. Charts, spend
-    /// tiles, and reset counts get their own treatment, so they never become columns.
+    /// Titles of the Always Visible limits any account reports, in first-seen order, then balances
+    /// (credits) even when they sit On Demand. Charts, spend tiles, and reset counts get their own
+    /// treatment, so they never become columns.
     static func columns(_ accounts: [[Entry]]) -> [String] {
         var titles: [String] = []
-        for entries in accounts {
-            for entry in entries where entry.alwaysShown && isColumnCandidate(entry.data) {
-                if !titles.contains(entry.data.title) { titles.append(entry.data.title) }
-            }
+        let entries = accounts.flatMap { $0 }
+        let alwaysShown = entries.filter { $0.alwaysShown && isColumnCandidate($0.data) }
+        let balances = entries.filter { !$0.alwaysShown && !$0.data.isBounded && isColumnCandidate($0.data) }
+        for entry in alwaysShown + balances where !titles.contains(entry.data.title) {
+            titles.append(entry.data.title)
         }
         return Array(titles.prefix(maxColumns))
     }
@@ -40,7 +42,7 @@ enum AccountTable {
     }
 
     static func cell(for title: String, in entries: [Entry]) -> Entry? {
-        entries.first { $0.alwaysShown && $0.data.title == title && isColumnCandidate($0.data) }
+        entries.first { $0.data.title == title && isColumnCandidate($0.data) && ($0.alwaysShown || !$0.data.isBounded) }
     }
 
     static func resets(in entries: [Entry]) -> Resets? {

@@ -253,7 +253,11 @@ private struct AccountTableCell: View {
 
     private func values(_ data: WidgetData) -> some View {
         let style: MetricFormatter.Style = data.showsFullValues ? .full : .row
-        let parts = data.selectedValues.map { MetricFormatter.string(for: $0, style: style) }
+        let selected = data.selectedValues
+        // A lone labelled value ("$0.00 used · off") splits so the amount keeps the bold line.
+        let parts = selected.count == 1 && selected[0].label != nil
+            ? [MetricFormatter.number(selected[0].number, kind: selected[0].kind, style: style), selected[0].label ?? ""]
+            : selected.map { MetricFormatter.string(for: $0, style: style) }
         return VStack(alignment: .leading, spacing: 1) {
             Text(parts.first ?? data.headline)
                 .font(.system(size: 11.5, weight: .semibold))
