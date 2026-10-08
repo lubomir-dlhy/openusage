@@ -29,6 +29,7 @@ enum ClaudeUsageMapper {
         appendUsageWindow(body["seven_day_sonnet"], label: "Sonnet", periodDurationMs: weeklyPeriodMs, to: &lines)
         appendScopedWeeklyLimit(body["limits"], modelName: "Fable", label: "Fable", to: &lines)
         appendExtraUsage(body["extra_usage"], to: &lines)
+        appendUsageCredits(body["spend"], to: &lines)
         appendResetGrants(body["cedar_ember"], now: now, to: &lines)
 
         return ClaudeMappedUsage(
@@ -40,7 +41,7 @@ enum ClaudeUsageMapper {
     /// Labels of the lines `mapUsageResponse` produces from the live usage endpoint (everything else on a
     /// Claude snapshot is recomputed locally or is a rate-limit notice).
     static let liveLimitLabels: Set<String> = [
-        "Session", "Weekly", "Sonnet", "Fable", "Extra usage spent", "Rate Limit Resets"
+        "Session", "Weekly", "Sonnet", "Fable", "Extra usage spent", "Usage Credits", "Rate Limit Resets"
     ]
 
     /// Snapshot shown when the usage endpoint rate-limits us and there is no last-good usage to fall back
@@ -228,6 +229,30 @@ enum ClaudeUsageMapper {
             // (compact like the spend tiles, e.g. "$1.2K spent") instead of a baked full-currency string.
             lines.append(.values(label: "Extra usage spent", values: [MetricValue(number: used, kind: .dollars)]))
         }
+    }
+
+    /// The account's usage credits (`spend`), the "Usage credits" balance on claude.ai's usage page. Shows
+    /// the prepaid balance when Anthropic reports one, else the amount spent; a missing block emits no row.
+    private static func appendUsageCredits(_ value: Any?, to lines: inout [MetricLine]) {
+        guard let object = value as? [String: Any] else { return }
+        let enabled = ProviderParse.bool(object["enabled"]) ?? false
+        let value: MetricValue
+        if let balance = money(object["balance"]) {
+            value = MetricValue(number: balance, kind: .dollars, label: "balance")
+        } else {
+            value = MetricValue(number: money(object["used"]) ?? 0, kind: .dollars, label: enabled ? "used" : "used · off")
+        }
+        lines.append(.values(label: "Usage Credits", values: [value]))
+    }
+
+    /// `{ "amount_minor": 1234, "exponent": 2 }`, or a bare dollar number.
+    private static func money(_ value: Any?) -> Double? {
+        if let object = value as? [String: Any] {
+            guard let minor = ProviderParse.number(object["amount_minor"]) else { return nil }
+            let exponent = ProviderParse.number(object["exponent"]) ?? 2
+            return minor / pow(10, exponent)
+        }
+        return ProviderParse.number(value)
     }
 
     /// Usage-limit reset grants from the `cedar_ember` block (e.g. a launch promo's "one usage-limit reset
