@@ -113,30 +113,15 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
     }
 
     private func accountRow(_ row: AccountTableRow, columns: [String], limitColumns: Set<String>) -> some View {
-        // Renewal sits with the account (left); resets sit under that account's limits (right), so
-        // neither adds a line of its own.
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             AccountTableNameColumn(row: row)
                 .frame(width: Self.nameWidth, alignment: .leading)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .center, spacing: 10) {
-                    ForEach(columns, id: \.self) { title in
-                        AccountTableCell(entry: AccountTable.cell(for: title, in: row.entries), title: title)
-                            .frame(width: limitColumns.contains(title) ? nil : Self.balanceWidth, alignment: .leading)
-                            .frame(maxWidth: limitColumns.contains(title) ? .infinity : nil, alignment: .leading)
-                    }
-                    if columns.isEmpty { Spacer(minLength: 0) }
-                }
-                if let resets = AccountTable.resets(in: row.entries) {
-                    TimelineView(.periodic(from: .now, by: 30)) { context in
-                        AccountResetsLine(resets: resets, now: context.date)
-                            .font(.system(size: 9.5))
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
+            ForEach(columns, id: \.self) { title in
+                AccountTableCell(entry: AccountTable.cell(for: title, in: row.entries), title: title)
+                    .frame(width: limitColumns.contains(title) ? nil : Self.balanceWidth, alignment: .leading)
+                    .frame(maxWidth: limitColumns.contains(title) ? .infinity : nil, alignment: .leading)
             }
-            .padding(.top, 2)
+            if columns.isEmpty { Spacer(minLength: 0) }
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
@@ -181,11 +166,18 @@ private struct AccountTableNameColumn: View {
                     .lineLimit(1)
                     .hoverTooltip(sublineTooltip)
             }
-            if let renewal = row.renewal {
+            let resets = AccountTable.resets(in: row.entries)
+            if row.renewal != nil || resets != nil {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
-                    AccountRenewalLabel(renewal: renewal, now: context.date)
-                        .font(.system(size: 9.5))
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        if let renewal = row.renewal {
+                            AccountRenewalChip(renewal: renewal, now: context.date)
+                        }
+                        if let resets {
+                            AccountResetsChip(resets: resets, now: context.date)
+                        }
+                    }
+                    .padding(.top, 1)
                 }
             }
         }
@@ -208,69 +200,71 @@ private struct AccountTableNameColumn: View {
     }
 }
 
-/// "💳 25 Oct (17d)" under the account's plan; the tooltip says what the date is.
-private struct AccountRenewalLabel: View {
+/// A small capsule tag under an account's name; the details live in its tooltip.
+private struct AccountChip: View {
+    let icon: String
+    let text: String
+    var iconStyle: AnyShapeStyle = AnyShapeStyle(.secondary)
+    let tooltip: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(iconStyle)
+            Text(text)
+                .foregroundStyle(.secondary)
+        }
+        .font(.system(size: 9, weight: .medium))
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1.5)
+        .background(Capsule().fill(.quaternary.opacity(0.6)))
+        .hoverTooltip(tooltip)
+    }
+}
+
+private func countdown(_ remaining: TimeInterval) -> String {
+    Formatters.expiryCountdown(remaining) ?? Formatters.imminent
+}
+
+/// "💳 25 Oct": when the subscription renews.
+private struct AccountRenewalChip: View {
     let renewal: SubscriptionRenewal
     let now: Date
 
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: "creditcard")
-                .font(.system(size: 8.5))
-                .foregroundStyle(.secondary)
-            Text(renewal.date.formatted(.dateTime.month(.abbreviated).day()))
-                .foregroundStyle(.primary)
-            Text("(\(Formatters.expiryCountdown(renewal.date.timeIntervalSince(now)) ?? Formatters.imminent))")
-                .foregroundStyle(.tertiary)
-        }
-        .fixedSize()
-        .hoverTooltip(tooltip)
+        AccountChip(icon: "creditcard", text: renewal.date.formatted(.dateTime.month(.abbreviated).day()), tooltip: tooltip)
     }
 
     private var tooltip: String {
-        let line = "Subscription renews " + renewal.date.formatted(date: .long, time: .omitted)
-        guard renewal.estimated else { return line }
-        return line + "\nEstimated from the last billing date on record"
+        var lines = [
+            "Subscription renews " + renewal.date.formatted(date: .long, time: .omitted),
+            "In " + countdown(renewal.date.timeIntervalSince(now))
+        ]
+        if renewal.estimated { lines.append("Estimated from the last billing date on record") }
+        return lines.joined(separator: "\n")
     }
 }
 
-/// "↻ 2 · 29 Oct (21d)" under an account's limits: how many resets and when the first expires.
-/// Hovering lists every reset.
-private struct AccountResetsLine: View {
+/// "↻ 2 · 29 Oct": how many limit resets and when the first expires; the icon takes the soonest's
+/// severity color. The tooltip lists every reset.
+private struct AccountResetsChip: View {
     let resets: AccountTable.Resets
     let now: Date
 
     var body: some View {
-        let soonest = resets.soonest.map { $0.timeIntervalSince(now) }
-        HStack(spacing: 4) {
-            Image(systemName: "arrow.counterclockwise")
-                .font(.system(size: 8.5, weight: .semibold))
-                .foregroundStyle(soonest.map { Theme.meterFill(WidgetData.expirySeverity(secondsRemaining: $0)) }
-                    ?? AnyShapeStyle(Color.secondary))
-            Text("\(resets.count)")
-                .foregroundStyle(.primary)
-            if let first = resets.soonest {
-                Text("·").foregroundStyle(.tertiary)
-                expiry(first)
-            }
-        }
-        .hoverTooltip(tooltip)
-    }
-
-    /// The date leads; the countdown follows quietly, colored once the reset is within a week of expiring.
-    private func expiry(_ date: Date) -> some View {
-        let remaining = date.timeIntervalSince(now)
-        let severity = WidgetData.expirySeverity(secondsRemaining: remaining)
-        return HStack(spacing: 2) {
-            Text(date.formatted(.dateTime.month(.abbreviated).day()))
-                .foregroundStyle(.primary)
-            Text("(\(countdown(remaining)))")
-                .foregroundStyle(severity == .normal ? AnyShapeStyle(.tertiary) : Theme.meterFill(severity))
-        }
-    }
-
-    private func countdown(_ remaining: TimeInterval) -> String {
-        Formatters.expiryCountdown(remaining) ?? Formatters.imminent
+        let soonest = resets.soonest
+        let text = soonest.map { "\(resets.count) · " + $0.formatted(.dateTime.month(.abbreviated).day()) }
+            ?? "\(resets.count)"
+        AccountChip(
+            icon: "arrow.counterclockwise",
+            text: text,
+            iconStyle: soonest.map { Theme.meterFill(WidgetData.expirySeverity(secondsRemaining: $0.timeIntervalSince(now))) }
+                ?? AnyShapeStyle(.secondary),
+            tooltip: tooltip
+        )
     }
 
     private var tooltip: String {
