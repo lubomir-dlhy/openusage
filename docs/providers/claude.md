@@ -14,12 +14,12 @@ the same account and organization through both Claude Code and Claude Desktop st
 | Fable | Separate weekly Fable limit (model-scoped window from the `limits` array) |
 | Sonnet | Separate weekly Sonnet limit (plan-dependent) |
 | Extra Usage | Extra-usage credits spent against your monthly cap |
-| Usage Credits | Your usage-credit balance when Anthropic reports one, otherwise the amount spent (`$0.00 used · off` while usage credits are turned off) |
+| Credits | Your usage-credit balance when Anthropic reports one, otherwise the amount spent (`$0.00 used · off` while usage credits are turned off) |
 | Rate Limit Resets | One-off usage-limit resets Anthropic grants (e.g. a model-launch reset for Pro and Max), shown as a count (e.g. `1 available`); hover the value for a timeline of when each must be used by |
 | Today / Yesterday / Last 30 Days | Local spend, as cost, tokens, or both (see below) |
 
 Fable is enabled and always visible directly below Weekly by default. Sonnet stays off until you
-enable it in Customize. Usage Credits and Rate Limit Resets are on but tucked behind the caret.
+enable it in Customize. Credits and Rate Limit Resets are on but tucked behind the caret.
 
 When Claude reports your plan name, OpenUsage shows it beside the provider name. OpenUsage reads the
 current plan and tier from Claude's profile API, so subscription upgrades and downgrades do not depend

@@ -18,14 +18,13 @@ A provider card can also show **quick-link buttons** pinned at the bottom of its
 
 In **Compact** density, a provider with two or more accounts (say three Claude logins) shows as one
 card instead of one card per account. Each account is a row; the limits its accounts share (Session,
-Weekly, Fable, and Usage Credits for Claude; Weekly and Credits for Codex) become columns, up to four.
+Weekly, Fable, and Credits for Claude; Weekly, Luna Reserve, and Credits for Codex) become columns, up to four.
 Credits always get a column, even when you've tucked them behind the caret. The card's header adds up
 the last-30-days spend of all its accounts (`30d $9.4K`); hover it for the per-account split. Under each
-account's name you'll see its plan and last-30-days spend, then when the subscription renews (`Renews 25
-Oct (17d)`; hover for the full date and whether it's an estimate). An account with limit resets shows,
-under its limit bars, how many it has and when the first one expires — `1 reset available · expires 22
-Oct (14d)`, or `2 resets available · first expires 29 Oct (21d)`. Hover it to see every reset with its
-exact expiry time. From a week out the countdown shows whole days; closer in it shows days and hours, then
+account's name you'll see its plan and last-30-days spend, then 💳 and the renewal date (`💳 25 Oct
+(17d)`). Under an account's limits, ↻ shows how many limit resets it has and when the first one expires
+(`↻ 2 · 29 Oct (21d)`). Labels stay to icons and single words; hover any of them for the full wording,
+every reset's exact expiry, and whether a renewal date is an estimate. From a week out the countdown shows whole days; closer in it shows days and hours, then
 hours and minutes, and turns yellow within a week and red within 48 hours. The reset icon takes the
 color of the soonest one.
 

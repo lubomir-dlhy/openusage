@@ -208,7 +208,7 @@ private struct AccountTableNameColumn: View {
     }
 }
 
-/// "Renews 25 Oct (17d)" at the start of the line under an account row.
+/// "💳 25 Oct (17d)" under the account's plan; the tooltip says what the date is.
 private struct AccountRenewalLabel: View {
     let renewal: SubscriptionRenewal
     let now: Date
@@ -218,7 +218,6 @@ private struct AccountRenewalLabel: View {
             Image(systemName: "creditcard")
                 .font(.system(size: 8.5))
                 .foregroundStyle(.secondary)
-            Text("Renews").foregroundStyle(.secondary)
             Text(renewal.date.formatted(.dateTime.month(.abbreviated).day()))
                 .foregroundStyle(.primary)
             Text("(\(Formatters.expiryCountdown(renewal.date.timeIntervalSince(now)) ?? Formatters.imminent))")
@@ -235,8 +234,8 @@ private struct AccountRenewalLabel: View {
     }
 }
 
-/// The resets part of the line under an account row: the count and the soonest expiry, e.g.
-/// "2 resets available · first expires 29 Oct (21d)". Hovering lists every reset.
+/// "↻ 2 · 29 Oct (21d)" under an account's limits: how many resets and when the first expires.
+/// Hovering lists every reset.
 private struct AccountResetsLine: View {
     let resets: AccountTable.Resets
     let now: Date
@@ -248,11 +247,10 @@ private struct AccountResetsLine: View {
                 .font(.system(size: 8.5, weight: .semibold))
                 .foregroundStyle(soonest.map { Theme.meterFill(WidgetData.expirySeverity(secondsRemaining: $0)) }
                     ?? AnyShapeStyle(Color.secondary))
-            Text(resets.count == 1 ? "1 reset available" : "\(resets.count) resets available")
-                .foregroundStyle(.secondary)
+            Text("\(resets.count)")
+                .foregroundStyle(.primary)
             if let first = resets.soonest {
                 Text("·").foregroundStyle(.tertiary)
-                Text(resets.count == 1 ? "expires" : "first expires").foregroundStyle(.secondary)
                 expiry(first)
             }
         }
@@ -341,12 +339,17 @@ private struct AccountTableCell: View {
             .joined(separator: "\n")
     }
 
+    /// "used · off" → "off": the cell keeps one word; the tooltip carries the full reading.
+    private func lastWord(_ label: String) -> String {
+        label.components(separatedBy: "·").last?.trimmingCharacters(in: .whitespaces) ?? label
+    }
+
     private func values(_ data: WidgetData) -> some View {
         let style: MetricFormatter.Style = data.showsFullValues ? .full : .row
         let selected = data.selectedValues
         // A lone labelled value ("$0.00 used · off") splits so the amount keeps the first line.
         let parts = selected.count == 1 && selected[0].label != nil
-            ? [MetricFormatter.number(selected[0].number, kind: selected[0].kind, style: style), selected[0].label ?? ""]
+            ? [MetricFormatter.number(selected[0].number, kind: selected[0].kind, style: style), lastWord(selected[0].label ?? "")]
             : selected.map { MetricFormatter.string(for: $0, style: style) }
         return VStack(alignment: .leading, spacing: 1) {
             Text(parts.first ?? data.headline)

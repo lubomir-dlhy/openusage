@@ -131,7 +131,7 @@ final class ClaudeProvider: ProviderRuntime {
                 .exportingLimit("sonnet", unit: "percent"),
             .boundedDollars(id: "\(provider.id).extra", provider: provider, title: "Extra Usage", metricLabel: "Extra usage spent", limit: 100, valueWord: "spent")
                 .exportingLimit("extraUsage", unit: "usd", source: .progressOrValue(kind: .dollars)),
-            .values(id: "\(provider.id).credits", provider: provider, title: "Usage Credits", metricLabel: "Usage Credits"),
+            .values(id: "\(provider.id).credits", provider: provider, title: "Credits", metricLabel: "Usage Credits"),
             // Anthropic's one-off usage-limit reset grants (`cedar_ember`), shown read-only in the same
             // resets popover as Codex. Seeded On Demand and unpinned in `DefaultLayout`, like Codex's.
             .values(id: "\(provider.id).rateLimitResets", provider: provider, title: "Rate Limit Resets", metricLabel: "Rate Limit Resets", traySuffix: "resets", showsResetExpiries: true)
