@@ -40,6 +40,21 @@ final class CodexHomeDiscoveryTests: XCTestCase {
         ])
     }
 
+    func testCandidateHomesIncludeUnderscoreSiblingDirectories() {
+        let scanner = scanner(
+            environment: [:],
+            files: FakeFiles(),
+            directories: [
+                "/Users/dev": [".codex_work", ".codexbar", ".config"],
+                "/Users/dev/.config": ["codex_ci"],
+            ]
+        )
+
+        XCTAssertEqual(scanner.candidateHomes(), [
+            "/Users/dev/.config/codex", "/Users/dev/.codex", "/Users/dev/.codex_work", "/Users/dev/.config/codex_ci",
+        ])
+    }
+
     func testSiblingDiscoveryIncludesHiddenCodexDirectories() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
