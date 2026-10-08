@@ -20,14 +20,16 @@ In **Compact** density, a provider with two or more accounts (say three Claude l
 card instead of one card per account. Each account is a row; the limits its accounts share (Session,
 Weekly, Fable, and Usage Credits for Claude; Weekly and Credits for Codex) become columns, up to four.
 Credits always get a column, even when you've tucked them behind the caret. Under each
-account's name you'll see its plan and last-30-days spend, and — when it has limit resets — how many
-and when the nearest one expires (`1 reset · expires in 14d`, `2 resets · next in 21d`). From a week
-out the countdown shows whole days; closer in it shows days and hours, then hours and minutes. The dot
-turns yellow within a week and red within 48 hours.
+account's name you'll see its plan and last-30-days spend. An account with limit resets gets one more
+line across the row listing each reset's expiry date with a countdown — `1 reset available · expires
+22 Oct (14d)`, or `2 resets available · expire 29 Oct (21d) and 6 Nov (29d)`; past two dates it adds
+`+N more`. From a week out the countdown shows whole days; closer in it shows days and hours, then
+hours and minutes, and turns yellow within a week and red within 48 hours. The reset icon takes the
+color of the soonest one.
 
 Anything that may be cut off has a tooltip: hover an account name for the full name and login, the
 plan line for exact spend, a cell for the full reading and reset time, and the resets line for every
-expiry date. Click an account row to unfold its full card (usage trend, spend, links); click the
+exact expiry time. Click an account row to unfold its full card (usage trend, spend, links); click the
 provider's header to open or close all of them. Right-click a row for the usual Hide, Refresh,
 Rename, and Customize actions, and drag rows to reorder accounts. Default density keeps one card per
 account.

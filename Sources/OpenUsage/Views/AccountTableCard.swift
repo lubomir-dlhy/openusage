@@ -90,14 +90,21 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
     }
 
     private func accountRow(_ row: AccountTableRow, columns: [String]) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            AccountTableNameColumn(row: row)
-                .frame(width: Self.nameWidth, alignment: .leading)
-            ForEach(columns, id: \.self) { title in
-                AccountTableCell(entry: AccountTable.cell(for: title, in: row.entries), title: title)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 10) {
+                AccountTableNameColumn(row: row)
+                    .frame(width: Self.nameWidth, alignment: .leading)
+                ForEach(columns, id: \.self) { title in
+                    AccountTableCell(entry: AccountTable.cell(for: title, in: row.entries), title: title)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if columns.isEmpty { Spacer(minLength: 0) }
             }
-            if columns.isEmpty { Spacer(minLength: 0) }
+            if let resets = AccountTable.resets(in: row.entries) {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    AccountResetsLine(resets: resets, now: context.date)
+                }
+            }
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
@@ -113,7 +120,6 @@ private struct AccountTableNameColumn: View {
     let row: AccountTableRow
 
     var body: some View {
-        let resets = AccountTable.resets(in: row.entries)
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Text(row.name)
@@ -143,15 +149,6 @@ private struct AccountTableNameColumn: View {
                     .lineLimit(1)
                     .hoverTooltip(sublineTooltip)
             }
-            if let resets, let soonest = resets.soonest {
-                TimelineView(.periodic(from: .now, by: 30)) { context in
-                    resetsLine(resets, soonest: soonest, now: context.date)
-                }
-            } else if let resets {
-                Text(resets.count == 1 ? "1 reset" : "\(resets.count) resets")
-                    .font(.system(size: 9.5))
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 
@@ -170,26 +167,59 @@ private struct AccountTableNameColumn: View {
         ].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
+}
 
-    private func resetsLine(_ resets: AccountTable.Resets, soonest: Date, now: Date) -> some View {
-        let remaining = soonest.timeIntervalSince(now)
-        let countdown = Formatters.expiryCountdown(remaining) ?? Formatters.imminent
-        let severity = WidgetData.expirySeverity(secondsRemaining: remaining)
-        return HStack(spacing: 3) {
-            Circle()
-                .fill(Theme.meterFill(severity))
-                .frame(width: 5, height: 5)
-            Text(resets.count == 1 ? "1 reset · expires in \(countdown)" : "\(resets.count) resets · next in \(countdown)")
+/// Full-width line under an account row: one entry per reset, each with its expiry date and countdown,
+/// e.g. "2 resets available · expire Oct 29 (21d) and Nov 7 (30d)".
+private struct AccountResetsLine: View {
+    let resets: AccountTable.Resets
+    let now: Date
+
+    private static let shownExpiries = 2
+
+    var body: some View {
+        let soonest = resets.soonest.map { $0.timeIntervalSince(now) }
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.counterclockwise")
+                .font(.system(size: 8.5, weight: .semibold))
+                .foregroundStyle(soonest.map { Theme.meterFill(WidgetData.expirySeverity(secondsRemaining: $0)) }
+                    ?? AnyShapeStyle(Color.secondary))
+            Text(resets.count == 1 ? "1 reset available" : "\(resets.count) resets available")
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+            if !resets.expiries.isEmpty {
+                Text("·").foregroundStyle(.tertiary)
+                Text(resets.count == 1 ? "expires" : "expire").foregroundStyle(.secondary)
+                let shown = Array(resets.expiries.prefix(Self.shownExpiries))
+                ForEach(Array(shown.enumerated()), id: \.offset) { index, date in
+                    if index > 0, resets.expiries.count == 2 { Text("and").foregroundStyle(.secondary) }
+                    expiry(date, comma: index < shown.count - 1 && resets.expiries.count > 2)
+                }
+                if resets.expiries.count > Self.shownExpiries {
+                    Text("+\(resets.expiries.count - Self.shownExpiries) more").foregroundStyle(.tertiary)
+                }
+            }
+            Spacer(minLength: 0)
         }
         .font(.system(size: 9.5))
-        .hoverTooltip(resetsTooltip(resets))
+        .lineLimit(1)
+        .hoverTooltip(tooltip)
     }
 
-    private func resetsTooltip(_ resets: AccountTable.Resets) -> String {
-        let dates = resets.expiries.map { "Expires " + $0.formatted(date: .abbreviated, time: .shortened) }
+    /// The date leads; the countdown follows quietly, colored once the reset is within a week of expiring.
+    private func expiry(_ date: Date, comma: Bool) -> some View {
+        let remaining = date.timeIntervalSince(now)
+        let severity = WidgetData.expirySeverity(secondsRemaining: remaining)
+        return HStack(spacing: 2) {
+            Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                .foregroundStyle(.primary)
+            Text("(\(Formatters.expiryCountdown(remaining) ?? Formatters.imminent))" + (comma ? "," : ""))
+                .foregroundStyle(severity == .normal ? AnyShapeStyle(.tertiary) : Theme.meterFill(severity))
+        }
+    }
+
+    private var tooltip: String {
         let heading = resets.count == 1 ? "1 limit reset available" : "\(resets.count) limit resets available"
+        let dates = resets.expiries.map { "Expires " + $0.formatted(date: .abbreviated, time: .shortened) }
         return ([heading] + dates).joined(separator: "\n")
     }
 }
