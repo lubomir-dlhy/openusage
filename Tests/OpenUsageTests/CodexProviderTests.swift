@@ -731,4 +731,13 @@ final class CodexUsageClientRefreshTests: XCTestCase {
             XCTFail("expected CodexAuthError.sessionExpired, got \(error)")
         }
     }
+
+    @MainActor
+    func testCreditsRowShowsExactBalanceAndDollarValue() throws {
+        let descriptor = try XCTUnwrap(CodexProvider().widgetDescriptors.first { $0.id == "codex.credits" })
+        var data = descriptor.sample
+        data.values = CodexUsageMapper.creditValues(remaining: 62_497.6)
+        XCTAssertEqual(data.title, "Credits")
+        XCTAssertEqual(data.unboundedDetail, "$2,499.88 · 62,497 credits")
+    }
 }

@@ -10,7 +10,7 @@ Tracks your ChatGPT/Codex subscription limits using the login from the Codex CLI
 | Weekly | 7-day window usage |
 | Spark / Spark Weekly | GPT-5.3-Codex-Spark model limits — a 5-hour and a weekly window. Shown only when your account has the limit (otherwise "No data"), and tucked below the "show more" caret by default |
 | Rate Limit Resets | On-demand rate-limit reset credits, shown as a count (e.g. `2 available`) with a colored dot for the soonest expiry; hover the value for a timeline of each credit's expiry |
-| Extra Usage | Flex credits, shown verbatim as dollars + credits (e.g. `$31.84 · 796 credits`) |
+| Credits | Your ChatGPT credit balance with its USD equivalent at 4¢ per credit, every digit shown (e.g. `$2,499.88 · 62,497 credits`); always visible by default |
 | Today / Yesterday / Last 30 Days | Local spend, as cost, tokens, or both (see below) |
 
 The Session and Weekly meters match each reported rate-limit window by its **duration**, not by the slot it arrives in — so a plan that only has a weekly limit (the ChatGPT profile shows a single "Weekly usage limit") shows just the Weekly row, and Session reads "No data". The same goes for Spark's windows.

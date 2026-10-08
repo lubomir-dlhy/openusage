@@ -39,6 +39,8 @@ struct WidgetData: Hashable {
     /// state when none are available) and lights up like the spend rows — so it stays reachable even
     /// at "0 available", where `expiriesAt` is empty. Off for every other row.
     var showsResetExpiries: Bool = false
+    /// Balance rows (Codex credits) print every digit on the row instead of the abbreviated "62.5K".
+    var showsFullValues: Bool = false
     /// Names of models this period's spend used that have no known price. Their usage is excluded
     /// unless a fallback estimate is enabled; either way the missing-price warning stays visible.
     /// Drives the label warning triangle and its hover list. Empty for every other row.
@@ -317,6 +319,8 @@ struct WidgetData: Hashable {
     /// Right-aligned descriptive line for an unbounded row (no bar): just "<value> <word>". The word is
     /// `unboundedValueWord` when set (extras always read "1,503 left", spend rows "$12.34 spent");
     /// otherwise it falls back to the global left/used mode word.
+    private var rowStyle: MetricFormatter.Style { showsFullValues ? .full : .row }
+
     var unboundedDetail: String {
         guard hasData else { return Self.noDataSubtitle }
         if let valueTextOverride { return valueTextOverride }
@@ -328,11 +332,11 @@ struct WidgetData: Hashable {
             if selected.count == 1 {
                 let value = selected[0]
                 if value.kind == .dollars, let word = unboundedValueWord {
-                    return "\(MetricFormatter.number(value.number, kind: .dollars, style: .row)) \(word)"
+                    return "\(MetricFormatter.number(value.number, kind: .dollars, style: rowStyle)) \(word)"
                 }
-                return MetricFormatter.string(for: value, style: .row)
+                return MetricFormatter.string(for: value, style: rowStyle)
             }
-            return selected.map { MetricFormatter.string(for: $0, style: .row) }.joined(separator: " · ")
+            return selected.map { MetricFormatter.string(for: $0, style: rowStyle) }.joined(separator: " · ")
         }
         // Fallback for an unbounded row without typed values: "<value> <suffix> <word>".
         let word = unboundedValueWord ?? displayMode.label.lowercased()

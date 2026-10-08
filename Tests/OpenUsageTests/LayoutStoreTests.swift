@@ -697,11 +697,11 @@ final class LayoutStoreTests: XCTestCase {
         XCTAssertEqual(expandedByProvider["claude"], [
             "claude.sonnet", "claude.credits", "claude.rateLimitResets", "claude.today", "claude.yesterday", "claude.last30"
         ])
-        XCTAssertEqual(primaryByProvider["codex"], ["codex.session", "codex.weekly", "codex.trend"])
-        // Spark (the optional model-specific limits) leads the On Demand section, before credits.
+        XCTAssertEqual(primaryByProvider["codex"], ["codex.session", "codex.weekly", "codex.credits", "codex.trend"])
+        // Spark (the optional model-specific limits) leads the On Demand section.
         XCTAssertEqual(expandedByProvider["codex"], [
             "codex.spark", "codex.sparkWeekly",
-            "codex.credits", "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30"
+            "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30"
         ])
         XCTAssertEqual(primaryByProvider["devin"], ["devin.daily", "devin.weekly"])
         XCTAssertEqual(expandedByProvider["devin"], ["devin.extra"])

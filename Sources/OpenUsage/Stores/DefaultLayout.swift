@@ -118,10 +118,10 @@ enum DefaultLayout {
         // Claude's core meters (Session, Weekly, Fable, Extra, Usage Trend) stay above the fold;
         // optional Sonnet, usage credits, reset grants, and spend-history rows sit below the caret.
         "claude.sonnet", "claude.credits", "claude.rateLimitResets", "claude.today", "claude.yesterday", "claude.last30",
-        // Codex's core Session/Weekly meters and Usage Trend stay above the fold; Spark (the optional
-        // model-specific limits), credits, reset details, and spend rows sit below the caret.
+        // Codex's Session/Weekly meters, Credits, and Usage Trend stay above the fold; Spark (the optional
+        // model-specific limits), reset details, and spend rows sit below the caret.
         "codex.spark", "codex.sparkWeekly",
-        "codex.credits", "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30",
+        "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30",
         "cursor.grokBot", "cursor.onDemand", "cursor.requests", "cursor.credits",
         "cursor.today", "cursor.yesterday", "cursor.last30",
         // Copilot: Credits (the metered premium pool) + Extra Usage stay above the fold; the org
