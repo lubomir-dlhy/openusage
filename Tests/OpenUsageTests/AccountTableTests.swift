@@ -76,4 +76,14 @@ final class AccountTableTests: XCTestCase {
         XCTAssertEqual(Formatters.expiryCountdown(5 * 3_600 + 20 * 60), "5h 20m")
         XCTAssertNil(Formatters.expiryCountdown(-1))
     }
+
+    func testTotalSpendSumsAccountsWithHistory() {
+        func spend(_ id: String, _ usd: Double) -> AccountTable.Entry {
+            var data = WidgetData(title: "Last 30 Days", icon: .providerMark("claude"), kind: .dollars, used: 0)
+            data.values = [MetricValue(number: usd, kind: .dollars), MetricValue(number: 1, kind: .count, label: "tokens")]
+            return entry(id, data, always: false)
+        }
+        XCTAssertEqual(AccountTable.totalLast30Spend([[spend("a.last30", 5200)], [spend("b.last30", 2200)], []]), 7400)
+        XCTAssertNil(AccountTable.totalLast30Spend([[], []]))
+    }
 }

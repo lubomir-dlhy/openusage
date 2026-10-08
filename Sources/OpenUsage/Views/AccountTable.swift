@@ -60,6 +60,12 @@ enum AccountTable {
         return data.values.first { $0.kind == .dollars }?.number
     }
 
+    /// Last 30 Days spend summed across accounts; `nil` when none has local spend history.
+    static func totalLast30Spend(_ accounts: [[Entry]]) -> Double? {
+        let amounts = accounts.compactMap(last30Spend(in:))
+        return amounts.isEmpty ? nil : amounts.reduce(0, +)
+    }
+
     /// The short name an account goes by inside its provider's card: a rename wins, then the account's
     /// own label (organization, else email), then the card title without the provider prefix.
     static func rowName(displayName: String, recordLabel: String?, customLabel: String?, familyName: String) -> String {

@@ -69,6 +69,13 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
                 Text("\(rows.count) accounts")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
+                if let total = AccountTable.totalLast30Spend(rows.map(\.entries)) {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text("30d " + MetricFormatter.number(total, kind: .dollars, style: .tray))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .hoverTooltip(spendTooltip(total: total))
+                }
                 Spacer()
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
                     .font(.system(size: 8, weight: .bold))
@@ -78,6 +85,16 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(expanded ? "Collapse all \(familyName) accounts" : "Expand all \(familyName) accounts")
+    }
+
+    private func spendTooltip(total: Double) -> String {
+        let accounts = rows.compactMap { row in
+            AccountTable.last30Spend(in: row.entries).map {
+                "\(row.name): " + MetricFormatter.number($0, kind: .dollars, style: .full)
+            }
+        }
+        return (["Last 30 days, all accounts: " + MetricFormatter.number(total, kind: .dollars, style: .full)]
+            + accounts + ["Estimated from local usage at API rates"]).joined(separator: "\n")
     }
 
     private func columnHeader(_ columns: [String], limitColumns: Set<String>) -> some View {
