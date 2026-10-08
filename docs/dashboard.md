@@ -22,9 +22,9 @@ Weekly, Fable, and Usage Credits for Claude; Weekly and Credits for Codex) becom
 Credits always get a column, even when you've tucked them behind the caret. Under each
 account's name you'll see its plan and last-30-days spend. A line across the row shows when the
 subscription renews (`Renews 25 Oct (17d)`; hover for the full date and whether it's an estimate) and,
-for an account with limit resets, lists each reset's expiry date with a countdown — `1 reset available · expires
-22 Oct (14d)`, or `2 resets available · expire 29 Oct (21d) and 6 Nov (29d)`; past two dates it adds
-`+N more`. From a week out the countdown shows whole days; closer in it shows days and hours, then
+for an account with limit resets, how many it has and when the first one expires — `1 reset available
+· expires 22 Oct (14d)`, or `2 resets available · first expires 29 Oct (21d)`. Hover the line to see
+every reset with its exact expiry time. From a week out the countdown shows whole days; closer in it shows days and hours, then
 hours and minutes, and turns yellow within a week and red within 48 hours. The reset icon takes the
 color of the soonest one.
 

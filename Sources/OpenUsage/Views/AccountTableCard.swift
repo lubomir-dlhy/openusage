@@ -214,13 +214,11 @@ private struct AccountRenewalLabel: View {
     }
 }
 
-/// The resets part of the line under an account row: one entry per reset, each with its expiry date and countdown,
-/// e.g. "2 resets available · expire Oct 29 (21d) and Nov 7 (30d)".
+/// The resets part of the line under an account row: the count and the soonest expiry, e.g.
+/// "2 resets available · first expires 29 Oct (21d)". Hovering lists every reset.
 private struct AccountResetsLine: View {
     let resets: AccountTable.Resets
     let now: Date
-
-    private static let shownExpiries = 2
 
     var body: some View {
         let soonest = resets.soonest.map { $0.timeIntervalSince(now) }
@@ -231,37 +229,36 @@ private struct AccountResetsLine: View {
                     ?? AnyShapeStyle(Color.secondary))
             Text(resets.count == 1 ? "1 reset available" : "\(resets.count) resets available")
                 .foregroundStyle(.secondary)
-            if !resets.expiries.isEmpty {
+            if let first = resets.soonest {
                 Text("·").foregroundStyle(.tertiary)
-                Text(resets.count == 1 ? "expires" : "expire").foregroundStyle(.secondary)
-                let shown = Array(resets.expiries.prefix(Self.shownExpiries))
-                ForEach(Array(shown.enumerated()), id: \.offset) { index, date in
-                    if index > 0, resets.expiries.count == 2 { Text("and").foregroundStyle(.secondary) }
-                    expiry(date, comma: index < shown.count - 1 && resets.expiries.count > 2)
-                }
-                if resets.expiries.count > Self.shownExpiries {
-                    Text("+\(resets.expiries.count - Self.shownExpiries) more").foregroundStyle(.tertiary)
-                }
+                Text(resets.count == 1 ? "expires" : "first expires").foregroundStyle(.secondary)
+                expiry(first)
             }
         }
         .hoverTooltip(tooltip)
     }
 
     /// The date leads; the countdown follows quietly, colored once the reset is within a week of expiring.
-    private func expiry(_ date: Date, comma: Bool) -> some View {
+    private func expiry(_ date: Date) -> some View {
         let remaining = date.timeIntervalSince(now)
         let severity = WidgetData.expirySeverity(secondsRemaining: remaining)
         return HStack(spacing: 2) {
             Text(date.formatted(.dateTime.month(.abbreviated).day()))
                 .foregroundStyle(.primary)
-            Text("(\(Formatters.expiryCountdown(remaining) ?? Formatters.imminent))" + (comma ? "," : ""))
+            Text("(\(countdown(remaining)))")
                 .foregroundStyle(severity == .normal ? AnyShapeStyle(.tertiary) : Theme.meterFill(severity))
         }
     }
 
+    private func countdown(_ remaining: TimeInterval) -> String {
+        Formatters.expiryCountdown(remaining) ?? Formatters.imminent
+    }
+
     private var tooltip: String {
         let heading = resets.count == 1 ? "1 limit reset available" : "\(resets.count) limit resets available"
-        let dates = resets.expiries.map { "Expires " + $0.formatted(date: .abbreviated, time: .shortened) }
+        let dates = resets.expiries.enumerated().map { index, date in
+            "\(index + 1). Expires \(date.formatted(date: .abbreviated, time: .shortened)) (in \(countdown(date.timeIntervalSince(now))))"
+        }
         return ([heading] + dates).joined(separator: "\n")
     }
 }
