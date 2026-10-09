@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.7.16
+
+### New Features
+- Fold several accounts of one provider into a single table card in Compact mode, with credit columns, the soonest reset, subscription renewal dates, and a 30-day spend total in the header by @lubomir-dlhy
+- Show Claude Usage Credits from the usage endpoint's spend block by @lubomir-dlhy
+- Show the exact ChatGPT credit balance with its USD value, and Pro's Luna Reserve weekly pool, for Codex by @lubomir-dlhy
+- Widen the menu-bar panel and fit Compact meters on one line by @lubomir-dlhy
+- Show one Codex card per account across Codex homes and pi logins, and keep their tokens refreshed ([#1321](https://github.com/robinebers/openusage/pull/1321), [#1322](https://github.com/robinebers/openusage/pull/1322)) by @robinebers
+- Show Claude usage-limit reset grants in a Rate Limit Resets row ([#1290](https://github.com/robinebers/openusage/pull/1290)) by @robinebers
+- Add Report an Issue to the Options menu ([#1343](https://github.com/robinebers/openusage/pull/1343)) by @robinebers
+- Price Codex Ultrafast and GPT-6 Sol models, Claude Sonnet 5.5, and Cursor Grok 4.7 / grok-bot-cua ([#1327](https://github.com/robinebers/openusage/pull/1327), [#1329](https://github.com/robinebers/openusage/pull/1329), [#1286](https://github.com/robinebers/openusage/pull/1286)) by @robinebers
+
+### Bug Fixes
+- Discover underscore-named sibling Codex homes (`~/.codex_*`) by @lubomir-dlhy
+- Bring back Codex local spend per signed-in folder and keep slow history scans from blocking live quota ([#1349](https://github.com/robinebers/openusage/pull/1349), [#1338](https://github.com/robinebers/openusage/pull/1338)) by @robinebers
+- Update Codex plan names and keep header labels visible ([#1332](https://github.com/robinebers/openusage/pull/1332)) by @validatedev
+- Attribute OpenCode 2 ChatGPT OAuth usage to Codex ([#1284](https://github.com/robinebers/openusage/pull/1284)) by @validatedev
+- Keep Codex tiers on tierless settings records and price Ultrafast -fast slugs correctly ([#1331](https://github.com/robinebers/openusage/pull/1331)) by @robinebers
+- Persist Codex and Claude token rotation to the correct Keychain entry without losing MCP credentials ([#1317](https://github.com/robinebers/openusage/pull/1317), [#1316](https://github.com/robinebers/openusage/pull/1316)) by @robinebers
+- Keep verified Claude limits on the first 429 after relaunch and count terminal sessions with multiple accounts ([#1325](https://github.com/robinebers/openusage/pull/1325), [#1299](https://github.com/robinebers/openusage/pull/1299)) by @robinebers
+- Prefer structured Cursor team usage pools and bound the usage CSV export to 20s ([#1337](https://github.com/robinebers/openusage/pull/1337), [#1324](https://github.com/robinebers/openusage/pull/1324)) by @robinebers
+- Keep the panel's top edge still while its height animates, and keep each screen's header and footer while switching ([#1345](https://github.com/robinebers/openusage/pull/1345), [#1346](https://github.com/robinebers/openusage/pull/1346)) by @kennnyq
+- Read OpenCode 2 usage and Go credentials, and show the Session reset countdown below 1% ([#1323](https://github.com/robinebers/openusage/pull/1323), [#1340](https://github.com/robinebers/openusage/pull/1340)) by @robinebers, @hasan007-sudo
+- Keep Grok local spend when team billing returns 412 ([#1272](https://github.com/robinebers/openusage/pull/1272)) by @slycrel
+- Show the Ollama monthly cloud usage limit and warn when the plan response can't be read ([#1270](https://github.com/robinebers/openusage/pull/1270), [#1300](https://github.com/robinebers/openusage/pull/1300)) by @robinebers, @tduarte
+- Tolerate glued shell banners and isolate process pipe drains ([#1320](https://github.com/robinebers/openusage/pull/1320), [#1318](https://github.com/robinebers/openusage/pull/1318)) by @robinebers
+- Rename the update toggle to Check Automatically ([#1330](https://github.com/robinebers/openusage/pull/1330)) by @robinebers
+
+### Chores
+- Merge upstream v0.7.14 while keeping PostHog excluded from the fork by @lubomir-dlhy
+- Bump actions/checkout to v7 by @dependabot[bot]
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.15...v0.7.16](https://github.com/lubomir-dlhy/openusage/compare/v0.7.15...v0.7.16)
+
 ## v0.7.15
 
 ### New Features
