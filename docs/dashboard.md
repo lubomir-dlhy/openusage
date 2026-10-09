@@ -19,12 +19,14 @@ A provider card can also show **quick-link buttons** pinned at the bottom of its
 In **Compact** density, a provider with two or more accounts (say three Claude logins) shows as one
 card instead of one card per account. Each account is a row; the limits its accounts share (Session,
 Weekly, Fable, and Credits for Claude; Weekly, Luna Reserve, and Credits for Codex) become columns, up to four.
-Credits always get a column, even when you've tucked them behind the caret. The card's header adds up
+Credits always get a column, even when you've tucked them behind the caret. It stays narrow and
+shows compact amounts (`$2.5K`, `62.5K credits`), so the limit bars get the room; hover for the exact
+balance. The card's header adds up
 the last-30-days spend of all its accounts (`$9.4K / 30 days`); hover it for the per-account split. Under each
 account's name you'll see its plan and last-30-days spend, and up to two small tags: 💳 with the
-renewal date (`💳 25 Oct`) and ↻ with how many limit resets the account has and when the first
+renewal date and how many days are left (`💳 25 Oct · 16d`, or `today`) and ↻ with how many limit resets the account has and when the first
 expires (`↻ 2 · 29 Oct`). The ↻ icon turns yellow when that reset expires within a week and red
-within 48 hours. Hover a tag for the details: the full renewal date, how far away it is, and whether
+within 48 hours. When both tags don't fit side by side, they stack. Hover a tag for the details: the full renewal date, how far away it is, and whether
 it's an estimate; or every reset with its exact expiry time and countdown.
 
 Anything that may be cut off has a tooltip: hover an account name for the full name and login, the

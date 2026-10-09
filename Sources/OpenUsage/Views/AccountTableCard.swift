@@ -33,7 +33,7 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
     private static var nameWidth: CGFloat { 156 }
     /// Balance columns (credits) matter less than the limits, so they take a narrow fixed column and
     /// the limit bars share the rest.
-    private static var balanceWidth: CGFloat { 84 }
+    private static var balanceWidth: CGFloat { 64 }
 
     var body: some View {
         let columns = AccountTable.columns(rows.map(\.entries))
@@ -175,13 +175,17 @@ private struct AccountTableNameColumn: View {
             let resets = AccountTable.resets(in: row.entries)
             if row.renewal != nil || resets != nil {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
-                    HStack(spacing: 5) {
+                    let chips = Group {
                         if let renewal = row.renewal {
                             AccountRenewalChip(renewal: renewal, now: context.date)
                         }
                         if let resets {
                             AccountResetsChip(resets: resets, now: context.date)
                         }
+                    }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 5) { chips }
+                        VStack(alignment: .leading, spacing: 4) { chips }
                     }
                     .padding(.top, 3)
                 }
@@ -219,6 +223,7 @@ private struct AccountTableNameColumn: View {
 private struct AccountChip: View {
     let icon: String
     let text: String
+    var detail: String? = nil
     var iconStyle: AnyShapeStyle = AnyShapeStyle(.secondary)
     let tooltip: String
 
@@ -229,6 +234,10 @@ private struct AccountChip: View {
                 .foregroundStyle(iconStyle)
             Text(text)
                 .foregroundStyle(.secondary)
+            if let detail {
+                Text("· " + detail)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .font(.system(size: 11, weight: .medium))
         .lineLimit(1)
@@ -250,7 +259,21 @@ private struct AccountRenewalChip: View {
     let now: Date
 
     var body: some View {
-        AccountChip(icon: "creditcard", text: renewal.date.formatted(.dateTime.month(.abbreviated).day()), tooltip: tooltip)
+        AccountChip(
+            icon: "creditcard",
+            text: renewal.date.formatted(.dateTime.month(.abbreviated).day()),
+            detail: daysLeft,
+            tooltip: tooltip
+        )
+    }
+
+    /// Whole calendar days until renewal: "27d", or "today".
+    private var daysLeft: String? {
+        let calendar = Calendar.current
+        guard let days = calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: renewal.date)
+        ).day, days >= 0 else { return nil }
+        return days == 0 ? "today" : "\(days)d"
     }
 
     private var tooltip: String {
@@ -365,27 +388,40 @@ private struct AccountTableCell: View {
         label.components(separatedBy: "·").last?.trimmingCharacters(in: .whitespaces) ?? label
     }
 
+    /// Compact amounts ("$2.5K", "62.5K credits") so the balance column stays narrow; the tooltip
+    /// keeps the exact reading.
     private func values(_ data: WidgetData) -> some View {
-        let style: MetricFormatter.Style = data.showsFullValues ? .full : .row
         let selected = data.selectedValues
-        // A lone labelled value ("$0.00 used · off") splits so the amount keeps the first line.
-        let parts = selected.count == 1 && selected[0].label != nil
-            ? [MetricFormatter.number(selected[0].number, kind: selected[0].kind, style: style), lastWord(selected[0].label ?? "")]
-            : selected.map { MetricFormatter.string(for: $0, style: style) }
+        let numbers = selected.map { MetricFormatter.number($0.number, kind: $0.kind, style: .tray) }
+        // A lone labelled value ("$0.00 used · off") keeps one word under the amount.
+        let caption: [String] = selected.count == 1
+            ? [selected[0].label.map(lastWord)].compactMap { $0 }
+            : zip(selected.dropFirst(), numbers.dropFirst()).map { value, number in
+                value.label.map { "\(number) \($0)" } ?? number
+            }
+        let shortCaption = selected.count == 1 ? caption : Array(numbers.dropFirst())
         return VStack(alignment: .leading, spacing: 1) {
-            Text(parts.first ?? data.headline)
+            Text(numbers.first ?? data.headline)
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            if parts.count > 1 {
-                Text(parts.dropFirst().joined(separator: " · "))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+            if !caption.isEmpty {
+                ViewThatFits(in: .horizontal) {
+                    captionText(caption)
+                    captionText(shortCaption)
+                }
             }
         }
         .hoverTooltip("\(title): " + data.selectedValues.map { MetricFormatter.string(for: $0, style: .full) }
             .joined(separator: " · "))
+    }
+
+    private func captionText(_ parts: [String]) -> some View {
+        Text(parts.joined(separator: " · "))
+            .font(.system(size: 11))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+            .fixedSize()
     }
 }
 
