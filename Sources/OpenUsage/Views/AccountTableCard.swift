@@ -30,10 +30,10 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
     @ViewBuilder let menu: (ProviderGroup) -> Menu
     let rowGesture: (ProviderGroup) -> RowGesture
 
-    private static var nameWidth: CGFloat { 138 }
+    private static var nameWidth: CGFloat { 156 }
     /// Balance columns (credits) matter less than the limits, so they take a narrow fixed column and
     /// the limit bars share the rest.
-    private static var balanceWidth: CGFloat { 72 }
+    private static var balanceWidth: CGFloat { 84 }
 
     var body: some View {
         let columns = AccountTable.columns(rows.map(\.entries))
@@ -68,20 +68,20 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
                 ProviderIcon(source: icon, inset: 0.04)
                     .frame(width: 14, height: 14)
                 Text(familyName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                 Text("\(rows.count) accounts")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
                 if let total = AccountTable.totalLast30Spend(rows.map(\.entries)) {
                     Text("·").foregroundStyle(.tertiary)
                     Text("30d " + MetricFormatter.number(total, kind: .dollars, style: .tray))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(.secondary)
                         .hoverTooltip(spendTooltip(total: total))
                 }
                 Spacer()
                 Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
@@ -105,7 +105,7 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
             Color.clear.frame(width: Self.nameWidth, height: 1)
             ForEach(columns, id: \.self) { title in
                 Text(title)
-                    .font(.system(size: 9.5, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .frame(width: limitColumns.contains(title) ? nil : Self.balanceWidth, alignment: .leading)
@@ -126,7 +126,7 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
             }
             if columns.isEmpty { Spacer(minLength: 0) }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onTapGesture { onToggle(row.id) }
         .opacity(activeRowID == row.id ? 0 : 1)
@@ -143,18 +143,19 @@ private struct AccountTableNameColumn: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Text(row.name)
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.system(size: 13.5, weight: .semibold))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                     .truncationMode(.middle)
                     .hoverTooltip(row.fullName)
                 if let notice = row.notice {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 8.5))
+                        .font(.system(size: 10))
                         .foregroundStyle(.orange)
                         .hoverTooltip(notice)
                 } else if let staleness = row.staleness, !row.refreshing {
                     Image(systemName: "clock")
-                        .font(.system(size: 8.5))
+                        .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                         .hoverTooltip(staleness.tooltip)
                 }
@@ -164,7 +165,7 @@ private struct AccountTableNameColumn: View {
             }
             if let subline {
                 Text(subline)
-                    .font(.system(size: 9.5))
+                    .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .hoverTooltip(sublineTooltip)
@@ -172,7 +173,7 @@ private struct AccountTableNameColumn: View {
             let resets = AccountTable.resets(in: row.entries)
             if row.renewal != nil || resets != nil {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         if let renewal = row.renewal {
                             AccountRenewalChip(renewal: renewal, now: context.date)
                         }
@@ -180,7 +181,7 @@ private struct AccountTableNameColumn: View {
                             AccountResetsChip(resets: resets, now: context.date)
                         }
                     }
-                    .padding(.top, 1)
+                    .padding(.top, 3)
                 }
             }
         }
@@ -213,16 +214,16 @@ private struct AccountChip: View {
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: icon)
-                .font(.system(size: 8, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(iconStyle)
             Text(text)
                 .foregroundStyle(.secondary)
         }
-        .font(.system(size: 9, weight: .medium))
+        .font(.system(size: 11, weight: .medium))
         .lineLimit(1)
         .fixedSize()
-        .padding(.horizontal, 5)
-        .padding(.vertical, 1.5)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
         .background(Capsule().fill(.quaternary.opacity(0.6)))
         .hoverTooltip(tooltip)
     }
@@ -294,7 +295,7 @@ private struct AccountTableCell: View {
             }
         } else {
             Text("–")
-                .font(.system(size: 11.5))
+                .font(.system(size: 13.5))
                 .foregroundStyle(.tertiary)
                 .hoverTooltip("No \(title) limit for this account")
         }
@@ -306,7 +307,7 @@ private struct AccountTableCell: View {
         // Narrow columns drop the reset's minutes ("1d 23h" → "1d"), then the reset; never an ellipsis.
         let shortReset = reset?.split(separator: " ").first.map(String.init).flatMap { $0.first?.isNumber == true ? $0 : nil }
         let resets = [reset, shortReset].compactMap { $0 }
-        return VStack(alignment: .leading, spacing: 3) {
+        return VStack(alignment: .leading, spacing: 4) {
             ViewThatFits(in: .horizontal) {
                 ForEach(Array(Set(resets)).sorted { $0.count > $1.count }, id: \.self) { text in
                     meterLine(data, state: state, reset: text)
@@ -323,12 +324,12 @@ private struct AccountTableCell: View {
             if case .spent = state { flame(state) }
             if case .runningOut = state { flame(state) }
             Text(MetricFormatter.number(data.displayedValue, kind: data.kind, style: .row))
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .monospacedDigit()
             Spacer(minLength: 4)
             if let reset {
                 Text(reset)
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             }
         }
@@ -338,7 +339,7 @@ private struct AccountTableCell: View {
 
     private func flame(_ state: WidgetData.MeterState) -> some View {
         Image(systemName: "flame.fill")
-            .font(.system(size: 8.5))
+            .font(.system(size: 10))
             .foregroundStyle(state.severity.map(Theme.meterFill) ?? AnyShapeStyle(Color.secondary))
     }
 
@@ -362,12 +363,12 @@ private struct AccountTableCell: View {
             : selected.map { MetricFormatter.string(for: $0, style: style) }
         return VStack(alignment: .leading, spacing: 1) {
             Text(parts.first ?? data.headline)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             if parts.count > 1 {
                 Text(parts.dropFirst().joined(separator: " · "))
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
@@ -390,7 +391,7 @@ private struct AccountTableBar: View {
                     .frame(width: fraction > 0 ? max(4, proxy.size.width * min(fraction, 1)) : 0)
             }
         }
-        .frame(height: 4)
+        .frame(height: 5)
         .accessibilityHidden(true)
     }
 }
