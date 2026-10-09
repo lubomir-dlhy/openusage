@@ -138,7 +138,9 @@ homes, each with its own sign-in), OpenUsage finds them at launch and gives each
 card, with its own limits, plan, and spend tiles read from that home. A custom dir signed into the same
 account as your main login doesn't become a second card — its session logs simply count into the main
 card's spend tiles. OpenUsage also hides an older manually configured account when its config directory
-is already represented by automatic account discovery, so upgrading cannot create a duplicate card.
+is already represented by automatic account discovery, or when that directory is signed into the same
+account and organization as a discovered card. In the second case the discovered card keeps its working
+login and also counts the configured directory's session logs, so the spend stays in one place.
 
 Extra cards are named from the account ("Claude — Acme Corp"); right-click a card and choose **Rename…**
 (or use the Name field in Customize) to call it whatever you like. A card only shows while its login is

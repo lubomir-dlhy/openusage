@@ -28,8 +28,11 @@ within 48 hours. Hover a tag for the details: the full renewal date, how far awa
 it's an estimate; or every reset with its exact expiry time and countdown.
 
 Anything that may be cut off has a tooltip: hover an account name for the full name and login, the
-plan line for exact spend, and a cell for the full reading and reset time. Click an account row to unfold its full card (usage trend, spend, links); click the
-provider's header to open or close all of them. Right-click a row for the usual Hide, Refresh,
+plan line for exact spend, and a cell for the full reading and reset time. When a column is too
+narrow for the full reset time, it shortens (`1d 23h` becomes `1d`) or drops out rather than being cut
+off. Click an account row to unfold the rest of its card (usage trend, spend, links) under the row;
+click the provider's header to open or close all of them. Rows start folded each time the app launches,
+independent of whether that account's card is open in Default density. Right-click a row for the usual Hide, Refresh,
 Rename, and Customize actions, and drag rows to reorder accounts. Default density keeps one card per
 account.
 

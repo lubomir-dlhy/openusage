@@ -50,7 +50,10 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
                 if row.isExpanded {
                     let shown = Set(columns.compactMap { AccountTable.cell(for: $0, in: row.entries)?.id })
                     detail(row, shown)
-                        .padding(.horizontal, -10)
+                        .padding(.horizontal, -4)
+                        .padding(.top, 2)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.35)))
+                        .padding(.bottom, 2)
                 }
             }
         }
@@ -300,25 +303,37 @@ private struct AccountTableCell: View {
     private func meter(_ data: WidgetData, now: Date) -> some View {
         let state = data.meterState(now: now)
         let reset = data.compactTrailingText(now: now)
+        // Narrow columns drop the reset's minutes ("1d 23h" → "1d"), then the reset; never an ellipsis.
+        let shortReset = reset?.split(separator: " ").first.map(String.init).flatMap { $0.first?.isNumber == true ? $0 : nil }
+        let resets = [reset, shortReset].compactMap { $0 }
         return VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                if case .spent = state { flame(state) }
-                if case .runningOut = state { flame(state) }
-                Text(MetricFormatter.number(data.displayedValue, kind: data.kind, style: .row))
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .monospacedDigit()
-                    .layoutPriority(1)
-                Spacer(minLength: 2)
-                if let reset {
-                    Text(reset)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
+            ViewThatFits(in: .horizontal) {
+                ForEach(Array(Set(resets)).sorted { $0.count > $1.count }, id: \.self) { text in
+                    meterLine(data, state: state, reset: text)
                 }
+                meterLine(data, state: state, reset: nil)
             }
-            .lineLimit(1)
             AccountTableBar(fraction: data.fraction, severity: state.severity)
         }
         .hoverTooltip(meterTooltip(data, state: state, now: now))
+    }
+
+    private func meterLine(_ data: WidgetData, state: WidgetData.MeterState, reset: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            if case .spent = state { flame(state) }
+            if case .runningOut = state { flame(state) }
+            Text(MetricFormatter.number(data.displayedValue, kind: data.kind, style: .row))
+                .font(.system(size: 11.5, weight: .semibold))
+                .monospacedDigit()
+            Spacer(minLength: 4)
+            if let reset {
+                Text(reset)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func flame(_ state: WidgetData.MeterState) -> some View {

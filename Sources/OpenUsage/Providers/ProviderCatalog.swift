@@ -15,7 +15,8 @@ enum ProviderCatalog {
         defaultClaudeExtraLogRoots: [URL] = [],
         defaultClaudeConfigDirs: [String] = [],
         codex: CodexAccountDiscovery = CodexAccountDiscovery(),
-        claudeIdentityKeys: [String: String] = [:]
+        claudeIdentityKeys: [String: String] = [:],
+        configDirIdentityKey: (String) -> String? = ProviderCatalog.claudeIdentityKey(inConfigDir:)
     ) -> [ProviderRuntime] {
         make(
             accounts: AccountsStore(defaults: defaults),
@@ -24,7 +25,8 @@ enum ProviderCatalog {
             defaultClaudeExtraLogRoots: defaultClaudeExtraLogRoots,
             defaultClaudeConfigDirs: defaultClaudeConfigDirs,
             codex: codex,
-            claudeIdentityKeys: claudeIdentityKeys
+            claudeIdentityKeys: claudeIdentityKeys,
+            configDirIdentityKey: configDirIdentityKey
         )
     }
 
@@ -39,7 +41,8 @@ enum ProviderCatalog {
         defaultClaudeExtraLogRoots: [URL] = [],
         defaultClaudeConfigDirs: [String] = [],
         codex: CodexAccountDiscovery = CodexAccountDiscovery(),
-        claudeIdentityKeys: [String: String] = [:]
+        claudeIdentityKeys: [String: String] = [:],
+        configDirIdentityKey: (String) -> String? = ProviderCatalog.claudeIdentityKey(inConfigDir:)
     ) -> [ProviderRuntime] {
         // Default provider order (see AGENTS.md "## Providers"): the three established providers first,
         // then every other provider alphabetically by display name. Account cards slot in right after
@@ -48,7 +51,17 @@ enum ProviderCatalog {
         // Every baked `Provider.displayName` here is the DERIVED default — renames live only in the
         // account registry and are resolved at render time (`ProviderAccountRecord.resolvedDisplayName`),
         // so a baked name can never be a stale copy of one.
-        let configuredClaude = accounts.accounts(for: "claude")
+        // A configured account logged in as a discovered card's identity is the same login: the card
+        // keeps the live credential and also scans the configured dir's logs.
+        var claudeCards = claudeCards
+        let configuredClaude = accounts.accounts(for: "claude").filter { account in
+            guard !account.isDefault, let configDir = account.configDir,
+                  let key = configDirIdentityKey(configDir),
+                  let index = claudeCards.firstIndex(where: { $0.identityKey == key })
+            else { return true }
+            claudeCards[index].additionalLogDirectories.append(configDir)
+            return false
+        }
         let organizationCards = claudeCards.filter { $0.configDirPath == nil }
         let configDirectoryCards = claudeCards.filter { $0.configDirPath != nil }
         var automaticallyRepresentedConfigDirs = configDirectoryCards.compactMap(\.configDirPath)
@@ -131,6 +144,16 @@ enum ProviderCatalog {
             ZAIProvider()
         ]
         return runtimes
+    }
+
+    nonisolated static func claudeIdentityKey(inConfigDir path: String) -> String? {
+        let file = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            .appendingPathComponent(".claude.json")
+        guard let data = try? Data(contentsOf: file),
+              let account = try? JSONDecoder().decode(DefaultAccountObserver.ClaudeStateFile.self, from: data)
+                .oauthAccount
+        else { return nil }
+        return DefaultAccountObserver.claudeIdentityKey(account)
     }
 
     private static func canonicalConfigDir(_ path: String) -> String {

@@ -19,6 +19,8 @@ struct WidgetGroupedListView: View {
 
     @State private var frameStore = ReorderFrameStore()
     @State var activeProviderID: String?
+    /// Account-table rows unfold independently of the per-account cards' persisted carets.
+    @State var expandedAccountRows: Set<String> = []
     @State private var activeMetricID: String?
     /// The card the "Rename…" alert is currently editing; `nil` when the alert is closed.
     @State private var renameCardID: String?

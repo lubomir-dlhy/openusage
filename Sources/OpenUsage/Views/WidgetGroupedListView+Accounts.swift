@@ -39,13 +39,17 @@ extension WidgetGroupedListView {
             activeRowID: activeProviderID,
             onToggle: { id in
                 withAnimation(Motion.spring) {
-                    _ = layout.setProviderExpanded(!layout.isProviderExpanded(id), for: id)
+                    if expandedAccountRows.remove(id) == nil { expandedAccountRows.insert(id) }
                 }
             },
             onToggleAll: {
-                let expand = !rows.contains(where: \.isExpanded)
+                let ids = rows.map(\.id)
                 withAnimation(Motion.spring) {
-                    for row in rows { _ = layout.setProviderExpanded(expand, for: row.id) }
+                    if rows.contains(where: \.isExpanded) {
+                        expandedAccountRows.subtract(ids)
+                    } else {
+                        expandedAccountRows.formUnion(ids)
+                    }
                 }
             },
             detail: { row, shownIDs in accountDetail(row.group, excluding: shownIDs) },
@@ -80,13 +84,16 @@ extension WidgetGroupedListView {
             notice: dataStore.headerNotice(for: id),
             staleness: dataStore.stalenessHint(for: id),
             refreshing: dataStore.refreshingProviderIDs.contains(id),
-            isExpanded: layout.isProviderExpanded(id)
+            isExpanded: expandedAccountRows.contains(id)
         )
     }
 
-    /// The account's own rows minus the limits already shown as table columns, then its links.
+    /// The account's own rows minus what the table row already shows (limit columns, resets tag),
+    /// then its links.
     private func accountDetail(_ group: ProviderGroup, excluding shownIDs: Set<String>) -> some View {
-        let rows = resolvedRows(group.widgets, hideEmpty: true).filter { !shownIDs.contains($0.descriptor.id) }
+        let rows = resolvedRows(group.widgets, hideEmpty: true).filter {
+            !shownIDs.contains($0.descriptor.id) && !$0.data.showsResetExpiries
+        }
         return VStack(spacing: 0) {
             ForEach(rows) { entry in
                 row(entry.descriptor, data: entry.data, in: group.provider.id, condensedTop: false)
