@@ -20,7 +20,7 @@ In **Compact** density, a provider with two or more accounts (say three Claude l
 card instead of one card per account. Each account is a row; the limits its accounts share (Session,
 Weekly, Fable, and Credits for Claude; Weekly, Luna Reserve, and Credits for Codex) become columns, up to four.
 Credits always get a column, even when you've tucked them behind the caret. The card's header adds up
-the last-30-days spend of all its accounts (`30d $9.4K`); hover it for the per-account split. Under each
+the last-30-days spend of all its accounts (`$9.4K / 30 days`); hover it for the per-account split. Under each
 account's name you'll see its plan and last-30-days spend, and up to two small tags: 💳 with the
 renewal date (`💳 25 Oct`) and ↻ with how many limit resets the account has and when the first
 expires (`↻ 2 · 29 Oct`). The ↻ icon turns yellow when that reset expires within a week and red

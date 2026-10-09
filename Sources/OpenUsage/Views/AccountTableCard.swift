@@ -74,9 +74,12 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
                     .foregroundStyle(.secondary)
                 if let total = AccountTable.totalLast30Spend(rows.map(\.entries)) {
                     Text("·").foregroundStyle(.tertiary)
-                    Text("30d " + MetricFormatter.number(total, kind: .dollars, style: .tray))
-                        .font(.system(size: 11.5, weight: .medium))
+                    (Text(MetricFormatter.number(total, kind: .dollars, style: .tray))
+                        .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(.secondary)
+                        + Text(" / 30 days")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary))
                         .hoverTooltip(spendTooltip(total: total))
                 }
                 Spacer()
@@ -164,9 +167,8 @@ private struct AccountTableNameColumn: View {
                 }
             }
             if let subline {
-                Text(subline)
+                subline
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .hoverTooltip(sublineTooltip)
             }
@@ -189,10 +191,19 @@ private struct AccountTableNameColumn: View {
 
     private var spend: Double? { AccountTable.last30Spend(in: row.entries) }
 
-    private var subline: String? {
-        let parts = [row.plan, spend.map { "30d " + MetricFormatter.number($0, kind: .dollars, style: .tray) }]
-            .compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    /// "Max 20x · $7.4K/30d", with the amount carrying the weight and the period kept quiet.
+    private var subline: Text? {
+        let amount = spend.map {
+            Text(MetricFormatter.number($0, kind: .dollars, style: .tray)).fontWeight(.medium).foregroundStyle(.secondary)
+                + Text("/30d").foregroundStyle(.tertiary)
+        }
+        let plan = row.plan.map { Text($0).foregroundStyle(.secondary) }
+        switch (plan, amount) {
+        case let (plan?, amount?): return plan + Text(" · ").foregroundStyle(.tertiary) + amount
+        case let (plan?, nil): return plan
+        case let (nil, amount?): return amount
+        case (nil, nil): return nil
+        }
     }
 
     private var sublineTooltip: String? {
