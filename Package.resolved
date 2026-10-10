@@ -11,6 +11,18 @@
       }
     },
     {
+<<<<<<< HEAD
+=======
+      "identity" : "posthog-ios",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PostHog/posthog-ios.git",
+      "state" : {
+        "revision" : "2f6db7d9ccfac0307722c9a2a4029bf534985e2f",
+        "version" : "3.90.2"
+      }
+    },
+    {
+>>>>>>> upstream/main
       "identity" : "sparkle",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/sparkle-project/Sparkle",
