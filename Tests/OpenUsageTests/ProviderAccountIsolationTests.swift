@@ -180,4 +180,27 @@ struct ProviderAccountIsolationTests {
             "claude@culture", "claude", "claude#1",
         ])
     }
+
+    @Test func catalogFoldsLegacyClaudeAccountSignedInAsADiscoveredCard() {
+        let defaults = UserDefaults(suiteName: "ProviderCatalogSameIdentity-\(UUID().uuidString)")!
+        let accounts = AccountsStore(defaults: defaults)
+        accounts.addAccount(providerID: "claude", label: "CulturePulse", configDir: "/Users/example/CP/.claude")
+
+        let runtimes = ProviderCatalog.make(
+            accounts: accounts,
+            defaults: defaults,
+            claudeCards: [ClaudeAccountCard(
+                id: "claude@culture",
+                identityKey: "user|culture",
+                organizationID: "culture",
+                displayName: "Claude — CulturePulse",
+                usesDesktopCredentials: false,
+                allowsUnattributedPiUsage: false
+            )],
+            defaultClaudeConfigDirs: ["/Users/example/.claude"],
+            configDirIdentityKey: { $0 == "/Users/example/CP/.claude" ? "user|culture" : nil }
+        )
+
+        #expect(runtimes.map(\.provider.id).filter { $0.hasPrefix("claude") } == ["claude@culture", "claude"])
+    }
 }
