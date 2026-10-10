@@ -119,15 +119,18 @@ struct AccountTableCard<Detail: View, Menu: View, RowGesture: Gesture>: View {
     }
 
     private func accountRow(_ row: AccountTableRow, columns: [String], limitColumns: Set<String>) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            AccountTableNameColumn(row: row)
-                .frame(width: Self.nameWidth, alignment: .leading)
-            ForEach(columns, id: \.self) { title in
-                AccountTableCell(entry: AccountTable.cell(for: title, in: row.entries), title: title)
-                    .frame(width: limitColumns.contains(title) ? nil : Self.balanceWidth, alignment: .leading)
-                    .frame(maxWidth: limitColumns.contains(title) ? .infinity : nil, alignment: .leading)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 10) {
+                AccountTableNameColumn(row: row)
+                    .frame(width: Self.nameWidth, alignment: .leading)
+                ForEach(columns, id: \.self) { title in
+                    AccountTableCell(entry: AccountTable.cell(for: title, in: row.entries), title: title)
+                        .frame(width: limitColumns.contains(title) ? nil : Self.balanceWidth, alignment: .leading)
+                        .frame(maxWidth: limitColumns.contains(title) ? .infinity : nil, alignment: .leading)
+                }
+                if columns.isEmpty { Spacer(minLength: 0) }
             }
-            if columns.isEmpty { Spacer(minLength: 0) }
+            AccountTableChips(row: row)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
@@ -172,24 +175,6 @@ private struct AccountTableNameColumn: View {
                     .lineLimit(1)
                     .hoverTooltip(sublineTooltip)
             }
-            let resets = AccountTable.resets(in: row.entries)
-            if row.renewal != nil || resets != nil {
-                TimelineView(.periodic(from: .now, by: 30)) { context in
-                    let chips = Group {
-                        if let renewal = row.renewal {
-                            AccountRenewalChip(renewal: renewal, now: context.date)
-                        }
-                        if let resets {
-                            AccountResetsChip(resets: resets, now: context.date)
-                        }
-                    }
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 5) { chips }
-                        VStack(alignment: .leading, spacing: 4) { chips }
-                    }
-                    .padding(.top, 3)
-                }
-            }
         }
     }
 
@@ -216,6 +201,27 @@ private struct AccountTableNameColumn: View {
             spend.map { "Last 30 days: " + MetricFormatter.number($0, kind: .dollars, style: .full) }
         ].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: "\n")
+    }
+}
+
+/// The renewal and reset tags, on one line under the whole row so they never stack.
+private struct AccountTableChips: View {
+    let row: AccountTableRow
+
+    var body: some View {
+        let resets = AccountTable.resets(in: row.entries)
+        if row.renewal != nil || resets != nil {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                HStack(spacing: 5) {
+                    if let renewal = row.renewal {
+                        AccountRenewalChip(renewal: renewal, now: context.date)
+                    }
+                    if let resets {
+                        AccountResetsChip(resets: resets, now: context.date)
+                    }
+                }
+            }
+        }
     }
 }
 
