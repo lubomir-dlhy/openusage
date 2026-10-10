@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.7.17
+
+### Bug Fixes
+- Show one row per Claude login: a hand-added account signed into the same account and organization as a discovered one folds into it, so its limits and spend stay together ([#12](https://github.com/lubomir-dlhy/openusage/pull/12)) by @lubomir-dlhy
+- Tidier Compact account table: rows start folded, reset times shorten instead of getting cut off, and unfolded details sit in an inset under their row ([#12](https://github.com/lubomir-dlhy/openusage/pull/12)) by @lubomir-dlhy
+- Larger, easier-to-read type and tags in the account table, with renewal and reset tags side by side on their own line ([#12](https://github.com/lubomir-dlhy/openusage/pull/12)) by @lubomir-dlhy
+- Show how many days are left until renewal (`5 Nov · 26d`) and spend as `$10.4K / 30 days` ([#12](https://github.com/lubomir-dlhy/openusage/pull/12)) by @lubomir-dlhy
+- Narrower credits column with compact amounts (`$2.5K`), giving the limit bars more room ([#12](https://github.com/lubomir-dlhy/openusage/pull/12)) by @lubomir-dlhy
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.16...v0.7.17](https://github.com/lubomir-dlhy/openusage/compare/v0.7.16...v0.7.17)
+
 ## v0.7.16
 
 ### New Features
