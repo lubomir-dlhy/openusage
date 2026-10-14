@@ -44,11 +44,12 @@ final class AppContainer {
     /// write). Each service shares its card's auth store and usage client. The view tree selects
     /// the matching service from `\.codexResetClaims` for each card's resets popover.
     let codexResetClaims: [String: CodexResetClaimService]
-    /// The provider runtimes, kept so on-demand credential detection (the Customize "Reset All" reseed)
-    /// can re-probe `hasLocalCredentials()` the same way first-run seeding does.
-    private let providers: [ProviderRuntime]
+    /// The provider runtimes, kept so on-demand credential detection (the welcome screen and the
+    /// Customize "Reset All" reseed) can re-probe `hasLocalCredentials()` on every card.
+    let providers: [ProviderRuntime]
     /// Read-only usage API on 127.0.0.1:6736 for other local apps (silently off when the port is taken).
     private let localAPI: LocalUsageServer
+<<<<<<< HEAD
     // A `let` of a `Sendable` `Task` is implicitly nonisolated, so the nonisolated `deinit` can cancel it.
     private let refreshTask: Task<Void, Never>
     /// Watches `AccountsStore` and rebuilds the per-account runtimes in place when the account
@@ -57,6 +58,10 @@ final class AppContainer {
     private let accountsObserver: Task<Void, Never>
     /// The fresh-install credential-detection pass (see `FirstRunSeeder`); `nil` on every later launch.
     private let seedTask: Task<Void, Never>?
+=======
+    /// `nil` until `startRefreshing()`, which the welcome screen delays until the user has picked providers.
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+>>>>>>> upstream/main
     /// The new-provider credential-detection pass (see `NewProviderSeeder`); `nil` unless this launch is
     /// the first with a provider the install has never seen.
     private let newProviderTask: Task<Void, Never>?
@@ -124,10 +129,10 @@ final class AppContainer {
             dataStore?.providerEnablementDidChange()
             iCloudSync?.scheduleWrite()
         }
-        // Fresh installs start minimal: seed the enabled-provider list (Claude/Codex/Cursor right away,
-        // then the detected set once the local credential probe finishes). No-op on every later launch.
+        // Fresh installs start with nothing on; the welcome screen turns on the user's picks. No-op on
+        // every later launch.
         let onboarding = OnboardingStore()
-        self.seedTask = FirstRunSeeder.seedIfNeeded(
+        FirstRunSeeder.seedIfNeeded(
             isFreshInstall: isFreshInstall,
             providers: providers,
             enablement: enablement,
@@ -207,7 +212,10 @@ final class AppContainer {
             // exactly like every UI surface.
             .resolvingDisplayNames(accounts.resolvedDisplayNamesByCardID)
         })
+<<<<<<< HEAD
         self.refreshTask = Self.startPeriodicRefresh(dataStore: dataStore)
+=======
+>>>>>>> upstream/main
         localAPI.start()
 
         // Apply account changes (add/remove, or edit icon/label/config dir) live: rebuild the per-account
@@ -229,13 +237,18 @@ final class AppContainer {
     }
 
     deinit {
+<<<<<<< HEAD
         refreshTask.cancel()
         accountsObserver.cancel()
         seedTask?.cancel()
+=======
+        refreshTask?.cancel()
+>>>>>>> upstream/main
         newProviderTask?.cancel()
         shellEnvironmentSnapshotTask.cancel()
     }
 
+<<<<<<< HEAD
     /// The name a card renders under right now — the app-side face of the one resolver
     /// (`ProviderAccountRecord.resolvedDisplayName`). Live: a rename in the account registry
     /// re-titles the card everywhere without a relaunch. Non-account providers (no record) keep
@@ -282,6 +295,11 @@ final class AppContainer {
                 await dataStore.refreshAll()
             }
         }
+=======
+    func startRefreshing() {
+        guard refreshTask == nil else { return }
+        refreshTask = Self.startPeriodicRefresh(dataStore: dataStore, telemetry: telemetry)
+>>>>>>> upstream/main
     }
 
     /// Re-runs first-launch credential detection on demand — the enablement half of the Customize
@@ -325,8 +343,8 @@ final class AppContainer {
     /// Between passes the loop sleeps via `RefreshWakeSignal`, which wakes it early when the user
     /// enables/disables a provider so a newly-enabled provider is fetched promptly instead of waiting out
     /// the full interval. The signal subscribes BEFORE the first pass and buffers, so an enablement change
-    /// landing while a pass is still running (first-run credential detection, `NewProviderSeeder`, the
-    /// Customize "Reset All" reseed — all of which typically finish faster than the network fetches) is
+    /// landing while a pass is still running (`NewProviderSeeder`, the Customize "Reset All" reseed —
+    /// both of which typically finish faster than the network fetches) is
     /// never lost. Each pass still honors the cache (and the per-provider failure backoff), so an early
     /// wake only hits the network for a provider whose snapshot has actually expired.
     ///

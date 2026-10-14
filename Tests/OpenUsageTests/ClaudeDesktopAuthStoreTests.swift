@@ -67,7 +67,7 @@ final class ClaudeDesktopAuthStoreTests: XCTestCase {
 
         XCTAssertNil(badge(snapshot.lines, "Error"))
         XCTAssertNil(snapshot.warning)
-        XCTAssertEqual(httpClient.requests.filter { $0.url.path == "/api/oauth/usage" }.count, 1)
+        XCTAssertEqual(httpClient.requests.filter { $0.isClaudeUsagePoll }.count, 1)
         XCTAssertEqual(fixture.keyReader.calls, [false])
     }
 
@@ -451,6 +451,7 @@ final class ClaudeDesktopAuthStoreTests: XCTestCase {
         }
 
         XCTAssertNil(badge(snapshot.lines, "Error"))
+<<<<<<< HEAD
         // Revoked CLI usage, successful Desktop usage, then the best-effort live profile lookup.
         XCTAssertEqual(httpClient.requests.count, 3)
         XCTAssertEqual(httpClient.requests.map(\.url.path), [
@@ -508,6 +509,11 @@ final class ClaudeDesktopAuthStoreTests: XCTestCase {
             "/api/oauth/usage", "/api/oauth/usage", "/api/oauth/profile"
         ])
         XCTAssertTrue(httpClient.requests.last?.headers["Authorization"]?.contains("desktop-token") == true)
+=======
+        let usageRequests = httpClient.requests.filter { $0.isClaudeUsagePoll }
+        XCTAssertEqual(usageRequests.count, 2)
+        XCTAssertTrue(usageRequests.last?.headers["Authorization"]?.contains("desktop-token") == true)
+>>>>>>> upstream/main
     }
 
     @MainActor

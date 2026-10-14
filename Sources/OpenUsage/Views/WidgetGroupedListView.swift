@@ -87,6 +87,7 @@ struct WidgetGroupedListView: View {
         // Keep the provider mark and hover-revealed copy control aligned with the card's content edges.
         .padding(.horizontal, 8)
         .highPriorityGesture(providerDragGesture(for: group))
+<<<<<<< HEAD
         .contextMenu { providerMenu(group) }
     }
 
@@ -97,6 +98,23 @@ struct WidgetGroupedListView: View {
         // the per-metric "Hide" but one level up, so the verb order reads the same on a header as a row.
         Button("Hide \(name)") {
             container.enablement.setEnabled(false, for: group.provider.id)
+=======
+        .contextMenu {
+            // Hides the whole provider section (the Customize provider list brings it back). Mirrors
+            // the per-metric "Hide" but one level up, so the verb order reads the same on a header as a row.
+            Button("Hide \(group.provider.displayName)") {
+                container.enablement.setEnabled(false, for: group.provider.id)
+            }
+            Divider()
+            Button("Refresh \(group.provider.displayName)") {
+                Task { await dataStore.refreshOnUserRequest(providerID: group.provider.id) }
+            }
+            Button("Customize…") {
+                openCustomize(for: group.provider.id)
+            }
+            Divider()
+            Button("Share Screenshot") { _ = shareCard(group) }
+>>>>>>> upstream/main
         }
         Divider()
         Button("Refresh \(name)") {
@@ -149,7 +167,8 @@ struct WidgetGroupedListView: View {
 
     private enum DashboardMetricCardRow: Identifiable {
         case metric(ResolvedRow)
-        case divider
+        case separator
+        case toggle
         /// #596: the provider's quick-link buttons (Status / Console / Dashboard ...), pinned at the
         /// bottom of the collapsible expanded section. They collapse with the caret — part of the
         /// expander, not always-visible chrome.
@@ -159,8 +178,10 @@ struct WidgetGroupedListView: View {
             switch self {
             case .metric(let row):
                 "metric:\(row.descriptor.id)"
-            case .divider:
-                "expanded-divider"
+            case .separator:
+                "expanded-separator"
+            case .toggle:
+                "expand-toggle"
             case .links:
                 "provider-links"
             }
@@ -173,6 +194,7 @@ struct WidgetGroupedListView: View {
         // recomputed several times per row (twice per adjacent pair plus once in `row`).
         let providerID = group.provider.id
         let isExpanded = layout.isProviderExpanded(providerID)
+<<<<<<< HEAD
         let hideEmpty = density == .compact
         var alwaysRows = resolvedRows(group.alwaysShownWidgets, hideEmpty: hideEmpty)
         var expandedRows = resolvedRows(group.expandedWidgets, hideEmpty: hideEmpty)
@@ -186,6 +208,12 @@ struct WidgetGroupedListView: View {
         }
         // The caret separates Always Visible and On Demand rows, so text-row condensing should not
         // bridge across it. Each side tightens only against rows on the same side of the separator.
+=======
+        let alwaysRows = resolvedRows(group.alwaysShownWidgets)
+        let expandedRows = resolvedRows(group.expandedWidgets)
+        // Text-row condensing stays within Always Visible and On Demand groups; it never crosses
+        // their separator. While collapsed, only the Always Visible group is passed through.
+>>>>>>> upstream/main
         let condensedIDs = visibleCondensedTextRowIDs(alwaysRows: alwaysRows, expandedRows: isExpanded ? expandedRows : [])
         let cardRows = metricCardRows(
             alwaysRows: alwaysRows,
@@ -195,7 +223,7 @@ struct WidgetGroupedListView: View {
         )
         // Same card builder the lifted preview uses, so the floating chip can't drift from the live card.
         return DashboardMetricCard {
-            // One stable list keeps the drag-owning metric row alive when it crosses the caret boundary.
+            // One stable list keeps the drag-owning metric row alive when it crosses the separator.
             // Separate always-shown/expanded loops can tear that source view down before `onEnded` fires,
             // leaving the lift overlay visible until another drag forces a reset.
             ForEach(cardRows) { cardRow in
@@ -205,7 +233,13 @@ struct WidgetGroupedListView: View {
                         condensedTop: condensedIDs.contains(entry.descriptor.id))
                 case .links(let links):
                     ProviderLinksView(links: links)
-                case .divider:
+                case .separator:
+                    DashboardMetricCardSeparator()
+                        .reorderFrame(
+                            id: expandedDividerID(for: providerID),
+                            in: .named(reorderSpaceName)
+                        )
+                case .toggle:
                     expandToggle(providerID: providerID, isExpanded: isExpanded)
                 }
             }
@@ -236,33 +270,40 @@ struct WidgetGroupedListView: View {
         // content to reveal — expanded metric rows (after Compact's no-data filter) or links — so a
         // provider whose expanded rows are all empty in Compact doesn't get a caret over nothing.
         let hasLinks = !links.isEmpty
+<<<<<<< HEAD
         let hasExpandedContent = !expandedRows.isEmpty || hasLinks
         return alwaysRows.map(DashboardMetricCardRow.metric)
             + (hasExpandedContent ? [.divider] : [])
             + (isExpanded && !expandedRows.isEmpty ? expandedRows.map(DashboardMetricCardRow.metric) : [])
             + (isExpanded && hasLinks ? [.links(links)] : [])
+=======
+        let hasExpandedContent = hasExpandedMetrics || hasLinks
+        let always = alwaysRows.map(DashboardMetricCardRow.metric)
+        guard hasExpandedContent else { return always }
+        guard isExpanded else { return always + [.toggle] }
+        return always
+            + [.separator]
+            + expandedRows.map(DashboardMetricCardRow.metric)
+            + (hasLinks ? [.links(links)] : [])
+            + [.toggle]
+>>>>>>> upstream/main
     }
 
     /// The centered caret at the bottom of a provider card that reveals or hides its On Demand metrics
-    /// and quick links. Rendered whenever the provider has either kind of expanded content.
+    /// and quick links. It stays below the Always Visible rows when collapsed and slides below all
+    /// expanded content when open.
     private func expandToggle(providerID: String, isExpanded: Bool) -> some View {
-        Button {
+        DashboardMetricCardCaret(isExpanded: isExpanded) {
             withAnimation(Motion.spring) {
                 _ = layout.setProviderExpanded(!isExpanded, for: providerID)
             }
-        } label: {
-            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 14, height: 14)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 5)
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
         }
+<<<<<<< HEAD
         .buttonStyle(.plain)
         .reorderFrame(id: expandedDividerID(for: providerID), in: .named(reorderSpaceName))
         .accessibilityLabel(isExpanded ? "Show less" : "Show more")
+=======
+>>>>>>> upstream/main
     }
 
     private func expandedDividerID(for providerID: String) -> String {
@@ -277,7 +318,7 @@ struct WidgetGroupedListView: View {
     /// IDs of text-only rows sitting directly under another text-only row. Rows can't see their
     /// neighbors, so the list computes the pairs; Compact density pulls these rows up so a run of
     /// one-liners reads as one cluster. Called per segment (always-shown / expanded), so the expand
-    /// caret is never crossed.
+    /// separator is never crossed.
     private func condensedTextRowIDs(_ rows: [ResolvedRow]) -> Set<String> {
         let offsets = WidgetData.condensedTextRowOffsets(in: rows.map(\.data))
         return Set(offsets.map { rows[$0].descriptor.id })
@@ -320,8 +361,13 @@ struct WidgetGroupedListView: View {
         }
         Divider()
         if let provider = layout.provider(id: providerID) {
+<<<<<<< HEAD
             Button("Refresh \(container.displayName(for: provider))") {
                 Task { await dataStore.refresh(providerID: providerID, force: true) }
+=======
+            Button("Refresh \(provider.displayName)") {
+                Task { await dataStore.refreshOnUserRequest(providerID: providerID) }
+>>>>>>> upstream/main
             }
         }
         Button("Customize…") {
@@ -382,9 +428,9 @@ struct WidgetGroupedListView: View {
             return []
         }
         let alwaysShown = group.alwaysShownWidgets.compactMap { layout.descriptor(for: $0)?.id }
-        // The caret is a drop target whenever the expanded section is open — including a links-only
-        // section (buttons but no expanded metrics), so a metric can be dragged past the caret to tuck
-        // it below the fold even when only buttons are showing there.
+        // The separator is a drop target whenever the expanded section is open — including a links-only
+        // section (buttons but no expanded metrics), so a metric can be dragged across the boundary
+        // even when only buttons are showing below it.
         let hasExpandedContent = group.hasExpandedMetrics || !group.provider.visibleLinks.isEmpty
         guard hasExpandedContent, layout.isProviderExpanded(providerID) else { return alwaysShown }
         let expanded = group.expandedWidgets.compactMap { layout.descriptor(for: $0)?.id }
@@ -392,19 +438,29 @@ struct WidgetGroupedListView: View {
     }
 
     private func makeProviderLift(for group: ProviderGroup, value: DragGesture.Value) -> ReorderLift? {
-        // The floating preview should match what the card shows: only the always-shown rows unless this
-        // provider's caret is currently open.
-        let visibleWidgets = layout.isProviderExpanded(group.provider.id) ? group.widgets : group.alwaysShownWidgets
-        let rows = visibleWidgets.compactMap { widget -> WidgetData? in
+        let isExpanded = layout.isProviderExpanded(group.provider.id)
+        let alwaysRows = group.alwaysShownWidgets.compactMap { widget -> WidgetData? in
             guard let descriptor = layout.descriptor(for: widget) else { return nil }
             return dataStore.data(for: descriptor)
         }
+        let expandedRows = isExpanded
+            ? group.expandedWidgets.compactMap { widget -> WidgetData? in
+                guard let descriptor = layout.descriptor(for: widget) else { return nil }
+                return dataStore.data(for: descriptor)
+            }
+            : []
+        let links = group.provider.visibleLinks
+        let hasExpandedContent = group.hasExpandedMetrics || !links.isEmpty
         return ReorderLift.make(
             id: group.provider.id,
             payload: .dashboardProvider(
                 provider: group.provider,
                 plan: dataStore.plan(for: group.provider.id),
-                rows: rows
+                rows: alwaysRows + expandedRows,
+                dividerIndex: isExpanded && hasExpandedContent ? alwaysRows.count : nil,
+                links: links,
+                showsCaret: hasExpandedContent,
+                isExpanded: isExpanded
             ),
             value: value,
             frames: frameStore.frames
