@@ -183,7 +183,10 @@ final class CodexProvider: ProviderRuntime {
             accountID: authState.auth.tokens?.accountID
         )
         var mapped = try CodexUsageMapper.mapUsageResponse(response, resetCredits: resetCredits, now: now())
-        mapped.renewal = CodexUsageMapper.renewal(auth: authState.auth, now: now())
+        mapped.renewal = await fetchRenewalBestEffort(
+            accessToken: currentToken,
+            accountID: authState.auth.tokens?.accountID
+        )
 
         return await snapshot(mapped: mapped)
     }
@@ -303,6 +306,20 @@ final class CodexProvider: ProviderRuntime {
     /// refresh: this is supplementary to the usage metrics, so a network error, timeout, or non-2xx just
     /// yields `nil` and the mapper falls back to the count embedded in the usage body. Logged, not thrown —
     /// the user still gets Session/Weekly/Credits even if this endpoint is down.
+    private func fetchRenewalBestEffort(accessToken: String, accountID: String?) async -> SubscriptionRenewal? {
+        do {
+            let response = try await usageClient.fetchAccountCheck(accessToken: accessToken, accountID: accountID)
+            guard (200..<300).contains(response.statusCode) else {
+                AppLog.warn(LogTag.plugin("codex"), "account check returned HTTP \(response.statusCode); no renewal date")
+                return nil
+            }
+            return CodexUsageMapper.renewal(accountCheck: response, accountID: accountID)
+        } catch {
+            AppLog.warn(LogTag.plugin("codex"), "account check failed; no renewal date: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     private func fetchResetCreditsBestEffort(accessToken: String, accountID: String?) async -> HTTPResponse? {
         do {
             return try await usageClient.fetchResetCredits(accessToken: accessToken, accountID: accountID)

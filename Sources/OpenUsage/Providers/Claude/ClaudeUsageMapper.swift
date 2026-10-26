@@ -167,19 +167,6 @@ enum ClaudeUsageMapper {
         )
     }
 
-    /// The profile reports when the subscription started, not when it renews. Consumer plans bill
-    /// monthly on that day, so the next renewal is projected from it; always marked as an estimate.
-    /// Only active Stripe subscriptions qualify — invoiced and inactive organizations get no date.
-    static func renewal(profile: ClaudeAccountProfile, now: Date) -> SubscriptionRenewal? {
-        guard let organization = profile.organization,
-              organization.subscriptionStatus == "active",
-              organization.billingType == "stripe_subscription",
-              let anchor = resetDate(organization.subscriptionCreatedAt),
-              let date = SubscriptionRenewal.next(anchor: anchor, after: now)
-        else { return nil }
-        return SubscriptionRenewal(date: date, estimated: true)
-    }
-
     private static func appendUsageWindow(_ value: Any?, label: String, periodDurationMs: Int, to lines: inout [MetricLine]) {
         guard let object = value as? [String: Any],
               let used = ProviderParse.number(object["utilization"])

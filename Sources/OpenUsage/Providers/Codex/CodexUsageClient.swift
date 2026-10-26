@@ -12,6 +12,7 @@ struct CodexUsageClient: Sendable {
     static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
     static let resetCreditsURL = URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")!
     static let consumeResetCreditURL = URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume")!
+    static let accountCheckURL = URL(string: "https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27")!
 
     var http: any HTTPClient
 
@@ -113,6 +114,25 @@ struct CodexUsageClient: Sendable {
         return try await http.send(HTTPRequest(
             method: "GET",
             url: Self.resetCreditsURL,
+            headers: headers,
+            timeout: 10
+        ))
+    }
+
+    /// The account's subscription state (next renewal, cancellation, scheduled plan change).
+    func fetchAccountCheck(accessToken: String, accountID: String?) async throws -> HTTPResponse {
+        var headers = [
+            "Authorization": "Bearer \(accessToken)",
+            "Accept": "application/json",
+            "User-Agent": "OpenUsage"
+        ]
+        if let accountID, !accountID.isEmpty {
+            headers["ChatGPT-Account-Id"] = accountID
+        }
+
+        return try await http.send(HTTPRequest(
+            method: "GET",
+            url: Self.accountCheckURL,
             headers: headers,
             timeout: 10
         ))

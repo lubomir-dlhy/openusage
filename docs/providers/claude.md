@@ -169,10 +169,18 @@ profile response supplies the current plan and tier. Claude Code tokens refresh 
 itself. If a token is expired or revoked, OpenUsage retries with the next credential source before
 reporting an error.
 
-The same profile reports when the subscription started (`subscription_created_at`). Claude bills
-monthly on that day, so the renewal date in the multi-account table is projected from it and marked
-as an estimate. It only appears for active subscriptions paid through Stripe; Team and Enterprise
-organizations billed by invoice show none.
+Claude's billing details (`claude.ai/api/organizations/{org}/subscription_details`, what claude.ai's
+billing settings read) don't accept the OAuth tokens Claude Code uses. The profile's
+`subscription_created_at` isn't the billing day once a plan has changed, so it isn't used either.
+Two ways to get the payment tag in the multi-account table, both in a Claude card's Customize page:
+
+- **Read From Claude Desktop** (off by default): uses Claude Desktop's signed-in claude.ai session to
+  read the billing details for every Claude account it can see, including Desktop profiles run under
+  Parall. It shows the next charge, a cancelled plan's end date, or a scheduled downgrade. The session
+  is read from Desktop's cookie store with the same "Claude Safe Storage" key used for Desktop logins,
+  sent only to that one endpoint, and never stored; results are kept for an hour. Accounts signed in
+  only in a browser aren't covered.
+- **Billing Day**: a day of the month you set; it overrides anything read from Claude Desktop.
 
 The plan badge reads `GET https://api.anthropic.com/api/oauth/profile` (the organization's `rate_limit_tier`), because the plan Claude Code saves at sign-in never updates afterwards. To stay clear of Anthropic's rate limits, that lookup runs at most once per access token — after a usage fetch has succeeded — and cards bound to a specific account reuse the profile they already fetched to verify identity, so they make no extra request. Inference-only tokens skip it entirely.
 

@@ -33,10 +33,14 @@ If Codex reports only a 7-day window, it maps to Weekly without inventing a 5-ho
 
 ## Renewal date
 
-The ChatGPT login's ID token carries the current billing period (`chatgpt_subscription_active_until`).
-The multi-account table shows it as the renewal date. The token is only refreshed now and then, so when
-that date has already passed (the plan has renewed since), OpenUsage rolls it forward by the plan's
-billing period (monthly, or yearly for a period longer than 300 days) and marks it as an estimate.
+The multi-account table's billing tag comes from `GET chatgpt.com/backend-api/accounts/check/v4-2023-04-27`,
+the same account check the ChatGPT app's billing settings read. It reports the next renewal
+(`renews_at`), whether the plan is cancelled (`will_renew` / `cancels_at`, shown as "Ends …"), and any
+scheduled plan change (`scheduled_plan_change`, shown as an upgrade or downgrade to the new plan).
+Upgrades take effect right away, so a past upgrade shows only as the new renewal date. The login
+token's `chatgpt_subscription_active_until` claim isn't used: it is only re-checked now and then and
+can lag the real billing period by months. If the account check fails, the tag is left off and the
+failure is logged.
 
 ## Where credentials come from
 
