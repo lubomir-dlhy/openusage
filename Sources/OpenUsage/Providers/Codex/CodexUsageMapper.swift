@@ -247,25 +247,42 @@ enum CodexUsageMapper {
         return Int(seconds * 1000)
     }
 
-    /// The ChatGPT subscription's current period end from the login's ID token claims. The claims are
-    /// only as fresh as the token: a lapsed `active_until` on a still-working login means it renewed
-    /// since, so the date rolls forward by the period length (yearly when the last period ran over
-    /// 300 days, else monthly) and is marked estimated.
-    static func renewal(auth: CodexAuth, now: Date) -> SubscriptionRenewal? {
-        let claims = [auth.tokens?.idToken, auth.tokens?.accessToken]
-            .compactMap { $0.flatMap(ProviderParse.jwtPayload)?["https://api.openai.com/auth"] as? [String: Any] }
-        let periods: [(start: Date?, until: Date)] = claims.compactMap { claim in
-            guard let until = (claim["chatgpt_subscription_active_until"] as? String).flatMap(OpenUsageISO8601.date(from:))
-            else { return nil }
-            return ((claim["chatgpt_subscription_active_start"] as? String).flatMap(OpenUsageISO8601.date(from:)), until)
+    /// The subscription's next billing event from `accounts/check` — the endpoint the ChatGPT app's
+    /// billing settings read. The login token's `chatgpt_subscription_active_until` claim is not used:
+    /// it is only re-checked now and then and misses upgrades, so it can lag the real period by months.
+    static func renewal(accountCheck response: HTTPResponse, accountID: String?) -> SubscriptionRenewal? {
+        guard (200..<300).contains(response.statusCode),
+              let accounts = ProviderParse.jsonObject(response.body)?["accounts"] as? [String: Any],
+              let account = (accountID.flatMap { accounts[$0] } ?? accounts["default"]) as? [String: Any],
+              let entitlement = account["entitlement"] as? [String: Any],
+              entitlement["has_active_subscription"] as? Bool == true
+        else { return nil }
+        let date = { (key: String) in (entitlement[key] as? String).flatMap(OpenUsageISO8601.date(from:)) }
+
+        if let change = entitlement["scheduled_plan_change"] as? [String: Any],
+           let changesAt = (change["changes_at"] as? String).flatMap(OpenUsageISO8601.date(from:)) {
+            let current = planRank((account["account"] as? [String: Any])?["plan_type"])
+            let next = planRank(change["plan_type"])
+            let status: SubscriptionRenewal.Status = switch (current, next) {
+            case let (current?, next?) where next > current: .upgrades
+            case let (current?, next?) where next < current: .downgrades
+            default: .changes
+            }
+            return SubscriptionRenewal(date: changesAt, status: status, newPlan: formatCodexPlan(change["plan_type"]))
         }
-        guard let latest = periods.max(by: { $0.until < $1.until }) else { return nil }
-        if latest.until > now { return SubscriptionRenewal(date: latest.until, estimated: false) }
-        let yearly = latest.start.map { latest.until.timeIntervalSince($0) > 300 * 86_400 } ?? false
-        guard let next = SubscriptionRenewal.next(anchor: latest.until, months: yearly ? 12 : 1, after: now) else {
-            return nil
+
+        let willRenew = (account["last_active_subscription"] as? [String: Any])?["will_renew"] as? Bool
+        if willRenew == false || date("cancels_at") != nil {
+            guard let end = date("cancels_at") ?? date("renews_at") ?? date("expires_at") else { return nil }
+            return SubscriptionRenewal(date: end, status: .ends)
         }
-        return SubscriptionRenewal(date: next, estimated: true)
+        return date("renews_at").map { SubscriptionRenewal(date: $0, status: .renews) }
+    }
+
+    /// Consumer plan order for telling an upgrade from a downgrade; `nil` for plans outside it.
+    private static func planRank(_ value: Any?) -> Int? {
+        guard let plan = (value as? String)?.lowercased() else { return nil }
+        return ["free", "go", "plus", "prolite", "pro", "promax"].firstIndex(of: plan)
     }
 
     /// Codex flex credits as raw values: the floored credit count and its dollar value (count × 4¢),

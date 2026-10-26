@@ -78,6 +78,8 @@ struct ProviderAccountRecord: Codable, Equatable, Sendable {
     /// A user-chosen card name (Rename in the card's context menu / Customize). Wins over `label`
     /// and the id-derived fallback; never touched by reconciliation.
     var customLabel: String?
+    /// Day of the month the subscription bills, set in Customize for providers that don't report it.
+    var billingDay: Int?
     var sources: [ProviderAccountSource]
     /// Set by a future "Remove Account…". A tombstoned account is never resurrected by rescans.
     var removedTombstone: Bool = false
@@ -221,6 +223,13 @@ final class ProviderAccountsStore {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         guard records[index].customLabel != trimmed else { return }
         records[index].customLabel = trimmed
+        persist()
+    }
+
+    /// Stores the day of the month a card's subscription bills; `nil` clears it.
+    func setBillingDay(cardID: String, to day: Int?) {
+        guard let index = records.firstIndex(where: { $0.id == cardID }), records[index].billingDay != day else { return }
+        records[index].billingDay = day
         persist()
     }
 

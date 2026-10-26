@@ -24,10 +24,13 @@ shows compact amounts (`$2.5K`, `62.5K credits`), so the limit bars get the room
 balance. The card's header adds up
 the last-30-days spend of all its accounts (`$9.4K / 30 days`); hover it for the per-account split. Under each
 account's name you'll see its plan and last-30-days spend, and a line of up to two small tags: 💳 with the
-renewal date and how many days are left (`💳 25 Oct · 16d`, or `today`) and ↻ with how many limit resets the account has and when the first
+next billing event and how many days are left (`💳 25 Oct · 16d`, or `today`) and ↻ with how many limit resets the account has and when the first
 expires (`↻ 2 · 29 Oct`). The ↻ icon turns yellow when that reset expires within a week and red
-within 48 hours. Hover a tag for the details: the full renewal date, how far away it is, and whether
-it's an estimate; or every reset with its exact expiry time and countdown.
+within 48 hours. The billing tag shows what happens next: a renewal (💳), a cancelled plan ending
+(`Ends 14 Nov`, in orange), or a scheduled plan change (`↓ Plus 14 Nov` for a downgrade, ↑ for an
+upgrade). Claude accounts get one when **Read From Claude Desktop** is turned on in a Claude card's
+Customize page, or from a **Billing Day** you set there; a Billing Day you set overrides any reported date. Hover a tag for the details: the full
+date, how far away it is, and where it came from; or every reset with its exact expiry time and countdown.
 
 Anything that may be cut off has a tooltip: hover an account name for the full name and login, the
 plan line for exact spend, and a cell for the full reading and reset time. When a column is too

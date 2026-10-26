@@ -52,9 +52,11 @@ final class ClaudeProvider: ProviderRuntime {
         var accessTokenFingerprint: Data
         /// `nil` when the lookup failed or the profile carried no organization; the stored plan is shown.
         var plan: String?
-        var profile: ClaudeAccountProfile?
+        /// The profile's organization, which the opt-in Claude Desktop billing lookup is keyed by.
+        var organization: String?
     }
     private var livePlan: LivePlan?
+    private let desktopBilling = ClaudeDesktopBilling.shared
 
     init(
         account: ProviderAccount = .makeDefault(providerID: "claude"),
@@ -413,7 +415,7 @@ final class ClaudeProvider: ProviderRuntime {
         // constantly-limited endpoint doesn't blank the dashboard (and we don't pile on more 429s).
         if let until = rateLimitedUntil, now() < until {
             AppLog.info(LogTag.plugin("claude"), "rate-limited (cooldown active, serving \(lastGoodUsage == nil ? "badge" : "last-good usage"))")
-            return rateLimitedSnapshot(credentials: state.oauth, retryAfterSeconds: Int(until.timeIntervalSince(now()).rounded(.up)))
+            return await rateLimitedSnapshot(credentials: state.oauth, retryAfterSeconds: Int(until.timeIntervalSince(now()).rounded(.up)))
         }
 
         if authStore.needsRefresh(state.oauth),
@@ -481,7 +483,7 @@ final class ClaudeProvider: ProviderRuntime {
             rateLimitedUntil = now().addingTimeInterval(TimeInterval(retryAfterSeconds ?? Int(Self.rateLimitCooldown)))
             adoptPendingLaunchUsageIfVerified(credentials: working.oauth)
             AppLog.info(LogTag.plugin("claude"), "rate-limited (serving \(lastGoodUsage == nil ? "badge" : "last-good usage"))")
-            return rateLimitedSnapshot(credentials: working.oauth, retryAfterSeconds: retryAfterSeconds)
+            return await rateLimitedSnapshot(credentials: working.oauth, retryAfterSeconds: retryAfterSeconds)
         }
 
         var mapped = try ClaudeUsageMapper.mapUsageResponse(response, credentials: working.oauth, now: now())
@@ -490,7 +492,7 @@ final class ClaudeProvider: ProviderRuntime {
         if let plan = await resolveLivePlan(credentials: working.oauth) {
             mapped.plan = plan
         }
-        mapped.renewal = cachedRenewal(for: working.oauth)
+        mapped.renewal = await desktopBillingRenewal(for: working.oauth)
         lastGoodUsage = mapped
         rateLimitedUntil = nil
         pendingLaunchSnapshot = nil
@@ -571,7 +573,7 @@ final class ClaudeProvider: ProviderRuntime {
                     subscriptionType: credentials.subscriptionType,
                     rateLimitTier: credentials.rateLimitTier
                 ),
-            renewal: cachedRenewal(for: credentials) ?? snapshot.renewal,
+            renewal: snapshot.renewal,
             lines: lines
         )
     }
@@ -591,7 +593,7 @@ final class ClaudeProvider: ProviderRuntime {
             // A cancelled refresh is not a verdict on the endpoint; let the next refresh try again.
             guard !Task.isCancelled else { return nil }
             AppLog.warn(LogTag.plugin("claude"), "live plan lookup failed; showing the stored plan until the token rotates: \(error.localizedDescription)")
-            livePlan = LivePlan(accessTokenFingerprint: Self.accessTokenFingerprint(credentials), plan: nil, profile: nil)
+            livePlan = LivePlan(accessTokenFingerprint: Self.accessTokenFingerprint(credentials), plan: nil)
             return nil
         }
         return rememberLivePlan(from: profile, credentials: credentials)
@@ -603,16 +605,20 @@ final class ClaudeProvider: ProviderRuntime {
         if plan == nil {
             AppLog.info(LogTag.plugin("claude"), "live profile carries no organization plan; showing the stored plan")
         }
-        livePlan = LivePlan(accessTokenFingerprint: Self.accessTokenFingerprint(credentials), plan: plan, profile: profile)
+        livePlan = LivePlan(
+            accessTokenFingerprint: Self.accessTokenFingerprint(credentials),
+            plan: plan,
+            organization: profile.organization?.uuid
+        )
         return plan
     }
 
-    /// Next renewal from the login's cached profile; recomputed each refresh so a passed date rolls on.
-    private func cachedRenewal(for credentials: ClaudeOAuth) -> SubscriptionRenewal? {
-        guard let livePlan, livePlan.accessTokenFingerprint == Self.accessTokenFingerprint(credentials),
-              let profile = livePlan.profile
+    private func desktopBillingRenewal(for credentials: ClaudeOAuth) async -> SubscriptionRenewal? {
+        guard ClaudeDesktopBillingSetting.isEnabled,
+              let livePlan, livePlan.accessTokenFingerprint == Self.accessTokenFingerprint(credentials),
+              let organization = livePlan.organization
         else { return nil }
-        return ClaudeUsageMapper.renewal(profile: profile, now: now())
+        return await desktopBilling.renewal(organization: organization)
     }
 
     /// Cached live plan for the login, without making a request (the rate-limited paths use this).
@@ -631,16 +637,17 @@ final class ClaudeProvider: ProviderRuntime {
     /// badge (no successful fetch yet this run). `lastGoodUsage` only ever holds a clean `mapUsageResponse`
     /// result (never a rate-limited snapshot), so the note is never duplicated and no stale spend tiles
     /// ride along — `probe` appends those fresh after this returns.
-    private func rateLimitedSnapshot(credentials: ClaudeOAuth, retryAfterSeconds: Int?) -> ClaudeMappedUsage {
+    private func rateLimitedSnapshot(credentials: ClaudeOAuth, retryAfterSeconds: Int?) async -> ClaudeMappedUsage {
+        let renewal = await desktopBillingRenewal(for: credentials)
         guard var mapped = lastGoodUsage else {
             var mapped = ClaudeUsageMapper.rateLimitedUsage(credentials: credentials, retryAfterSeconds: retryAfterSeconds)
             if let plan = cachedLivePlan(for: credentials) {
                 mapped.plan = plan
             }
-            mapped.renewal = cachedRenewal(for: credentials)
+            mapped.renewal = renewal
             return mapped
         }
-        mapped.renewal = cachedRenewal(for: credentials) ?? mapped.renewal
+        mapped.renewal = renewal ?? mapped.renewal
         mapped.lines.append(ClaudeUsageMapper.rateLimitedNote(retryAfterSeconds: retryAfterSeconds))
         mapped.warning = ClaudeUsageMapper.rateLimitedWarning(retryAfterSeconds: retryAfterSeconds)
         return mapped

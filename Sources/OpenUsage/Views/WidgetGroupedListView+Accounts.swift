@@ -79,7 +79,10 @@ extension WidgetGroupedListView {
             ),
             fullName: fullName.joined(separator: "\n"),
             plan: dataStore.plan(for: id),
-            renewal: dataStore.renewal(for: id),
+            renewal: record?.billingDay
+                .flatMap { SubscriptionRenewal.next(billingDay: $0, after: Date()) }
+                .map { SubscriptionRenewal(date: $0, status: .billingDay) }
+                ?? dataStore.renewal(for: id),
             entries: entries,
             notice: dataStore.headerNotice(for: id),
             staleness: dataStore.stalenessHint(for: id),

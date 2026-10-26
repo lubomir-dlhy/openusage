@@ -30,6 +30,7 @@ struct CustomizeProviderDetailView: View {
             VStack(alignment: .leading, spacing: density.sectionSpacing) {
                 if container.canRename(providerID) {
                     CardNameSection(providerID: providerID)
+                    BillingDaySection(providerID: providerID)
                 }
                 metricSections(group)
                     .simultaneousGesture(metricDragGesture())

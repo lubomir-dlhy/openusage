@@ -363,7 +363,7 @@ final class SafeStorageKeyCache: @unchecked Sendable {
     }
 }
 
-private extension Data {
+extension Data {
     init?(hexString: String) {
         guard hexString.count.isMultiple(of: 2) else { return nil }
         var bytes: [UInt8] = []

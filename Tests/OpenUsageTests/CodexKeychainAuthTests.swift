@@ -149,7 +149,7 @@ final class CodexKeychainAuthTests: XCTestCase {
         XCTAssertTrue(keychain.readAccounts.isEmpty)
         XCTAssertTrue(keychain.writeAccounts.isEmpty)
         XCTAssertEqual(keychain.serviceOnlyReads, 0)
-        XCTAssertEqual(http.requests.count, 2, "The file login should fetch usage and reset credits")
+        XCTAssertEqual(http.requests.count, 3, "The file login should fetch usage, reset credits, and the account check")
     }
 
     private func credential(_ token: String) -> String {

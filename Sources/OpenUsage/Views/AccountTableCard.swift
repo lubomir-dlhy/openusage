@@ -259,21 +259,42 @@ private func countdown(_ remaining: TimeInterval) -> String {
     Formatters.expiryCountdown(remaining) ?? Formatters.imminent
 }
 
-/// "💳 25 Oct": when the subscription renews.
+/// "💳 25 Oct": the subscription's next billing event — a renewal, a cancellation ending access
+/// ("Ends 14 Nov"), or a scheduled plan change ("↓ Plus 14 Nov").
 private struct AccountRenewalChip: View {
     let renewal: SubscriptionRenewal
     let now: Date
 
     var body: some View {
         AccountChip(
-            icon: "creditcard",
-            text: renewal.date.formatted(.dateTime.month(.abbreviated).day()),
+            icon: icon,
+            text: text,
             detail: daysLeft,
+            iconStyle: renewal.status == .ends ? Theme.notice : AnyShapeStyle(.secondary),
             tooltip: tooltip
         )
     }
 
-    /// Whole calendar days until renewal: "27d", or "today".
+    private var icon: String {
+        switch renewal.status {
+        case .renews, .billingDay: "creditcard"
+        case .ends: "xmark.circle"
+        case .upgrades: "arrow.up.circle"
+        case .downgrades: "arrow.down.circle"
+        case .changes: "arrow.left.arrow.right.circle"
+        }
+    }
+
+    private var text: String {
+        let date = renewal.date.formatted(.dateTime.month(.abbreviated).day())
+        switch renewal.status {
+        case .renews, .billingDay: return date
+        case .ends: return "Ends " + date
+        case .upgrades, .downgrades, .changes: return [renewal.newPlan, date].compactMap { $0 }.joined(separator: " ")
+        }
+    }
+
+    /// Whole calendar days until the date: "27d", or "today".
     private var daysLeft: String? {
         let calendar = Calendar.current
         guard let days = calendar.dateComponents(
@@ -283,11 +304,18 @@ private struct AccountRenewalChip: View {
     }
 
     private var tooltip: String {
-        var lines = [
-            "Subscription renews " + renewal.date.formatted(date: .long, time: .omitted),
-            "In " + countdown(renewal.date.timeIntervalSince(now))
-        ]
-        if renewal.estimated { lines.append("Estimated from the last billing date on record") }
+        let date = renewal.date.formatted(date: .long, time: .omitted)
+        let plan = renewal.newPlan ?? "another plan"
+        let headline = switch renewal.status {
+        case .renews: "Subscription renews " + date
+        case .billingDay: "Subscription bills " + date
+        case .ends: "Cancelled: access ends " + date
+        case .upgrades: "Upgrades to \(plan) on " + date
+        case .downgrades: "Downgrades to \(plan) on " + date
+        case .changes: "Changes to \(plan) on " + date
+        }
+        var lines = [headline, "In " + countdown(renewal.date.timeIntervalSince(now))]
+        if renewal.status == .billingDay { lines.append("From the billing day set in Customize") }
         return lines.joined(separator: "\n")
     }
 }
