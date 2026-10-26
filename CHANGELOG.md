@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.7.18
+
+### New Features
+- Read real Claude billing dates through Claude Desktop's signed-in claude.ai session (opt-in: Customize → Billing → Read From Claude Desktop), including Parall-wrapped Desktop profiles ([#14](https://github.com/lubomir-dlhy/openusage/pull/14)) by @lubomir-dlhy
+- Set a Billing Day per account in Customize for accounts whose provider doesn't report one ([#14](https://github.com/lubomir-dlhy/openusage/pull/14)) by @lubomir-dlhy
+- Billing tags show what happens next: renews, a cancelled plan ending ("Ends 14 Nov"), or a scheduled upgrade/downgrade ("↓ Max 5x 26 Nov") ([#14](https://github.com/lubomir-dlhy/openusage/pull/14)) by @lubomir-dlhy
+
+### Bug Fixes
+- Fix wrong payment dates: Codex now reads the account's real renewal from ChatGPT (the login-token date lagged upgrades by months), and Claude no longer guesses from the subscription start date ([#14](https://github.com/lubomir-dlhy/openusage/pull/14)) by @lubomir-dlhy
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.17...v0.7.18](https://github.com/lubomir-dlhy/openusage/compare/v0.7.17...v0.7.18)
+
+- [72190ba](https://github.com/lubomir-dlhy/openusage/commit/72190bac52831c6aa23452a14da76466a05b2bbb) fix(billing): real renewal dates and subscription status for Claude and Codex by @lubomir-dlhy
+
 ## v0.7.17
 
 ### Bug Fixes
