@@ -12,6 +12,7 @@ final class ClaudeResetClaimTests: XCTestCase {
         #"{"claudeAiOauth":{"accessToken":"token-a","refreshToken":"refresh-a","expiresAt":4102444800000,"subscriptionType":"max","scopes":["user:profile"]}}"#
     private nonisolated static let config = ClaudeOAuthConfig(
         usageURL: URL(string: "https://api.anthropic.com/api/oauth/usage")!,
+        profileURL: URL(string: "https://api.anthropic.com/api/oauth/profile")!,
         refreshURL: URL(string: "https://platform.claude.com/v1/oauth/token")!,
         clientID: "client"
     )
