@@ -19,6 +19,11 @@ struct DashboardContentView: View {
     var body: some View {
         PopoverScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                if !container.onboarding.isNewVersionNoticeDismissed {
+                    NewVersionNoticeCard()
+                        .padding(.bottom, density.sectionSpacing)
+                        .transition(.scale(scale: 0.95).combined(with: .opacity))
+                }
                 // A pending update found by a scheduled Sparkle check tops everything — it's the
                 // reminder the buried Sparkle window can't deliver for a dockless app.
                 if let updateVersion = updater.availableUpdateVersion {
@@ -36,6 +41,7 @@ struct DashboardContentView: View {
                 widgetContent
             }
             .animation(Motion.spring, value: container.onboarding.isCustomizeHintPending)
+            .animation(Motion.spring, value: container.onboarding.isNewVersionNoticeDismissed)
             .animation(Motion.spring, value: updater.availableUpdateVersion)
             .padding(.horizontal, horizontalPadding)
             .padding(.top, density.contentTopPadding)
@@ -54,13 +60,9 @@ struct DashboardContentView: View {
                 .padding(.bottom, density.sectionSpacing)
         }
         if layout.displayGroups.isEmpty {
-            Text("Turn on Customize to choose what to show.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
-                .padding(.horizontal, 16)
+            EmptyDashboardView {
+                withAnimation(Motion.modeSwitch) { layout.screen = .customize }
+            }
         } else {
             WidgetGroupedListView(
                 reorderSpaceName: reorderSpaceName,

@@ -11,7 +11,7 @@ import Foundation
 /// or project trees. A candidate only counts when it carries Claude's exact credential shape AND
 /// names its account (identity read from the home itself). Identity-extraction-is-validation: that
 /// routing, not name matching, is what keeps toys, forks, and sandbox homes out.
-struct ClaudeConfigDirDiscovery {
+struct ClaudeConfigDirDiscovery: Sendable {
     /// One accepted custom-config-dir login. Whether it becomes its own card or attaches to an
     /// existing account's record is the assembly's call, not discovery's.
     struct Finding: Equatable, Sendable {

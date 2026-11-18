@@ -19,6 +19,8 @@ struct WidgetRegistry: Sendable {
     /// (a stable `filter` walk), so `descriptors(for:)` returns the exact sequence the UI metric order
     /// depends on.
     private let descriptorsByProvider: [String: [WidgetDescriptor]]
+    let limitDescriptorsByProvider: [String: [WidgetDescriptor]]
+    let historyDescriptorsByProvider: [String: UsageHistoryDescriptor]
 
     init(providers: [Provider], descriptors: [WidgetDescriptor]) {
         self.providers = providers
@@ -36,6 +38,12 @@ struct WidgetRegistry: Sendable {
             byProvider[descriptor.providerID, default: []].append(descriptor)
         }
         self.descriptorsByProvider = byProvider
+        self.limitDescriptorsByProvider = byProvider.mapValues {
+            $0.filter { !$0.limitResources.isEmpty }
+        }
+        self.historyDescriptorsByProvider = byProvider.compactMapValues { descriptors in
+            descriptors.compactMap(\.historyResource).first
+        }
     }
 
     func descriptor(id: String) -> WidgetDescriptor? { descriptorsByID[id] }
@@ -64,16 +72,6 @@ struct WidgetRegistry: Sendable {
             }
         }
         return result
-    }
-
-    var limitDescriptorsByProvider: [String: [WidgetDescriptor]] {
-        descriptorsByProvider.mapValues { $0.filter { !$0.limitResources.isEmpty } }
-    }
-
-    var historyDescriptorsByProvider: [String: UsageHistoryDescriptor] {
-        descriptorsByProvider.compactMapValues { descriptors in
-            descriptors.compactMap(\.historyResource).first
-        }
     }
 
     @MainActor

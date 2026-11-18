@@ -67,7 +67,7 @@ final class ClaudeDesktopAuthStoreTests: XCTestCase {
 
         XCTAssertNil(badge(snapshot.lines, "Error"))
         XCTAssertNil(snapshot.warning)
-        XCTAssertEqual(httpClient.requests.filter { $0.url.path == "/api/oauth/usage" }.count, 1)
+        XCTAssertEqual(httpClient.requests.filter { $0.isClaudeUsagePoll }.count, 1)
         XCTAssertEqual(fixture.keyReader.calls, [false])
     }
 
@@ -452,11 +452,11 @@ final class ClaudeDesktopAuthStoreTests: XCTestCase {
 
         XCTAssertNil(badge(snapshot.lines, "Error"))
         // Revoked CLI usage, successful Desktop usage, then the best-effort live profile lookup.
-        XCTAssertEqual(httpClient.requests.count, 3)
-        XCTAssertEqual(httpClient.requests.map(\.url.path), [
+        let polls = httpClient.requests.filter { !$0.isClaudeResetGrantsCheck }
+        XCTAssertEqual(polls.map(\.url.path), [
             "/api/oauth/usage", "/api/oauth/usage", "/api/oauth/profile"
         ])
-        XCTAssertTrue(httpClient.requests.last?.headers["Authorization"]?.contains("desktop-token") == true)
+        XCTAssertTrue(polls.last?.headers["Authorization"]?.contains("desktop-token") == true)
     }
 
     @MainActor
@@ -503,11 +503,11 @@ final class ClaudeDesktopAuthStoreTests: XCTestCase {
         XCTAssertNil(badge(snapshot.lines, "Error"))
         // The inference-only environment token is never probed: Desktop usage succeeds, then supplies
         // the token for the best-effort live profile lookup.
-        XCTAssertEqual(httpClient.requests.count, 3)
-        XCTAssertEqual(httpClient.requests.map(\.url.path), [
+        let polls = httpClient.requests.filter { !$0.isClaudeResetGrantsCheck }
+        XCTAssertEqual(polls.map(\.url.path), [
             "/api/oauth/usage", "/api/oauth/usage", "/api/oauth/profile"
         ])
-        XCTAssertTrue(httpClient.requests.last?.headers["Authorization"]?.contains("desktop-token") == true)
+        XCTAssertTrue(polls.last?.headers["Authorization"]?.contains("desktop-token") == true)
     }
 
     @MainActor

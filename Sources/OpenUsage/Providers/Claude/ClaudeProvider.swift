@@ -40,6 +40,11 @@ final class ClaudeProvider: ProviderRuntime {
     /// memory only, so the first 429 after a relaunch can keep the painted limits instead of a bare badge.
     /// A successful live fetch discards it; only a login verified against the card's account consumes it.
     private var pendingLaunchSnapshot: ProviderSnapshot?
+    var resetGrantsCheck: ClaudeResetGrantsCheck?
+    /// Bumped by each claim, so a grants read that started before it can't cache pre-claim grants.
+    var resetClaimEpoch = 0
+    /// The last claim whose answer never arrived, kept so a retry of that grant reuses its request id.
+    var unsettledResetClaim: (grantID: String, requestID: String)?
 
     /// The plan Anthropic's profile endpoint reports for the current access token. Claude Code stamps
     /// `subscriptionType` / `rateLimitTier` into the login at sign-in and never updates them (a token refresh
@@ -52,8 +57,8 @@ final class ClaudeProvider: ProviderRuntime {
         var accessTokenFingerprint: Data
         /// `nil` when the lookup failed or the profile carried no organization; the stored plan is shown.
         var plan: String?
-        /// The profile's organization, which the opt-in Claude Desktop billing lookup is keyed by.
-        var organization: String?
+        /// The profile's organization, which the opt-in Claude Desktop billing lookup and the reset claim are keyed by.
+        var organizationUUID: String?
     }
     private var livePlan: LivePlan?
     private let desktopBilling = ClaudeDesktopBilling.shared
@@ -417,6 +422,7 @@ final class ClaudeProvider: ProviderRuntime {
             AppLog.info(LogTag.plugin("claude"), "rate-limited (cooldown active, serving \(lastGoodUsage == nil ? "badge" : "last-good usage"))")
             return await rateLimitedSnapshot(credentials: state.oauth, retryAfterSeconds: Int(until.timeIntervalSince(now()).rounded(.up)))
         }
+        let claimEpoch = resetClaimEpoch
 
         if authStore.needsRefresh(state.oauth),
            let refreshToken = state.oauth.refreshToken,
@@ -471,10 +477,7 @@ final class ClaudeProvider: ProviderRuntime {
         )
 
         let forceDesktopGeneration = working.source == .desktop
-        let currentGeneration = await loadOffMainActor { [authStore] in
-            authStore.credentialGeneration(forceDesktopFallback: forceDesktopGeneration)
-        }
-        guard currentGeneration == expectedGeneration else { throw ClaudeAuthError.credentialsChanged }
+        try await checkCredentialGeneration(expectedGeneration, forceDesktopFallback: forceDesktopGeneration)
 
         // 429 can come back from either attempt; the helper hands both through unchanged. Start a cooldown
         // (respecting Retry-After) and serve the last-good usage rather than a bare badge.
@@ -487,14 +490,25 @@ final class ClaudeProvider: ProviderRuntime {
         }
 
         var mapped = try ClaudeUsageMapper.mapUsageResponse(response, credentials: working.oauth, now: now())
+        if let resetGrants = try await resetGrantsLine(
+            credentials: working.oauth, expectedGeneration: expectedGeneration,
+            forceDesktopFallback: forceDesktopGeneration
+        ) {
+            mapped.lines.append(resetGrants)
+        }
         // Only after the usage call succeeded: the token is known-good, so a profile failure here is a
         // label problem, never an auth signal, and it must not take the bars down with it.
         if let plan = await resolveLivePlan(credentials: working.oauth) {
             mapped.plan = plan
         }
         mapped.renewal = await desktopBillingRenewal(for: working.oauth)
-        lastGoodUsage = mapped
-        rateLimitedUntil = nil
+        try await checkCredentialGeneration(expectedGeneration, forceDesktopFallback: forceDesktopGeneration)
+        // A claim that landed during this fetch makes these pre-claim meters; don't cache them over the
+        // post-claim refresh's.
+        if resetClaimEpoch == claimEpoch {
+            lastGoodUsage = mapped
+            rateLimitedUntil = nil
+        }
         pendingLaunchSnapshot = nil
         return mapped
     }
@@ -547,22 +561,8 @@ final class ClaudeProvider: ProviderRuntime {
             switch line {
             case .progress(_, _, _, _, let resetsAt?, _, _) where resetsAt <= now:
                 return nil
-            case .values(let label, let values, let colorHex, let expiriesAt, let unknownModels, let breakdown)
-                where expiriesAt.contains { $0 <= now }:
-                // Reset grants past their deadline are gone; grants without a known deadline still count.
-                let elapsed = expiriesAt.filter { $0 <= now }.count
-                let values = values.map { value in
-                    var value = value
-                    if value.kind == .count { value.number = max(0, value.number - Double(elapsed)) }
-                    return value
-                }
-                return .values(
-                    label: label, values: values, colorHex: colorHex,
-                    expiriesAt: expiriesAt.filter { $0 > now },
-                    unknownModels: unknownModels, modelBreakdown: breakdown
-                )
             default:
-                return line
+                return ClaudeUsageMapper.droppingElapsedResetGrants(line, now: now)
             }
         }
         guard !lines.isEmpty else { return }
@@ -580,8 +580,8 @@ final class ClaudeProvider: ProviderRuntime {
 
     /// Live plan for the given login, fetching the profile at most once per access token.
     private func resolveLivePlan(credentials: ClaudeOAuth) async -> String? {
-        if let livePlan, livePlan.accessTokenFingerprint == Self.accessTokenFingerprint(credentials) {
-            return livePlan.plan
+        if let cached = livePlan(for: credentials) {
+            return cached.plan
         }
         let profile: ClaudeAccountProfile
         do {
@@ -606,9 +606,8 @@ final class ClaudeProvider: ProviderRuntime {
             AppLog.info(LogTag.plugin("claude"), "live profile carries no organization plan; showing the stored plan")
         }
         livePlan = LivePlan(
-            accessTokenFingerprint: Self.accessTokenFingerprint(credentials),
-            plan: plan,
-            organization: profile.organization?.uuid
+            accessTokenFingerprint: Self.accessTokenFingerprint(credentials), plan: plan,
+            organizationUUID: profile.organization?.uuid
         )
         return plan
     }
@@ -616,17 +615,27 @@ final class ClaudeProvider: ProviderRuntime {
     private func desktopBillingRenewal(for credentials: ClaudeOAuth) async -> SubscriptionRenewal? {
         guard ClaudeDesktopBillingSetting.isEnabled,
               let livePlan, livePlan.accessTokenFingerprint == Self.accessTokenFingerprint(credentials),
-              let organization = livePlan.organization
+              let organization = livePlan.organizationUUID
         else { return nil }
         return await desktopBilling.renewal(organization: organization)
     }
 
+    /// The organization the profile reported for this access token, without making a request.
+    func cachedOrganizationUUID(for credentials: ClaudeOAuth) -> String? {
+        livePlan(for: credentials)?.organizationUUID
+    }
+
     /// Cached live plan for the login, without making a request (the rate-limited paths use this).
     private func cachedLivePlan(for credentials: ClaudeOAuth) -> String? {
+        livePlan(for: credentials)?.plan
+    }
+
+    /// The profile answer cached for this exact access token.
+    private func livePlan(for credentials: ClaudeOAuth) -> LivePlan? {
         guard let livePlan, livePlan.accessTokenFingerprint == Self.accessTokenFingerprint(credentials) else {
             return nil
         }
-        return livePlan.plan
+        return livePlan
     }
 
     private static func accessTokenFingerprint(_ credentials: ClaudeOAuth) -> Data {
@@ -665,7 +674,22 @@ final class ClaudeProvider: ProviderRuntime {
         rateLimitedUntil = nil
     }
 
-    private static func credentialFingerprint(_ credentials: ClaudeOAuth) -> Data {
+    /// A claim changed which grants exist, so re-read them on the next refresh. Bumping the epoch stops
+    /// a read that started before the claim from caching its pre-claim answer.
+    func forgetGrantsAfterResetClaim() {
+        resetGrantsCheck = nil
+        resetClaimEpoch += 1
+    }
+
+    /// A claim changed the limits too, so also drop the last-good usage and any 429 cooldown. Otherwise
+    /// the post-claim refresh could serve pre-claim meters from cache.
+    func forgetUsageAfterResetClaim() {
+        forgetGrantsAfterResetClaim()
+        lastGoodUsage = nil
+        rateLimitedUntil = nil
+    }
+
+    static func credentialFingerprint(_ credentials: ClaudeOAuth) -> Data {
         let access = Data((credentials.accessToken ?? "").utf8)
         let refresh = Data((credentials.refreshToken ?? "").utf8)
         var pair = Data(SHA256.hash(data: access))
@@ -673,12 +697,12 @@ final class ClaudeProvider: ProviderRuntime {
         return Data(SHA256.hash(data: pair))
     }
 
-    private struct RefreshedAccess {
+    struct RefreshedAccess {
         var accessToken: String
         var persisted: Bool
     }
 
-    private func refreshAccessToken(
+    func refreshAccessToken(
         state: inout ClaudeCredentialState,
         refreshToken: String,
         expectedGeneration: ClaudeCredentialGeneration
@@ -730,6 +754,9 @@ final class ClaudeProvider: ProviderRuntime {
         }
         if cachedCredentialFingerprint == Self.credentialFingerprint(previousOAuth) {
             cachedCredentialFingerprint = Self.credentialFingerprint(state.oauth)
+        }
+        if resetGrantsCheck?.credentialFingerprint == Self.credentialFingerprint(previousOAuth) {
+            resetGrantsCheck?.credentialFingerprint = Self.credentialFingerprint(state.oauth)
         }
         AppLog.info(LogTag.auth("claude"), "token refresh ok (rotated)")
         return RefreshedAccess(accessToken: decoded.accessToken, persisted: persisted)
