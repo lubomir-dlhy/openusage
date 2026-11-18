@@ -66,16 +66,7 @@ private struct ResetClaimServiceKey: EnvironmentKey {
     static let defaultValue: (any ResetClaimService)? = nil
 }
 
-private struct ResetClaimsKey: EnvironmentKey {
-    static let defaultValue: [String: any ResetClaimService] = [:]
-}
-
 extension EnvironmentValues {
-    var resetClaims: [String: any ResetClaimService] {
-        get { self[ResetClaimsKey.self] }
-        set { self[ResetClaimsKey.self] = newValue }
-    }
-
     var resetClaim: (any ResetClaimService)? {
         get { self[ResetClaimServiceKey.self] }
         set { self[ResetClaimServiceKey.self] = newValue }

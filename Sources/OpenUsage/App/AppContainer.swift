@@ -42,19 +42,19 @@ final class AppContainer {
     let accounts: ProviderAccountsStore
     /// Claims Codex reset credits and Claude reset grants from the resets popover (the app's only
     /// provider-API writes), keyed by provider id. Each service shares its card's credentials. The view
-    /// tree selects the matching service from `\.resetClaims` for each card's resets popover.
-    let resetClaims: [String: any ResetClaimService]
+    /// tree reads the matching service for each card's resets popover. Rebuilt with the runtimes on an
+    /// account change, so a claim always runs on the runtime that refreshes the card.
+    private(set) var resetClaims: [String: any ResetClaimService]
     /// The provider runtimes, kept so on-demand credential detection (the welcome screen and the
     /// Customize "Reset All" reseed) can re-probe `hasLocalCredentials()` on every card.
-    let providers: [ProviderRuntime]
+    private(set) var providers: [ProviderRuntime]
     /// Read-only usage API on 127.0.0.1:6736 for other local apps (silently off when the port is taken).
     private let localAPI: LocalUsageServer
     /// `nil` until `startRefreshing()`, which the welcome screen delays until the user has picked providers.
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     /// Watches `AccountsStore` and rebuilds the per-account runtimes in place when the account
     /// configuration changes (add/remove an account, or edit an existing one's icon/label/config dir).
-    /// A `let` Task capturing the stores (not `self`), so the nonisolated `deinit` can cancel it.
-    private let accountsObserver: Task<Void, Never>
+    @ObservationIgnored private var accountsObserver: Task<Void, Never>?
     /// The new-provider credential-detection pass (see `NewProviderSeeder`); `nil` unless this launch is
     /// the first with a provider the install has never seen.
     private let newProviderTask: Task<Void, Never>?
@@ -149,27 +149,7 @@ final class AppContainer {
         self.configuredAccounts = configuredAccounts
         self.iCloudSync = iCloudSync
 
-        // The resets popover's claim services, sharing each provider's credential loading and HTTP
-        // client so the claim's auth can't drift from the provider's. A claim forces a refresh so the
-        // meters and reset count reconcile before the popover shows its result.
-        var resetClaims: [String: any ResetClaimService] = [:]
-        for codex in providers.compactMap({ $0 as? CodexProvider }) {
-            let id = codex.provider.id
-            resetClaims[id] = CodexResetClaimService(
-                authStore: codex.authStore,
-                usageClient: codex.usageClient,
-                refreshAfterClaim: { [weak dataStore] in
-                    await ResetClaimRefresh.run(dataStore: dataStore, providerID: id, tag: "codex")
-                }
-            )
-        }
-        for claude in providers.compactMap({ $0 as? ClaudeProvider }) {
-            let id = claude.provider.id
-            resetClaims[id] = ClaudeResetClaimService(provider: claude, refreshAfterClaim: { [weak dataStore] in
-                await ResetClaimRefresh.run(dataStore: dataStore, providerID: id, tag: "claude")
-            })
-        }
-        self.resetClaims = resetClaims
+        self.resetClaims = Self.makeResetClaims(providers: providers, dataStore: dataStore)
 
         self.transparency = PopoverTransparencyStore()
         self.privacy = MenuBarPrivacyStore()
@@ -197,7 +177,12 @@ final class AppContainer {
             defaultClaudeConfigDirs: accountAssembly.defaultClaudeConfigDirs,
             claudeIdentityKeys: accountAssembly.identityKeysByCard,
             layout: layout,
-            dataStore: dataStore
+            dataStore: dataStore,
+            onRebuild: { [weak self] providers in
+                guard let self else { return }
+                self.providers = providers
+                self.resetClaims = Self.makeResetClaims(providers: providers, dataStore: self.dataStore)
+            }
         )
         // Become the notification-center delegate so banners show while frontmost — a menu-bar accessory
         // effectively always is. Notification authorization is requested the first time a trigger is
@@ -207,7 +192,7 @@ final class AppContainer {
 
     deinit {
         refreshTask?.cancel()
-        accountsObserver.cancel()
+        accountsObserver?.cancel()
         newProviderTask?.cancel()
         shellEnvironmentSnapshotTask.cancel()
     }
@@ -237,7 +222,8 @@ final class AppContainer {
         defaultClaudeConfigDirs: [String],
         claudeIdentityKeys: [String: String],
         layout: LayoutStore,
-        dataStore: WidgetDataStore
+        dataStore: WidgetDataStore,
+        onRebuild: @escaping @MainActor ([ProviderRuntime]) -> Void
     ) -> Task<Void, Never> {
         Task { @MainActor in
             for await _ in NotificationCenter.default.notifications(named: AccountsStore.didChangeNotification) {
@@ -252,12 +238,40 @@ final class AppContainer {
                 AppLog.info(.lifecycle, "accounts changed — rebuilding \(providers.count) runtimes live")
                 layout.syncAccounts(registry)
                 dataStore.updateProviders(registry: registry, providers: providers)
+                onRebuild(providers)
                 // A replaced icon keeps its file name (so the IconSource is unchanged) — drop the strip's
                 // content-keyed cache so the new image is rendered.
                 MenuBarStripRenderer.invalidateCache()
                 await dataStore.refreshAll()
             }
         }
+    }
+
+    /// The resets popover's claim services, sharing each provider's credential loading and HTTP
+    /// client so the claim's auth can't drift from the provider's. A claim forces a refresh so the
+    /// meters and reset count reconcile before the popover shows its result.
+    private static func makeResetClaims(
+        providers: [ProviderRuntime],
+        dataStore: WidgetDataStore
+    ) -> [String: any ResetClaimService] {
+        var resetClaims: [String: any ResetClaimService] = [:]
+        for codex in providers.compactMap({ $0 as? CodexProvider }) {
+            let id = codex.provider.id
+            resetClaims[id] = CodexResetClaimService(
+                authStore: codex.authStore,
+                usageClient: codex.usageClient,
+                refreshAfterClaim: { [weak dataStore] in
+                    await ResetClaimRefresh.run(dataStore: dataStore, providerID: id, tag: "codex")
+                }
+            )
+        }
+        for claude in providers.compactMap({ $0 as? ClaudeProvider }) {
+            let id = claude.provider.id
+            resetClaims[id] = ClaudeResetClaimService(provider: claude, refreshAfterClaim: { [weak dataStore] in
+                await ResetClaimRefresh.run(dataStore: dataStore, providerID: id, tag: "claude")
+            })
+        }
+        return resetClaims
     }
 
     func startRefreshing() {
