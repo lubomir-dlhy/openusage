@@ -126,7 +126,10 @@ final class OllamaMonthlyUsageTests: XCTestCase {
         ]), forKey: "layout.seededDefaults")
         defaults.set(["ollama.session"], forKey: "layout.menuBarPins")
         let upgraded = LayoutStore(registry: registry, defaults: defaults, storageKey: "layout")
-        XCTAssertFalse(upgraded.placed.contains { $0.descriptorID == "ollama.last4Weeks" })
+        // The fork keeps unknown saved ids as invisible tombstones (see LayoutBootstrap); the removed row
+        // must stay disabled and out of the metric lists.
+        XCTAssertFalse(upgraded.isMetricEnabled("ollama.last4Weeks"))
+        XCTAssertFalse(upgraded.orderedSupportedMetrics(for: "ollama").map(\.id).contains("ollama.last4Weeks"))
         XCTAssertTrue(upgraded.isMetricEnabled("ollama.purchasedCredits"))
         XCTAssertFalse(upgraded.isMetricEnabled("ollama.monthly"))
         XCTAssertEqual(upgraded.pinnedMetricIDs, ["ollama.session"])
