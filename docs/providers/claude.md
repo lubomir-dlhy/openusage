@@ -24,8 +24,10 @@ enable it in Customize. Credits and Rate Limit Resets are on but tucked behind t
 When Claude reports your plan name, OpenUsage shows it beside the provider name. OpenUsage reads the
 current plan and tier from Claude's profile API, so subscription upgrades and downgrades do not depend
 on Claude Code rewriting older plan metadata in its Keychain entry. The profile is fetched once per login.
-The plan comes from Anthropic's live account profile, so an upgrade (say, Max 5x to Max 20x) shows up on
-the next refresh without signing in to Claude Code again. If the profile can't be read, the badge falls
+The plan comes from Anthropic's live account profile, so an upgrade (say, Max to Ultra) shows up on
+the next refresh without signing in to Claude Code again. Plans use Anthropic's current names: the old
+Max 5x reads **Max** and the old Max 20x reads **Ultra**. When Anthropic asks OpenUsage to wait, the wait
+is capped at one hour. If the profile can't be read, the badge falls
 back to the plan saved with your login.
 
 ## Rate limit resets

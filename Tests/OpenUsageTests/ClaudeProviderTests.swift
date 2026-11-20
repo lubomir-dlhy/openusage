@@ -195,7 +195,7 @@ final class ClaudeUsageMapperTests: XCTestCase {
             credentials: ClaudeOAuth(subscriptionType: "max", rateLimitTier: "claude_max_subscription_20x")
         )
 
-        XCTAssertEqual(mapped.plan, "Max 20x")
+        XCTAssertEqual(mapped.plan, "Ultra")
         XCTAssertEqual(progress(mapped.lines, "Session")?.used, 10)
         XCTAssertEqual(progress(mapped.lines, "Weekly")?.periodDurationMs, ClaudeUsageMapper.weeklyPeriodMs)
         XCTAssertEqual(progress(mapped.lines, "Sonnet")?.used, 5)
@@ -215,7 +215,7 @@ final class ClaudeUsageMapperTests: XCTestCase {
             fallback: ClaudeOAuth(subscriptionType: "max", rateLimitTier: "default_claude_max_20x")
         )
 
-        XCTAssertEqual(plan, "Max 5x")
+        XCTAssertEqual(plan, "Max")
     }
 
     func testLiveProfileCanReplaceStaleMaxPlanWithPro() throws {
@@ -490,7 +490,7 @@ final class ClaudeProviderTests: XCTestCase {
         XCTAssertFalse(httpClient.requests.contains { $0.url.path.hasSuffix("/api/oauth/usage") })
         // Local spend tiles are unaffected and still load.
         XCTAssertNotNil(values(snapshot.lines, "Today"))
-        XCTAssertEqual(snapshot.plan, "Max 5x")
+        XCTAssertEqual(snapshot.plan, "Max")
     }
 
     func testLiveClaudeUsageReportsResetFields() async throws {
