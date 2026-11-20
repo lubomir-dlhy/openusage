@@ -7,7 +7,7 @@ final class AntigravityProviderTests: XCTestCase {
 
     private func used(_ line: MetricLine?) -> Double? {
         guard case .progress(_, let used, _, _, _, _, _)? = line else { return nil }
-        return used
+        return (used * 1_000_000).rounded() / 1_000_000
     }
 
     private func resetsAt(_ line: MetricLine?) -> Date? {

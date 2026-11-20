@@ -23,7 +23,7 @@ final class AntigravityArgonQuotaTests: XCTestCase {
         XCTAssertEqual(lines?.map(\.label), ["Session", "Weekly", "Claude", "Claude Weekly"], file: file, line: line)
         XCTAssertEqual(lines?.map { metric -> Double? in
             guard case .progress(_, let used, _, _, _, _, _) = metric else { return nil }
-            return used
+            return (used * 1_000_000).rounded() / 1_000_000
         }, [20, 30, 40, 50], file: file, line: line)
     }
 
@@ -142,7 +142,7 @@ final class AntigravityArgonQuotaTests: XCTestCase {
         """
         let lines = AntigravityUsageMapper.buildLines(AntigravityUsageMapper.parseCloudCodeModels(Data(json.utf8)))
         XCTAssertEqual(lines, [.progress(
-            label: "Session", used: 20, limit: 100, format: .percent,
+            label: "Session", used: (1 - 0.8) * 100, limit: 100, format: .percent,
             resetsAt: nil, periodDurationMs: MetricPeriod.sessionMs
         )])
 
