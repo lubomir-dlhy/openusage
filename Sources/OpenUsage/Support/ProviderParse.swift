@@ -38,6 +38,11 @@ enum ProviderParse {
     /// (nonzero → true, via `boolValue`), and the strings "true"/"1"/"false"/"0" (case-insensitive).
     /// Returns `nil` for anything else, so an absent or unrecognized field stays distinguishable from an
     /// explicit false. `Bool` is tried before `NSNumber` so a JSON `0`/`1` bridges the same way either path.
+    /// `Int(_:)` traps on a value outside the Int range; this returns nil instead.
+    static func int(_ value: Double) -> Int? {
+        abs(value) < Double(Int.max) ? Int(value) : nil
+    }
+
     static func bool(_ value: Any?) -> Bool? {
         if let bool = value as? Bool { return bool }
         if let number = value as? NSNumber { return number.boolValue }
