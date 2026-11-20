@@ -116,7 +116,7 @@ final class CursorProvider: ProviderRuntime {
         // The access token may have rotated during the usage fetch's refresh-and-retry; read the live one.
         let currentToken = authState.accessToken ?? accessToken
 
-        let (planInfoName, planInfoUnavailable) = await fetchPlanName(accessToken: currentToken)
+        let (planInfoName, planInfoUnavailable, isMerged) = await fetchPlanInfo(accessToken: currentToken)
         let routingPlanName = CursorUsageMapper.routingPlanName(
             planInfoName: planInfoName,
             membershipType: authState.membershipType
@@ -136,7 +136,7 @@ final class CursorProvider: ProviderRuntime {
                 planName: displayPlanName ?? routingPlanName,
                 unavailableMessage: fallback.message
             )
-            await appendGrokBotUsage(to: &mapped.lines, accessToken: currentToken)
+            if !isMerged { await appendGrokBotUsage(to: &mapped.lines, accessToken: currentToken) }
             let history = await appendSpendLines(to: &mapped.lines, accessToken: currentToken)
             return snapshot(mapped, usageHistory: history)
         }
@@ -148,11 +148,34 @@ final class CursorProvider: ProviderRuntime {
                     planName: displayPlanName ?? routingPlanName,
                     unavailableMessage: "Cursor request-based usage data unavailable. Try again later."
                 )
-                await appendGrokBotUsage(to: &mapped.lines, accessToken: currentToken)
+                if !isMerged { await appendGrokBotUsage(to: &mapped.lines, accessToken: currentToken) }
                 return snapshot(mapped)
             } catch {
                 AppLog.warn(LogTag.plugin("cursor"), "optional request-based usage fallback failed")
             }
+        }
+
+        if isMerged {
+            var mapped = try CursorUsageMapper.mapUsage(
+                usage: usage,
+                planName: planInfoName,
+                creditGrants: nil,
+                stripeBalanceCents: 0,
+                unified: CursorUnifiedBilling(
+                    creditBalance: await fetchOptionalJSONObject(label: "credit balance") {
+                        try await self.usageClient.fetchComplatCreditBalance(accessToken: currentToken)
+                    },
+                    usageStatus: await fetchOptionalJSONObject(label: "usage status") {
+                        try await self.usageClient.fetchUsageStatus(accessToken: currentToken)
+                    }
+                )
+            )
+            mapped.plan = CursorUsageMapper.resolvedPlanLabel(
+                planInfoName: planInfoName,
+                membershipType: authState.membershipType
+            )
+            let history = await appendSpendLines(to: &mapped.lines, accessToken: currentToken)
+            return snapshot(mapped, usageHistory: history)
         }
 
         let creditGrants = await fetchCreditGrants(accessToken: currentToken)
@@ -339,21 +362,23 @@ final class CursorProvider: ProviderRuntime {
         return accessToken
     }
 
-    private func fetchPlanName(accessToken: String) async -> (String?, Bool) {
+    /// `isMerged` marks an account whose Cursor, X and Grok plans are unified.
+    private func fetchPlanInfo(accessToken: String) async -> (String?, Bool, Bool) {
         guard let body = await fetchOptionalJSONObject(label: "plan", request: {
             try await self.usageClient.fetchPlan(accessToken: accessToken)
         }) else {
-            return (nil, true)
+            return (nil, true, false)
         }
+        let isMerged = body["isMerged"] as? Bool == true
         guard let planInfo = body["planInfo"] as? [String: Any],
               let planName = (planInfo["planName"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .nilIfEmpty
         else {
             AppLog.warn(LogTag.plugin("cursor"), "optional plan response contained invalid plan metadata")
-            return (nil, true)
+            return (nil, true, isMerged)
         }
-        return (planName, false)
+        return (planName, false, isMerged)
     }
 
     private func fetchCreditGrants(accessToken: String) async -> [String: Any]? {
