@@ -18,6 +18,7 @@ final class CursorProvider: ProviderRuntime {
     let pricing: @Sendable () async -> ModelPricing
     let spendHistoryBudget: TimeInterval
     let usageHistoryStore: CursorUsageHistoryStore
+    private var lastKnownIsMerged = false
 
     init(
         authStore: CursorAuthStore = CursorAuthStore(),
@@ -367,9 +368,10 @@ final class CursorProvider: ProviderRuntime {
         guard let body = await fetchOptionalJSONObject(label: "plan", request: {
             try await self.usageClient.fetchPlan(accessToken: accessToken)
         }) else {
-            return (nil, true, false)
+            return (nil, true, lastKnownIsMerged)
         }
         let isMerged = body["isMerged"] as? Bool == true
+        lastKnownIsMerged = isMerged
         guard let planInfo = body["planInfo"] as? [String: Any],
               let planName = (planInfo["planName"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines)

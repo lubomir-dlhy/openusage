@@ -295,7 +295,7 @@ final class AntigravityProvider: ProviderRuntime {
         switch await usageClient.cloudCodeAllHosts(
             path: AntigravityUsageClient.quotaSummaryPath,
             token: token,
-            userAgent: "antigravity",
+            userAgent: AntigravityUsageClient.clientUserAgent,
             body: [:],
             isComplete: AntigravityUsageMapper.isCompleteSummary
         ) {
@@ -311,7 +311,7 @@ final class AntigravityProvider: ProviderRuntime {
         }
 
         // Legacy: fetchAvailableModels — the full Antigravity model set (Gemini + Claude + GPT-OSS).
-        switch await usageClient.cloudCode(path: AntigravityUsageClient.fetchModelsPath, token: token, userAgent: "antigravity", body: [:]) {
+        switch await usageClient.cloudCode(path: AntigravityUsageClient.fetchModelsPath, token: token, userAgent: AntigravityUsageClient.clientUserAgent, body: [:]) {
         case .authFailed:
             return .authFailed
         case .ok(let data):

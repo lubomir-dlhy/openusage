@@ -602,8 +602,8 @@ extension WidgetData {
     /// read — the `resetsAt - now ≈ full period` test is only valid the instant the snapshot is captured,
     /// then drifts every second until the next refresh, which split the headline from the label (headline
     /// "100% left" while the label fell back to "Resets in 5h"). Usage is the stable, snapshot-consistent
-    /// signal: providers that report 0 utilization directly remain at 0, and Antigravity's mapper rounds
-    /// its fraction-derived percent (so a pool under ~0.5% used also reads 0). Codex percentages are
+    /// signal: providers that report 0 utilization directly remain at 0, and Antigravity keeps fractional
+    /// percents, so only an untouched pool reads 0. Codex percentages are
     /// preserved verbatim, so a reported 1% is not treated as "Not started."
     /// Still gated on `now < resetsAt`: once the reset has passed the snapshot is stale, so we drop the
     /// "Not started" claim and let the row fall back to the normal "Resets soon"/countdown formatting.

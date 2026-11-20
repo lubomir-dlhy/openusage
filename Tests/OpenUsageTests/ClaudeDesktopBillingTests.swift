@@ -33,7 +33,7 @@ final class ClaudeDesktopBillingTests: XCTestCase {
             "scheduled_downgrade": ["plan_type": "max_5x_monthly", "date": "2026-11-26T08:03:05Z"]
         ])
         XCTAssertEqual(ClaudeDesktopBilling.renewal(subscriptionDetails: body),
-                       SubscriptionRenewal(date: date("2026-11-26T08:03:05Z"), status: .downgrades, newPlan: "Max 5x"))
+                       SubscriptionRenewal(date: date("2026-11-26T08:03:05Z"), status: .downgrades, newPlan: "Max"))
         XCTAssertEqual(ClaudeDesktopBilling.planName("pro_annual"), "Pro")
     }
 

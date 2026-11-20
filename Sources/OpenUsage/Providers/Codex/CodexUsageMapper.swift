@@ -58,7 +58,7 @@ enum CodexUsageMapper {
             ))
         }
 
-        if let remaining = readCreditsRemaining(response: response, body: body) {
+        if let remaining = readCreditsRemaining(response: response, body: body), ProviderParse.int(remaining) != nil {
             lines.append(.values(label: "Credits", values: creditValues(remaining: remaining)))
         }
 

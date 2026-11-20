@@ -227,6 +227,10 @@ final class AntigravityQuotaSummaryTests: XCTestCase {
         },
                        "a complete daily response must not be replaced by the partial production response")
 
+        let summaryAgents = routing.requests.filter { $0.url.path == AntigravityUsageClient.quotaSummaryPath }.map { $0.headers["User-Agent"] }
+        XCTAssertEqual(summaryAgents, [AntigravityUsageClient.clientUserAgent], "the hub identity is what exposes the Argon quota")
+        XCTAssertTrue(AntigravityUsageClient.clientUserAgent.hasPrefix("antigravity/hub/"))
+
         // Without Antigravity's client metadata loadCodeAssist omits currentTier/paidTier.
         let planRequest = routing.requests.first { $0.url.path.contains("loadCodeAssist") }
         let planBody = planRequest?.body.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]

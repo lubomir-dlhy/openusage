@@ -243,6 +243,13 @@ final class ClaudeLivePlanTests: XCTestCase {
         XCTAssertNil(ProviderParse.int(-.infinity))
     }
 
+    func testHugeDurationsFormatWithoutTrapping() {
+        XCTAssertNotNil(Formatters.compactDuration(1e300))
+        XCTAssertNotNil(Formatters.expiryCountdown(1e300))
+        XCTAssertEqual(ClaudeDesktopBilling.planName("max_20x_monthly"), "Ultra")
+        XCTAssertEqual(ClaudeDesktopBilling.planName("max_5x_annual"), "Max")
+    }
+
     private func profile(organizationType: String?, rateLimitTier: String?) -> ClaudeAccountProfile {
         ClaudeAccountProfile(
             account: .init(uuid: "account"),
