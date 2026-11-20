@@ -211,11 +211,20 @@ enum CopilotUsageMapper {
     }()
 }
 
+extension CopilotUsageMapper {
+    /// GitHub sends its rate limits as 403 with `x-ratelimit-remaining: 0` or `retry-after`.
+    static func isRateLimit(_ response: HTTPResponse) -> Bool {
+        response.statusCode == 429
+            || (response.statusCode == 403 && (response.header("x-ratelimit-remaining") == "0" || response.header("retry-after") != nil))
+    }
+}
+
 enum CopilotUsageError: Error, LocalizedError, Equatable {
     case invalidResponse
     case connectionFailed
     case requestFailed(Int)
     case quotaUnavailable
+    case rateLimited
 
     var errorDescription: String? {
         switch self {
@@ -227,6 +236,8 @@ enum CopilotUsageError: Error, LocalizedError, Equatable {
             return "Copilot usage request failed (HTTP \(status)). Try again later."
         case .quotaUnavailable:
             return "Copilot usage data is unavailable for this account."
+        case .rateLimited:
+            return "GitHub is rate limiting Copilot usage requests. Try again later."
         }
     }
 }

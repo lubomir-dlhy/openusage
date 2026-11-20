@@ -293,6 +293,19 @@ final class ZAIProviderTests: XCTestCase {
         XCTAssertEqual(snapshot.errorCategory, .notLoggedIn)
     }
 
+    func testAKeyZaiRefusesInsideAnOKResponseIsRejected() async {
+        let provider = ZAIProvider(
+            authStore: makeAuthStore(key: "zai-expired"),
+            usageClient: ZAIUsageClient(http: RoutingHTTPClient { _ in
+                jsonResponse(#"{"code":401,"msg":"token expired or incorrect","success":false}"#)
+            })
+        )
+
+        let snapshot = await provider.refresh()
+
+        XCTAssertEqual(snapshot.errorCategory, ZAIAuthError.invalidKey.errorCategory)
+    }
+
     func testRefreshClassifiesAuthenticationAndServerFailures() async {
         let cases: [(status: Int, expected: ErrorCategory)] = [(401, .authInvalid), (500, .http5xx)]
 

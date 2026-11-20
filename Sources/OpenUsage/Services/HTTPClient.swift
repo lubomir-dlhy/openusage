@@ -36,10 +36,12 @@ struct URLSessionHTTPClient: HTTPClient {
     var allowsInsecureLoopback: Bool = false
 
     /// One session for every provider request, built once with the optional `~/.openusage/config.json`
-    /// proxy applied (see `ProxyConfig`). Default configuration — same cookie/cache semantics as
-    /// `URLSession.shared` — when no valid proxy is configured.
+    /// proxy applied (see `ProxyConfig`). Ephemeral with no URL cache, so a provider response is never
+    /// served from disk or memory.
     private static let session: URLSession = {
-        let configuration = URLSessionConfiguration.default
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         if let proxy = ProxyConfig.current {
             configuration.proxyConfigurations = [proxy.proxyConfiguration()]
             // Record that a proxy is in effect (useful in a support log). Scheme/host/port only —

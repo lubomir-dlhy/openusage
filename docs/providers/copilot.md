@@ -49,6 +49,7 @@ Using Copilot in a supported editor is enough on its own — the editor writes t
 
 - **"Sign in to GitHub Copilot…"** — no token was found. Sign in to Copilot in your editor, or run `gh auth login`.
 - **"GitHub token invalid or expired"** — the token was rejected (401/403). Re-authenticate with `gh auth login`.
+- **"GitHub is rate limiting Copilot usage requests"** — GitHub answered 429, or 403 with rate-limit headers. Wait and it clears on a later refresh; your sign-in is fine.
 - **Meters show "No data" but the plan is shown** — expected on an org-managed Copilot Business/Enterprise seat whose response carries no personal `credits_used` and, if you aren't an org owner or billing manager, no org billing access either (GitHub doesn't expose per-seat quota otherwise, and org billing is admin-only). If you *are* an org admin and still see no Org Credits, make sure your token can list your orgs — the GitHub CLI token from `gh auth login` can; some editor-plugin tokens can't.
 
 ## Under the hood

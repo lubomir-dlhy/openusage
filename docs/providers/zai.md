@@ -54,7 +54,7 @@ an invalid response instead of being shown as zero.
 ## Troubleshooting
 
 - **"No Z.ai API key"** — add a key in Settings → API Keys, or export `ZAI_API_KEY`.
-- **"Z.ai API key invalid"** — the key was rejected (401/403). Regenerate it in the
+- **"Z.ai API key invalid"** — the key was rejected (401/403, or a 401 inside an otherwise OK response). Regenerate it in the
   [Z.ai console](https://z.ai/manage-apikey/apikey-list).
 - **"No active GLM Coding Plan"** (amber notice by the name) — the key is valid, but the account has no
   GLM Coding Plan, so there's nothing to meter. Subscribe at [z.ai/subscribe](https://z.ai/subscribe);

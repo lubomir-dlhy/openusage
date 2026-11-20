@@ -38,6 +38,12 @@ enum ZAIUsageMapper {
         return ((root["msg"] as? String) ?? "").lowercased().contains("coding plan")
     }
 
+    /// Z.ai answers a revoked or expired key with HTTP 200 and `{"success":false,"code":401}`.
+    static func isRejectedKey(_ body: Data) -> Bool {
+        guard let root = ProviderParse.jsonObject(body) else { return false }
+        return (root["success"] as? Bool) == false && (root["code"] as? Int) == 401
+    }
+
     /// Session + weekly + web-search meters from the quota payload. Missing required values are an
     /// invalid response rather than zero usage; an explicit empty array remains a valid no-data state.
     static func mapQuota(_ body: Data) throws -> [MetricLine] {

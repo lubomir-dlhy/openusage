@@ -152,7 +152,7 @@ it. It is omitted when unavailable, including on older endpoints and accounts wi
     {
       "type": "badge",
       "label": "Pay as you go",
-      "text": "2500 cap",
+      "text": "$25.00 cap",
       "color": "#22c55e",
       "subtitle": null
     },

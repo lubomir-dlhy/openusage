@@ -317,6 +317,19 @@ final class CopilotProviderTests: XCTestCase {
         XCTAssertEqual(snapshot.errorCategory, .authExpired)
     }
 
+    func testGitHubRateLimitOn403IsNotAnExpiredSignIn() async {
+        for headers in [["x-ratelimit-remaining": "0"], ["retry-after": "60"]] {
+            let provider = CopilotProvider(
+                authStore: editorTokenStore(),
+                usageClient: CopilotUsageClient(http: FakeHTTPClient(response: HTTPResponse(statusCode: 403, headers: headers, body: Data())))
+            )
+
+            let snapshot = await provider.refresh()
+
+            XCTAssertEqual(snapshot.errorCategory, .rateLimited, "\(headers)")
+        }
+    }
+
     func testMapsLinesAndSendsTokenHeaderOnSuccess() async throws {
         let http = FakeHTTPClient(response: ok(makePaidBody()))
         let provider = CopilotProvider(

@@ -17,6 +17,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // Open/trim the file log, seed the cached level, and emit the startup line BEFORE anything
         // else logs, so the first lines of a session are captured.
         AppLog.bootstrap()
+        URLCache.shared = URLCache(memoryCapacity: 0, diskCapacity: 0)
         // Kernel-level single-instance lock (#874): rejects a duplicate even when two copies launch
         // so close together that the workspace guard's LaunchServices snapshot misses the peer.
         var holdsLock = false
