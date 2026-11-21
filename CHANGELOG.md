@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.7.19
+
+### New Features
+- First-launch welcome screen that asks only after you pick providers ([#1380](https://github.com/robinebers/openusage/pull/1380)) by @robinebers
+- Claim Claude usage-limit resets from the resets popover ([#1413](https://github.com/robinebers/openusage/pull/1413)) by @robinebers
+- Antigravity Argon quota and pricing ([#1395](https://github.com/robinebers/openusage/pull/1395)) by @validatedev
+
+### Bug Fixes
+- Claude: Max 5x now reads **Max** and Max 20x reads **Ultra**, matching Anthropic's new plan names; Retry-After waits are capped at an hour ([#16](https://github.com/lubomir-dlhy/openusage/pull/16)) by @lubomir-dlhy
+- Cursor: read unified (Cursor + X + Grok) accounts the way Cursor's dashboard does, and read Extra Usage spend from the same budget as its limit ([#16](https://github.com/lubomir-dlhy/openusage/pull/16)) by @lubomir-dlhy
+- Antigravity: ask the daily quota host first and send the hub client identity so the Argon quota shows ([#16](https://github.com/lubomir-dlhy/openusage/pull/16)) by @lubomir-dlhy
+- Ollama accepts free-plan accounts with no included allowance; Grok shows its pay-as-you-go cap in dollars; a Z.ai 401 inside an OK response counts as a rejected key; a Copilot 403 with rate-limit headers counts as a rate limit ([#16](https://github.com/lubomir-dlhy/openusage/pull/16)) by @lubomir-dlhy
+- Reject provider numbers too large to store, and stop caching provider responses on disk ([#16](https://github.com/lubomir-dlhy/openusage/pull/16)) by @lubomir-dlhy
+- Reset-claim services are rebuilt when accounts change, so claims go to the right account ([#15](https://github.com/lubomir-dlhy/openusage/pull/15)) by @lubomir-dlhy
+- Stop repeat Keychain popups and keep Always Allow ([#1372](https://github.com/robinebers/openusage/pull/1372), [#1379](https://github.com/robinebers/openusage/pull/1379)) by @robinebers
+- Check Claude reset grants hourly instead of on every refresh ([#1367](https://github.com/robinebers/openusage/pull/1367)) by @robinebers
+- Move the dashboard caret below expanded metrics ([#1382](https://github.com/robinebers/openusage/pull/1382)) by @robinebers
+- Cursor: Enterprise badge and Extra Usage from usage-summary ([#1409](https://github.com/robinebers/openusage/pull/1409)) by @dariocurr
+- Cursor: fetch spend history day by day and keep finished days per account ([#1373](https://github.com/robinebers/openusage/pull/1373)) by @robinebers
+- Antigravity: restore Gemini meters and plan badge from Cloud Code ([#1407](https://github.com/robinebers/openusage/pull/1407)) by @validatedev
+- Ollama: read credits and limits from /api/balance ([#1368](https://github.com/robinebers/openusage/pull/1368)) by @robinebers
+- OpenCode: keep reading auth.json on OpenCode 1 databases ([#1365](https://github.com/robinebers/openusage/pull/1365)) by @robinebers
+- Codex: Dashboard link points at chatgpt.com/settings/usage ([#1364](https://github.com/robinebers/openusage/pull/1364)) by @robinebers; auto-review is free from October 6 ([#1354](https://github.com/robinebers/openusage/pull/1354)) by @validatedev
+- Pricing: accept the -n shorthand for Gemini none effort ([#1371](https://github.com/robinebers/openusage/pull/1371)) by @validatedev
+
+### Refactor
+- Read only the new lines of growing Claude and Codex logs ([#1383](https://github.com/robinebers/openusage/pull/1383)) by @robinebers
+- Find Claude and Codex accounts off the main thread at launch ([#1384](https://github.com/robinebers/openusage/pull/1384)) by @robinebers
+- Check each Codex log line for event markers in one pass ([#1390](https://github.com/robinebers/openusage/pull/1390)) by @robinebers
+- Coalesce refresh-end work ([#1391](https://github.com/robinebers/openusage/pull/1391)) by @robinebers
+
+---
+
+### Changelog
+**Full Changelog**: [v0.7.18...v0.7.19](https://github.com/lubomir-dlhy/openusage/compare/v0.7.18...v0.7.19)
+
+Syncs upstream v0.7.16 ([#15](https://github.com/lubomir-dlhy/openusage/pull/15)) and hand-ports a set of upstream 0.8 fixes onto the 0.7 line ([#16](https://github.com/lubomir-dlhy/openusage/pull/16)).
+
 ## v0.7.18
 
 ### New Features
