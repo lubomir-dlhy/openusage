@@ -151,11 +151,17 @@ actor ClaudeDesktopBilling {
             .map { SubscriptionRenewal(date: $0, status: .renews) }
     }
 
-    /// `max_5x_monthly` → "Max 5x", `pro_annual` → "Pro".
+    /// `max_5x_monthly` → "Max", `max_20x_monthly` → "Ultra", `pro_annual` → "Pro", matching the
+    /// plan names Anthropic adopted on 2026-10-30.
     static func planName(_ value: Any?) -> String? {
         guard var plan = (value as? String)?.lowercased(), !plan.isEmpty else { return nil }
         for suffix in ["_monthly", "_annual", "_yearly"] where plan.hasSuffix(suffix) {
             plan.removeLast(suffix.count)
+        }
+        switch plan {
+        case "max_5x": return "Max"
+        case "max_20x", "ultra": return "Ultra"
+        default: break
         }
         return plan.split(separator: "_")
             .map { $0.first?.isNumber == true ? String($0) : $0.capitalized }

@@ -12,7 +12,8 @@ settings page.
 | Monthly | Current plans: dollars of your monthly included credits used, with a countdown to the monthly reset |
 | Purchased Credits | Dollars left of the extra credits you bought, which are used after your included credits run out |
 
-Ollama's current plans come with a monthly dollar allowance; plans from before that change keep their
+A Free account with no included allowance shows only Purchased Credits (even at $0) instead of an
+error. Ollama's current plans come with a monthly dollar allowance; plans from before that change keep their
 session and weekly limits instead. Each account reports one or the other, so OpenUsage shows whichever
 your plan has and leaves the other rows out.
 

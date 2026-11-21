@@ -89,13 +89,13 @@ enum Formatters {
     /// Time until a reset expires: whole days from a week out ("14d"), else `compactDuration` ("3d 5h").
     static func expiryCountdown(_ seconds: TimeInterval) -> String? {
         guard seconds.isFinite, seconds > 0 else { return nil }
-        if seconds >= 7 * 86_400 { return "\(Int(seconds / 86_400))d" }
+        if seconds >= 7 * 86_400 { return "\(ProviderParse.int(seconds / 86_400) ?? .max)d" }
         return compactDuration(seconds)
     }
 
     static func compactDuration(_ seconds: TimeInterval) -> String? {
         guard seconds.isFinite, seconds > 0 else { return nil }
-        let totalMinutes = max(1, Int((seconds / 60).rounded(.up)))
+        let totalMinutes = max(1, ProviderParse.int((seconds / 60).rounded(.up)) ?? .max)
         let days = totalMinutes / (24 * 60)
         let hours = (totalMinutes % (24 * 60)) / 60
         let minutes = totalMinutes % 60

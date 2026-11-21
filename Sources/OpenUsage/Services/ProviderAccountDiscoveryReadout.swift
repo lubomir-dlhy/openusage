@@ -206,7 +206,7 @@ extension ProviderAccountAssembly {
             )
             guard result.status == .available || result.status == .permissionRequired else { return nil }
             let plan = result.oauth?.subscriptionType?.lowercased()
-            let label = plan.map { ["max", "pro", "free"].contains($0) } == true ? "Personal"
+            let label = plan.map { ["max", "ultra", "pro", "free"].contains($0) } == true ? "Personal"
                 : plan?.capitalized ?? "Organization \(organization.prefix(8))"
             return ClaudeDesktopOrganization(id: organization, identityKey: "\(user)|\(organization)", label: label)
         }

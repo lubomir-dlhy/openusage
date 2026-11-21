@@ -233,13 +233,19 @@ final class OllamaUsageMapperTests: XCTestCase {
             "not json",
             #"{"limits":{"session":{"usage":0.349}}}"#,
             #"{"purchased":{"balance_usd":25}}"#,
-            #"{"included":{},"purchased":{"balance_usd":25}}"#
+            #"{"included":{}}"#
         ]
         for body in bodies {
             XCTAssertThrowsError(try OllamaUsageMapper.balanceLines(data(body)), body) { error in
                 XCTAssertEqual(error as? OllamaUsageError, .invalidResponse, body)
             }
         }
+    }
+
+    func testFreePlanWithNoIncludedAllowanceShowsPurchasedCredits() throws {
+        let free = #"{"included":{"balance_usd":0,"allowance_usd":0,"period":{"from":"2026-10-14T00:00:00Z","until":"2026-11-14T00:00:00Z"}},"purchased":{"balance_usd":0}}"#
+        let lines = try OllamaUsageMapper.balanceLines(data(free))
+        XCTAssertEqual(lines, [.values(label: "Purchased Credits", values: [MetricValue(number: 0, kind: .dollars)])])
     }
 
     func testAbsentLegacyMeterIsOmittedRatherThanShownAtZero() throws {

@@ -7,7 +7,7 @@ Tracks Grok Build credit usage using the login from the Grok CLI.
 | Metric | Meaning |
 |---|---|
 | Weekly | The shared weekly pool's usage percent (the limit Grok's unified billing enforces), with the weekly reset countdown |
-| Extra Usage | Pay-as-you-go cap as a status (e.g. `2500 cap` or `Disabled`) |
+| Extra Usage | Pay-as-you-go cap in dollars as a status (e.g. `$25.00 cap` or `Disabled`) |
 | Today / Yesterday / Last 30 Days | Local cost and tokens from completed Grok CLI sessions |
 
 When Grok reports your subscription tier, OpenUsage shows it beside the provider name.

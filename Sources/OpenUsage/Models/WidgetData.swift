@@ -88,9 +88,7 @@ struct WidgetData: Hashable {
 
     /// How a session-window meter tells a not-yet-started window from an in-flight one.
     enum SessionStartSignal: Hashable {
-        /// Zero usage is the fresh signal. Antigravity reports a reset instant even for an untouched
-        /// window and its mapper rounds the fresh pool's fraction-derived percent to 0, so `used == 0`
-        /// is what marks the window as fresh.
+        /// Antigravity supplies reset dates for untouched windows. Only exact zero usage marks them fresh.
         case zeroUsage
         /// A missing reset date is the fresh signal: by the time a row carries one, a reset instant
         /// means the window started. Claude's five-hour block is created by the first message, so it
@@ -604,8 +602,8 @@ extension WidgetData {
     /// read — the `resetsAt - now ≈ full period` test is only valid the instant the snapshot is captured,
     /// then drifts every second until the next refresh, which split the headline from the label (headline
     /// "100% left" while the label fell back to "Resets in 5h"). Usage is the stable, snapshot-consistent
-    /// signal: providers that report 0 utilization directly remain at 0, and Antigravity's mapper rounds
-    /// its fraction-derived percent (so a pool under ~0.5% used also reads 0). Codex percentages are
+    /// signal: providers that report 0 utilization directly remain at 0, and Antigravity keeps fractional
+    /// percents, so only an untouched pool reads 0. Codex percentages are
     /// preserved verbatim, so a reported 1% is not treated as "Not started."
     /// Still gated on `now < resetsAt`: once the reset has passed the snapshot is stale, so we drop the
     /// "Not started" claim and let the row fall back to the normal "Resets soon"/countdown formatting.

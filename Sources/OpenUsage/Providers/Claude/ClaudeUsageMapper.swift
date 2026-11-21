@@ -121,7 +121,13 @@ enum ClaudeUsageMapper {
         return .text(label: "Note", value: noteText)
     }
 
+    static let maxRetryAfterSeconds = 60 * 60
+
     static func parseRetryAfterSeconds(_ response: HTTPResponse, now: Date = Date()) -> Int? {
+        parseUncappedRetryAfterSeconds(response, now: now).map { min($0, maxRetryAfterSeconds) }
+    }
+
+    private static func parseUncappedRetryAfterSeconds(_ response: HTTPResponse, now: Date) -> Int? {
         guard let raw = response.header("retry-after")?.trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty
         else {
@@ -131,7 +137,8 @@ enum ClaudeUsageMapper {
             return seconds
         }
         if let date = HTTPDateFormatter.date(from: raw) {
-            return max(0, Int(ceil(date.timeIntervalSince(now))))
+            let seconds = ceil(date.timeIntervalSince(now))
+            return seconds >= Double(maxRetryAfterSeconds) ? maxRetryAfterSeconds : max(0, Int(seconds))
         }
         return nil
     }
@@ -143,12 +150,11 @@ enum ClaudeUsageMapper {
             return nil
         }
         let base = raw.titleCased(separator: { $0 == " " }, lowercasingTail: true)
+        let tier = rateLimitTier ?? ""
+        if base == "Ultra" || (base == "Max" && (tier.contains("ultra") || tier.contains("20x"))) { return "Ultra" }
+        if base == "Max" { return base }
 
-        guard let tier = rateLimitTier,
-              let match = tier.range(of: #"\d+x"#, options: .regularExpression)
-        else {
-            return base
-        }
+        guard let match = tier.range(of: #"\d+x"#, options: .regularExpression) else { return base }
         return "\(base) \(tier[match])"
     }
 
@@ -180,6 +186,7 @@ enum ClaudeUsageMapper {
 
         switch profile.organization?.organizationType?.lowercased() {
         case "claude_max", "max": return "max"
+        case "claude_ultra", "ultra": return "ultra"
         case "claude_pro", "pro": return "pro"
         case "claude_team", "team": return "team"
         case "claude_enterprise", "enterprise": return "enterprise"

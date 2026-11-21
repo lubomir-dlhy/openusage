@@ -29,6 +29,15 @@ Enterprise/team seats that already return usable model-pool percentages from the
 may still omit on-demand there. In that case OpenUsage merges Extra Usage from `usage-summary`
 without replacing the live pool meters. Personal Pro seats are not probed for that merge.
 
+Extra Usage reads its spend from the same budget as its limit: your own spend against a personal cap,
+the team pool's spend against a pooled limit.
+
+A unified account (Cursor, X and Grok merged) has one included pool, so it shows Total Usage for that
+pool and no Cursor Models, Other Models, or Grok Bot rows. Credits is the balance on the dashboard's
+Credits card. Extra Usage is the dashboard's Additional usage: what this month's usage past the pool
+cost, paid from credits. With no monthly limit it shows only that amount, even at $0; with a limit it
+shows against the limit and resets with the month. It hides when additional usage is off.
+
 Grok Bot has its own usage allowance, separate from Cursor's normal billing-cycle meter. Its widget
 is enabled by default in Cursor's On Demand section. It uses your existing Cursor login, so signing
 into the Grok CLI is not required.

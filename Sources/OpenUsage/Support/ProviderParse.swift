@@ -34,6 +34,11 @@ enum ProviderParse {
         return nil
     }
 
+    /// `Int(_:)` traps on a value outside the Int range; this returns nil instead.
+    static func int(_ value: Double) -> Int? {
+        abs(value) < Double(Int.max) ? Int(value) : nil
+    }
+
     /// Permissive boolean read for `JSONSerialization` output: accepts real `Bool`s, numeric `NSNumber`s
     /// (nonzero → true, via `boolValue`), and the strings "true"/"1"/"false"/"0" (case-insensitive).
     /// Returns `nil` for anything else, so an absent or unrecognized field stays distinguishable from an

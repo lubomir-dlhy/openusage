@@ -32,7 +32,7 @@ enum GrokUsageMapper {
         // Disabled badge, same as a present cap of 0.
         lines.append(.badge(
             label: "Pay as you go",
-            text: config.onDemandCap > 0 ? "\(formatUnits(config.onDemandCap)) cap" : "Disabled",
+            text: config.onDemandCap > 0 ? "\(formatCap(config.onDemandCap)) cap" : "Disabled",
             colorHex: config.onDemandCap > 0 ? "#22c55e" : "#a3a3a3"
         ))
         return GrokMappedUsage(lines: lines)
@@ -67,10 +67,8 @@ enum GrokUsageMapper {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func formatUnits(_ value: Double) -> String {
-        if value.rounded() == value {
-            return String(Int(value))
-        }
-        return String(value)
+    /// `onDemandCap.val` is in cents.
+    private static func formatCap(_ cents: Double) -> String {
+        MetricFormatter.number(ProviderParse.centsToDollars(cents), kind: .dollars, style: .row)
     }
 }

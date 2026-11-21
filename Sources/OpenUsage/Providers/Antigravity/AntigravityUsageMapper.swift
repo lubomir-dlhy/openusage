@@ -274,7 +274,7 @@ enum AntigravityUsageMapper {
         let used = (1 - clamped) * 100
         return .progress(
             label: pool,
-            used: used.rounded(), // keep whole percents so a fresh window reads 0 and "Not started" works
+            used: used,
             limit: 100,
             format: .percent,
             resetsAt: resetTime,

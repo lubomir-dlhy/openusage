@@ -39,5 +39,6 @@ in this cache.
 
 If you explicitly turn on [iCloud Sync](icloud-sync.md), OpenUsage writes normalized daily tokens,
 spend, and model totals to its private iCloud container so your own Macs can show one combined summary.
-Credentials, account limits, provider responses, and raw logs are never written there. iCloud Sync is
+Credentials, account limits, provider responses, and raw logs are never written there. Separately, OpenUsage's network client keeps no URL cache, so provider
+responses are never cached by the system on disk or in memory. iCloud Sync is
 off by default and uses your iCloud account.

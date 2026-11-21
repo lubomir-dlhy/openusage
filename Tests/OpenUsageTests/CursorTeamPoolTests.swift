@@ -97,6 +97,77 @@ final class CursorTeamPoolTests: XCTestCase {
         )
     }
 
+    func testExtraUsageReadsItsSpendFromTheSameBudgetAsItsLimit() throws {
+        func onDemand(_ spend: [String: Any]) throws -> (used: Double, limit: Double) {
+            let mapped = try CursorUsageMapper.mapUsage(
+                usage: ["enabled": true, "planUsage": ["totalPercentUsed": 10], "spendLimitUsage": spend],
+                planName: "Team", creditGrants: nil, stripeBalanceCents: 0
+            )
+            guard case .progress(_, let used, let limit, _, _, _, _) = mapped.lines.first(where: { $0.label == "On-demand" }) else {
+                throw NSError(domain: "no On-demand row", code: 0)
+            }
+            return (used, limit)
+        }
+
+        let personal = try onDemand([
+            "individualLimit": 10000, "individualUsed": 0, "individualRemaining": 10000,
+            "pooledLimit": 50000, "pooledUsed": 12000, "pooledRemaining": 38000, "totalSpend": 12000, "limitType": "user"
+        ])
+        XCTAssertEqual(personal.used, 0, "the member spent nothing of their own cap, whatever the team pool spent")
+        XCTAssertEqual(personal.limit, 100)
+
+        let pool = try onDemand([
+            "pooledLimit": 50000, "pooledUsed": 12000, "pooledRemaining": 38000, "individualUsed": 3400, "limitType": "team"
+        ])
+        XCTAssertEqual(pool.used, 120, "the pool's spend, not one member's")
+        XCTAssertEqual(pool.limit, 500)
+
+        let inferred = try onDemand(["individualLimit": 10000, "individualRemaining": 7500, "pooledUsed": 12000, "totalSpend": 12000])
+        XCTAssertEqual(inferred.used, 25, "spend falls back to the same budget's limit minus what's left")
+
+        let ownTotal = try onDemand(["individualLimit": 5000, "individualUsed": 0, "individualRemaining": 4500, "totalSpend": 1200])
+        XCTAssertEqual(ownTotal.used, 12, "a personal cap with no team pool still takes totalSpend when individualUsed reads 0")
+    }
+
+    func testUnifiedAccountShowsDashboardCreditsAndAdditionalUsage() throws {
+        let usage: [String: Any] = [
+            "enabled": true,
+            "planUsage": ["totalPercentUsed": 42, "autoPercentUsed": 10, "apiPercentUsed": 5],
+            "spendLimitUsage": ["individualLimit": 10000, "individualUsed": 500]
+        ]
+        let mapped = try CursorUsageMapper.mapUsage(
+            usage: usage, planName: "Pro", creditGrants: nil, stripeBalanceCents: 0,
+            unified: CursorUnifiedBilling(
+                creditBalance: ["usdRemainingCents": 1250],
+                usageStatus: ["monthlyUsage": [
+                    "usedCents": 300, "limitCents": 2000,
+                    "periodStart": "2026-11-01T00:00:00Z", "resetsAt": "2026-12-01T00:00:00Z"
+                ]]
+            )
+        )
+        XCTAssertEqual(mapped.lines.map(\.label), ["Credits", "Total usage", "On-demand"])
+        XCTAssertEqual(mapped.lines.first, .values(label: "Credits", values: [MetricValue(number: 12.5, kind: .dollars)]))
+        guard case .progress(_, let used, let limit, _, let resetsAt, let periodMs, _) = mapped.lines.last else {
+            return XCTFail("expected an On-demand bar")
+        }
+        XCTAssertEqual(used, 3)
+        XCTAssertEqual(limit, 20)
+        XCTAssertEqual(resetsAt, OpenUsageISO8601.date(from: "2026-12-01T00:00:00Z"))
+        XCTAssertEqual(periodMs, 30 * 24 * 60 * 60 * 1000)
+
+        let off = try CursorUsageMapper.mapUsage(
+            usage: usage, planName: "Pro", creditGrants: nil, stripeBalanceCents: 0,
+            unified: CursorUnifiedBilling(creditBalance: nil, usageStatus: ["monthlyUsage": ["usedCents": 0, "additionalUsageOff": true]])
+        )
+        XCTAssertEqual(off.lines.map(\.label), ["Total usage"])
+
+        let uncapped = try CursorUsageMapper.mapUsage(
+            usage: usage, planName: "Pro", creditGrants: nil, stripeBalanceCents: 0,
+            unified: CursorUnifiedBilling(creditBalance: nil, usageStatus: ["monthlyUsage": ["usedCents": 0]])
+        )
+        XCTAssertEqual(uncapped.lines.last, .values(label: "On-demand", values: [MetricValue(number: 0, kind: .dollars)]))
+    }
+
     private func assertPercent(_ mapped: CursorMappedUsage, _ label: String, _ expected: Double,
                                file: StaticString = #filePath, line: UInt = #line) {
         guard case .progress(_, let used, let limit, let format, _, _, _) =

@@ -16,7 +16,7 @@ final class ClaudeLivePlanTests: XCTestCase {
                 profile: profile(organizationType: "claude_max", rateLimitTier: "default_claude_max_20x"),
                 credentials: stored
             ),
-            "Max 20x"
+            "Ultra"
         )
         XCTAssertEqual(
             ClaudeUsageMapper.formatLivePlan(profile: profile(organizationType: "claude_pro", rateLimitTier: nil), credentials: stored),
@@ -24,7 +24,7 @@ final class ClaudeLivePlanTests: XCTestCase {
         )
         XCTAssertEqual(
             ClaudeUsageMapper.formatLivePlan(profile: profile(organizationType: nil, rateLimitTier: "default_claude_max_20x"), credentials: stored),
-            "Max 20x"
+            "Ultra"
         )
         XCTAssertNil(ClaudeUsageMapper.formatLivePlan(
             profile: ClaudeAccountProfile(account: .init(uuid: "a"), organization: nil),
@@ -45,8 +45,8 @@ final class ClaudeLivePlanTests: XCTestCase {
         let first = await provider.refresh()
         let second = await provider.refresh()
 
-        XCTAssertEqual(first.plan, "Max 20x")
-        XCTAssertEqual(second.plan, "Max 20x")
+        XCTAssertEqual(first.plan, "Ultra")
+        XCTAssertEqual(second.plan, "Ultra")
         XCTAssertEqual(progress(first.lines, "Session")?.used, 42)
         // Profile only after the usage call proved the token, and never again for the same token.
         XCTAssertEqual(http.requests.filter { !$0.isClaudeResetGrantsCheck }.map(\.url.path), [
@@ -67,8 +67,8 @@ final class ClaudeLivePlanTests: XCTestCase {
         let first = await provider.refresh()
         let second = await provider.refresh()
 
-        XCTAssertEqual(first.plan, "Max 5x")
-        XCTAssertEqual(second.plan, "Max 5x")
+        XCTAssertEqual(first.plan, "Max")
+        XCTAssertEqual(second.plan, "Max")
         XCTAssertEqual(progress(first.lines, "Session")?.used, 42)
         XCTAssertEqual(progress(second.lines, "Session")?.used, 42)
         XCTAssertNil(first.warning)
@@ -105,9 +105,9 @@ final class ClaudeLivePlanTests: XCTestCase {
         let second = await provider.refresh()
         let third = await provider.refresh()
 
-        XCTAssertEqual(first.plan, "Max 5x")
-        XCTAssertEqual(second.plan, "Max 20x")
-        XCTAssertEqual(third.plan, "Max 20x")
+        XCTAssertEqual(first.plan, "Max")
+        XCTAssertEqual(second.plan, "Ultra")
+        XCTAssertEqual(third.plan, "Ultra")
         XCTAssertEqual(
             http.requests.filter { $0.url.path == "/api/oauth/profile" }.map { $0.headers["Authorization"] },
             ["Bearer token-a", "Bearer token-b"]
@@ -134,8 +134,8 @@ final class ClaudeLivePlanTests: XCTestCase {
         let first = await provider.refresh()
         let second = await provider.refresh()
 
-        XCTAssertEqual(first.plan, "Max 20x")
-        XCTAssertEqual(second.plan, "Max 20x")
+        XCTAssertEqual(first.plan, "Ultra")
+        XCTAssertEqual(second.plan, "Ultra")
         XCTAssertEqual(http.requests.filter { !$0.isClaudeResetGrantsCheck }.map(\.url.path), [
             "/api/oauth/profile", "/api/oauth/usage", "/api/oauth/usage"
         ])
@@ -163,8 +163,8 @@ final class ClaudeLivePlanTests: XCTestCase {
         let first = await provider.refresh()
         let second = await provider.refresh()
 
-        XCTAssertEqual(first.plan, "Max 20x")
-        XCTAssertEqual(second.plan, "Max 20x")
+        XCTAssertEqual(first.plan, "Ultra")
+        XCTAssertEqual(second.plan, "Ultra")
         XCTAssertEqual(first.warning?.hasPrefix("Updates blocked by Anthropic"), true)
         XCTAssertEqual(http.requests.map(\.url.path), ["/api/oauth/profile", "/api/oauth/usage"])
     }
@@ -181,7 +181,7 @@ final class ClaudeLivePlanTests: XCTestCase {
 
         let snapshot = await provider.refresh()
 
-        XCTAssertEqual(snapshot.plan, "Max 5x")
+        XCTAssertEqual(snapshot.plan, "Max")
         XCTAssertTrue(http.requests.isEmpty)
     }
 
@@ -207,6 +207,47 @@ final class ClaudeLivePlanTests: XCTestCase {
             now: { now },
             pricing: { TestPricing.bundled }
         )
+    }
+
+    /// Anthropic renamed Max 5x to Max and Max 20x to Ultra on Oct 30, 2026 (upstream #1497).
+    func testMaxTiersReadUnderAnthropicsNewPlanNames() {
+        let stored = ClaudeOAuth(subscriptionType: nil, rateLimitTier: nil)
+        func plan(_ type: String, _ tier: String?) -> String? {
+            ClaudeUsageMapper.formatLivePlan(profile: profile(organizationType: type, rateLimitTier: tier), credentials: stored)
+        }
+        XCTAssertEqual(plan("claude_max", "default_claude_max_5x"), "Max")
+        XCTAssertEqual(plan("claude_max", "default_claude_max_20x"), "Ultra")
+        XCTAssertEqual(plan("claude_max", nil), "Max")
+        XCTAssertEqual(plan("claude_max", "default_claude_ultra"), "Ultra")
+        XCTAssertEqual(plan("claude_ultra", "default_claude_ultra"), "Ultra")
+        XCTAssertEqual(plan("claude_pro", "default_claude_ai"), "Pro")
+        XCTAssertEqual(plan("claude_team", "default_claude_max_5x"), "Team 5x")
+        XCTAssertEqual(plan("claude_enterprise", nil), "Enterprise")
+        XCTAssertEqual(ClaudeUsageMapper.formatPlan(subscriptionType: "max", rateLimitTier: "default_claude_max_20x"), "Ultra")
+    }
+
+    func testRetryAfterWaitsAreCappedAtAnHour() {
+        func retry(_ value: String) -> Int? {
+            ClaudeUsageMapper.parseRetryAfterSeconds(HTTPResponse(statusCode: 429, headers: ["retry-after": value], body: Data()))
+        }
+        XCTAssertEqual(retry("120"), 120)
+        XCTAssertEqual(retry("86400"), 3600)
+        XCTAssertEqual(retry("Fri, 31 Dec 9999 23:59:59 GMT"), 3600)
+        XCTAssertNil(retry("99999999999999999999999"))
+    }
+
+    func testProviderNumbersTooLargeForAnIntAreRejected() {
+        XCTAssertEqual(ProviderParse.int(42.9), 42)
+        XCTAssertNil(ProviderParse.int(1e300))
+        XCTAssertNil(ProviderParse.int(.nan))
+        XCTAssertNil(ProviderParse.int(-.infinity))
+    }
+
+    func testHugeDurationsFormatWithoutTrapping() {
+        XCTAssertNotNil(Formatters.compactDuration(1e300))
+        XCTAssertNotNil(Formatters.expiryCountdown(1e300))
+        XCTAssertEqual(ClaudeDesktopBilling.planName("max_20x_monthly"), "Ultra")
+        XCTAssertEqual(ClaudeDesktopBilling.planName("max_5x_annual"), "Max")
     }
 
     private func profile(organizationType: String?, rateLimitTier: String?) -> ClaudeAccountProfile {
