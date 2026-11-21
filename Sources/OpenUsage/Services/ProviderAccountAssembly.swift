@@ -105,12 +105,17 @@ struct ProviderAccountAssembly {
         if families.count < ProviderAccountID.families.count {
             AppLog.info(.config, "account identity read skipped for \(ProviderAccountID.families.subtracting(families).sorted().joined(separator: ", ")): login shell cold and no shell-environment snapshot exists yet")
         }
-        return await make(
-            observer: DefaultAccountObserver(),
+        let assemblyStartedAt = ProcessInfo.processInfo.systemUptime
+        let environment = ProcessEnvironmentReader(blocksOnShellCapture: false)
+        let assembly = await make(
+            observer: DefaultAccountObserver(environment: environment),
             accountsStore: accountsStore ?? ProviderAccountsStore(defaults: defaults),
             families: families,
-            claudeDiscovery: ClaudeConfigDirDiscovery()
+            claudeDiscovery: ClaudeConfigDirDiscovery(environment: environment)
         )
+        let assemblyDurationMS = Int((ProcessInfo.processInfo.systemUptime - assemblyStartedAt) * 1_000)
+        AppLog.info(.config, "account assembly duration: \(assemblyDurationMS) ms")
+        return assembly
     }
 
     /// The environment variable that relocates each family's default home — the fact whose
@@ -145,19 +150,53 @@ struct ProviderAccountAssembly {
             }
         }
     ) async -> ProviderAccountAssembly {
-        let codex = families.contains("codex")
-            ? await makeCodexCards(observer: observer, accountsStore: accountsStore,
-                                   listDirectories: listCodexHomeDirectories)
-            : CodexAccountDiscovery()
+        let readout = await discover(
+            observer: observer,
+            accountsStore: accountsStore,
+            families: families,
+            listCodexHomeDirectories: listCodexHomeDirectories,
+            desktop: desktop,
+            listDesktopOrganizationDirectories: listDesktopOrganizationDirectories
+        )
+        let claudeConfigScan = await scanClaudeConfigDirs(claudeDiscovery, readout: readout)
+        return assemble(readout: readout, accountsStore: accountsStore, claudeConfigScan: claudeConfigScan)
+    }
+
+    struct ClaudeConfigScan: Sendable {
+        var defaultConfigDirs: [String]
+        var result: ClaudeConfigDirDiscovery.Result?
+    }
+
+    /// Runs only after the default Claude login read, since an unreadable default login skips the scan.
+    private static func scanClaudeConfigDirs(
+        _ discovery: ClaudeConfigDirDiscovery?,
+        readout: ProviderAccountDiscoveryReadout
+    ) async -> ClaudeConfigScan? {
+        guard let discovery, let outcome = readout.claude?.outcome else { return nil }
+        return await Task.detached(priority: .userInitiated) {
+            let runs = if case .unresolved = outcome { false } else { true }
+            return ClaudeConfigScan(defaultConfigDirs: discovery.defaultConfigDirs(), result: runs ? discovery.run() : nil)
+        }.value
+    }
+
+    @MainActor
+    static func assemble(
+        readout: ProviderAccountDiscoveryReadout,
+        accountsStore: ProviderAccountsStore,
+        claudeConfigScan: ClaudeConfigScan? = nil
+    ) -> ProviderAccountAssembly {
+        let codex = readout.codex.map {
+            makeCodexCards(readout: $0, accountsStore: accountsStore)
+        } ?? CodexAccountDiscovery()
         let codexCards = codex.cards
         var identityKeys = Dictionary(uniqueKeysWithValues: codexCards.map { ($0.id, $0.identity.key) })
         var observations: [ProviderAccountsStore.AccountObservation] = []
 
         let outcomes: [(family: String, outcome: DefaultAccountObserver.Outcome)] = [
-            ("claude", { observer.observeClaude() }),
-            ("codex", { observer.observeCodex() }),
-        ].compactMap { family, observe in
-            families.contains(family) && (family != "codex" || codexCards.isEmpty) ? (family, observe()) : nil
+            ("claude", readout.claude?.outcome),
+            ("codex", codexCards.isEmpty ? readout.codex?.outcome : nil),
+        ].compactMap { family, outcome in
+            outcome.map { (family, $0) }
         }
         for (family, outcome) in outcomes {
             switch outcome {
@@ -187,14 +226,12 @@ struct ProviderAccountAssembly {
             dirs: [ClaudeConfigDirDiscovery.Finding]
         )] = []
         var defaultClaudeExtraLogRoots: [URL] = []
-        let defaultClaudeConfigDirs = claudeDiscovery?.defaultConfigDirs() ?? []
-        let claudeOutcome = outcomes.first { $0.family == "claude" }?.outcome
-        if let claudeDiscovery, let claudeOutcome, families.contains("claude") {
+        let defaultClaudeConfigDirs = claudeConfigScan?.defaultConfigDirs ?? []
+        if let claudeOutcome = readout.claude?.outcome {
             if case .unresolved = claudeOutcome {
                 AppLog.info(.config, "discovery: claude default login is unreadable; skipping config-dir candidates")
-            } else {
+            } else if let scan = claudeConfigScan?.result {
                 let defaultKey = identityKeys["claude"]
-                let scan = claudeDiscovery.run()
                 for note in scan.notes { AppLog.info(.config, "discovery: \(note)") }
                 var order: [String] = []
                 var grouped: [String: [ClaudeConfigDirDiscovery.Finding]] = [:]
@@ -254,12 +291,12 @@ struct ProviderAccountAssembly {
             }.sorted { $0.id < $1.id }
         }
 
-        guard families.contains("claude") else {
+        guard let claudeReadout = readout.claude else {
             accountsStore.reconcile(with: observations)
             return ProviderAccountAssembly(identityKeysByCard: identityKeys, codex: codex)
         }
 
-        let swapAccounts = ClaudeSwapAccount.discover(files: observer.files, home: observer.homeDirectory())
+        let swapAccounts = claudeReadout.swapAccounts
         if !swapAccounts.isEmpty {
             AppLog.info(.config, "accounts: discovered \(swapAccounts.count) Claude Swap accounts")
         }
@@ -298,16 +335,8 @@ struct ProviderAccountAssembly {
             )
         }
 
-        let desktop = desktop ?? ClaudeDesktopAuthStore(
-            files: observer.files, homeDirectory: observer.homeDirectory
-        )
-        let desktopOrganizations = discoverDesktopOrganizations(
-            desktop: desktop,
-            cliIdentity: identityKeys["claude"],
-            listDirectories: listDesktopOrganizationDirectories
-        )
-        let desktopAnchor = desktop.homeDirectory()
-            .appendingPathComponent("Library/Application Support/Claude").path
+        let desktopOrganizations = claudeReadout.desktopOrganizations
+        let desktopAnchor = claudeReadout.desktopAnchor ?? ""
         for organization in desktopOrganizations {
             let source = ProviderAccountSource(
                 kind: .defaultHome, anchor: desktopAnchor, holdsDefaultSource: false
@@ -409,71 +438,8 @@ struct ProviderAccountAssembly {
         )
     }
 
-    private struct DesktopOrganization {
-        var id: String
-        var identityKey: String
-        var label: String
-    }
-
     private static func organizationLabel(_ value: String?) -> String? {
         guard let value, let opening = value.lastIndex(of: "("), value.last == ")" else { return value }
         return String(value[value.index(after: opening)..<value.index(before: value.endIndex)])
-    }
-
-    private static func discoverDesktopOrganizations(
-        desktop: ClaudeDesktopAuthStore,
-        cliIdentity: String?,
-        listDirectories: @Sendable (URL) -> [String]
-    ) -> [DesktopOrganization] {
-        guard let user = desktop.lastKnownAccountUUID(), desktop.hasCredentialMaterial() else { return [] }
-        let active = desktop.load(allowInteraction: false, expectedAccountUUID: user)
-        let activeOrganization = active.organization
-
-        let root = desktop.homeDirectory().appendingPathComponent("Library/Application Support/Claude")
-        let memberships = Set(["claude-code-sessions", "local-agent-mode-sessions"].flatMap { directory in
-            listDirectories(root.appendingPathComponent(directory).appendingPathComponent(user))
-                .compactMap { UUID(uuidString: $0)?.uuidString.lowercased() }
-        })
-        var organizations = memberships
-        if let activeOrganization { organizations.insert(activeOrganization) }
-        if let text = try? desktop.files.readTextIfPresent(root.appendingPathComponent("config.json").path),
-           let rootObject = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
-        {
-            organizations.formUnion(rootObject.keys.compactMap {
-                $0.split(separator: ":").last.flatMap { UUID(uuidString: String($0))?.uuidString.lowercased() }
-            })
-        }
-        if let text = try? desktop.files.readTextIfPresent(
-            root.appendingPathComponent("plan-usage-history.json").path
-        ), let history = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
-           let samples = history["samples"] as? [[String: Any]]
-        {
-            organizations.formUnion(samples.compactMap {
-                ($0["org"] as? String).flatMap { UUID(uuidString: $0)?.uuidString.lowercased() }
-            })
-        }
-        let cliOrganization = cliIdentity.flatMap { identity -> String? in
-            let parts = identity.split(separator: "|")
-            guard parts.count == 2,
-                  String(parts[0]).caseInsensitiveCompare(user) == .orderedSame
-            else { return nil }
-            return String(parts[1]).lowercased()
-        }
-
-        return organizations.sorted { lhs, rhs in
-            lhs == activeOrganization ? true : rhs == activeOrganization ? false : lhs < rhs
-        }.compactMap { organization in
-            guard memberships.contains(organization)
-                || organization == activeOrganization || organization == cliOrganization
-            else { return nil }
-            let result = organization == activeOrganization ? active : desktop.load(
-                allowInteraction: false, organization: organization, expectedAccountUUID: user
-            )
-            guard result.status == .available || result.status == .permissionRequired else { return nil }
-            let plan = result.oauth?.subscriptionType?.lowercased()
-            let label = plan.map { ["max", "pro", "free"].contains($0) } == true ? "Personal"
-                : plan?.capitalized ?? "Organization \(organization.prefix(8))"
-            return DesktopOrganization(id: organization, identityKey: "\(user)|\(organization)", label: label)
-        }
     }
 }

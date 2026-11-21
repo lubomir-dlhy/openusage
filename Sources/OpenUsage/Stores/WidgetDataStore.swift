@@ -68,7 +68,7 @@ final class WidgetDataStore {
     /// the per-request timeouts a healthy provider can legitimately spend, or a slow network would turn
     /// working providers into errors. The worst legitimate case is Cursor, whose probe is sequential:
     /// token refresh (15s) → usage (10s, plus a 401 refresh-and-retry of another 25s) → plan (10s) →
-    /// usage summary (10s) → credits (10s) → usage CSV (30s), i.e. up to ~110s. Slowness short of the
+    /// usage summary (10s) → credits (10s) → spend history (20s), i.e. up to ~100s. Slowness short of the
     /// deadline is already reported separately by `slowProviderRefreshThreshold`.
     static let defaultProviderRefreshTimeout: TimeInterval = 120
 
@@ -103,6 +103,9 @@ final class WidgetDataStore {
     /// Accounts synced from other Macs that have NO card here: surfaced in Total Spend only (their
     /// synthesized snapshots carry the usual Today/Yesterday/Last 30 Days lines), never as cards.
     private(set) var remoteOnlySpend: [(provider: Provider, snapshot: ProviderSnapshot)] = []
+    @ObservationIgnored private var snapshotRebuildDeferrals = 0
+    @ObservationIgnored private var pendingSnapshotRebuild = false
+    @ObservationIgnored private var coalescedRebuildTask: Task<Void, Never>?
 
     /// Global meter style: whether every bounded tile (and the menu-bar value) renders as "used" or
     /// "left/remaining". Persisted so the choice survives relaunch; defaults to `.remaining`.
@@ -225,6 +228,7 @@ final class WidgetDataStore {
         let providerIDs = registry.providers.map(\.id).filter { isProviderEnabled($0) }
         let start = monotonicNow()
         AppLog.info(.refresh, "batch start (\(providerIDs.count) providers, force=\(force))")
+        snapshotRebuildDeferrals += 1
         let tasks = providerIDs.map { providerID in
             Task { await self.refresh(providerID: providerID, force: force, notifyHistoryChange: false) }
         }
@@ -232,6 +236,12 @@ final class WidgetDataStore {
         outcomes.reserveCapacity(tasks.count)
         for task in tasks {
             outcomes.append(await task.value)
+        }
+        snapshotRebuildDeferrals -= 1
+        if snapshotRebuildDeferrals == 0 {
+            coalescedRebuildTask?.cancel()
+            coalescedRebuildTask = nil
+            flushPendingSnapshotWork()
         }
         // Stamp the end of the pass so the footer countdown targets the next scheduled refresh
         // (this time + one refresh interval), mirroring the periodic loop that sleeps one interval
@@ -246,6 +256,16 @@ final class WidgetDataStore {
         let backedOff = outcomes.count { $0 == .backedOff }
         if refreshed > 0 { onLocalHistoryChanged?() }
         AppLog.info(.refresh, "batch end (\(durationMs)ms, \(refreshed) ok / \(failed) failed / \(cached) cached / \(backedOff) backed off)")
+    }
+
+    /// The user's own Refresh. It's the only refresh that lets a login they denied ask again.
+    func refreshOnUserRequest(providerID: String? = nil) async {
+        KeychainAccessGuard.forgetDenials()
+        if let providerID {
+            await refresh(providerID: providerID, force: true)
+        } else {
+            await refreshAll(force: true)
+        }
     }
 
     /// Evaluate every visible, enabled metric for a quota pace milestone and post a notification for any
@@ -315,7 +335,7 @@ final class WidgetDataStore {
             AppLog.debug(.refresh, "cache hit \(providerID)")
             if localSnapshots[providerID] != cached {
                 localSnapshots[providerID] = cached
-                rebuildRenderedSnapshots()
+                requestSnapshotRebuild()
             }
             return .cacheHit
         }
@@ -398,8 +418,12 @@ final class WidgetDataStore {
         localSnapshots[providerID] = snapshot
         // Stamp the write with the card's launch-resolved account identity; nil (no stamp) for
         // non-account providers and for cards whose identity didn't resolve this launch.
-        cache.store(snapshot, producedByIdentityKey: providerIdentityKeys[providerID])
-        rebuildRenderedSnapshots()
+        cache.store(
+            snapshot,
+            producedByIdentityKey: providerIdentityKeys[providerID],
+            persist: snapshotRebuildDeferrals == 0
+        )
+        requestSnapshotRebuild()
         if notifyHistoryChange { onLocalHistoryChanged?() }
         AppLog.info(.refresh, "\(providerID) ok (\(durationMs)ms)")
         return .refreshed
@@ -495,6 +519,29 @@ final class WidgetDataStore {
             providers: providers,
             identities: identities.isEmpty ? nil : identities
         )
+    }
+
+    private func requestSnapshotRebuild() {
+        guard snapshotRebuildDeferrals > 0 else {
+            rebuildRenderedSnapshots()
+            return
+        }
+        pendingSnapshotRebuild = true
+        guard coalescedRebuildTask == nil else { return }
+        coalescedRebuildTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard let self, !Task.isCancelled else { return }
+            self.coalescedRebuildTask = nil
+            self.flushPendingSnapshotWork()
+        }
+    }
+
+    func flushPendingSnapshotWork() {
+        if pendingSnapshotRebuild {
+            pendingSnapshotRebuild = false
+            rebuildRenderedSnapshots()
+        }
+        cache.persistPending()
     }
 
     private func rebuildRenderedSnapshots() {
